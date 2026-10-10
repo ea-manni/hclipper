@@ -27,6 +27,7 @@ env/
 *.webm
 *.wav
 *.mp3
+!assets/audio/*.mp3
 temp/
 output/
 clips/
@@ -37,6 +38,7 @@ sessions/
 *.json
 !package.json
 !tsconfig.json
+!ui/tsconfig*.json
 !pipeline/publisher/clips_queue.example.json
 .env
 .env.local

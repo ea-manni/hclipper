@@ -7,18 +7,18 @@ This document outlines the step-by-step phased execution plan to develop, stabil
 ## Phase 1: Engine Modularization & CLI Hardening (Foundation)
 **Objective**: Refactor the proven production scripts from `niyiadekunle` into clean, reusable Python modules with standardized JSON input/output contracts.
 
-- [ ] **Task 1.1**: Initialize project structure in `C:\Users\Ebunoluwa\Desktop\hclipper`:
+- [x] **Task 1.1**: Initialize project structure in `C:\Users\Ebunoluwa\Desktop\hclipper`:
   - `engine/`: Core Python pipeline packages.
   - `ui/`: Electron + React application.
   - `assets/`: Default fonts, banners, brand pills, and audio beds.
   - `bin/`: Platform binaries (`ffmpeg`, `ffprobe`, `yt-dlp`).
-- [ ] **Task 1.2**: Build `engine/downloader.py` (Unified YouTube + Facebook + Direct URL ingestion via `yt-dlp`).
-- [ ] **Task 1.3**: Build `engine/audio_dsp.py` (Broadcast loudnorm, vocal EQ, noise suppression, music ducking).
-- [ ] **Task 1.4**: Build `engine/trimmer.py` (Waveform data generation + pause trimming).
-- [ ] **Task 1.5**: Build `engine/reframe.py` (YuNet ONNX face tracking and 9:16 crop window calculator).
-- [ ] **Task 1.6**: Build `engine/subtitles.py` (Faster-Whisper word-level transcription + ASS generator).
-- [ ] **Task 1.7**: Build `engine/publisher.py` (Multi-account publisher for YouTube, TikTok US/NG, and Instagram).
-- [ ] **Task 1.8**: Create unified CLI entry point (`python -m engine.cli`) to test the modularized pipeline end-to-end.
+- [x] **Task 1.2**: Build `engine/downloader.py` (Unified YouTube + Facebook + Direct URL ingestion via `yt-dlp`).
+- [x] **Task 1.3**: Build `engine/audio_dsp.py` (Broadcast loudnorm, vocal EQ, noise suppression, music ducking).
+- [x] **Task 1.4**: Build `engine/trimmer.py` (Waveform data generation + pause trimming).
+- [x] **Task 1.5**: Build `engine/reframe.py` (YuNet ONNX face tracking and 9:16 crop window calculator).
+- [x] **Task 1.6**: Build `engine/subtitles.py` (Faster-Whisper word-level transcription + ASS generator).
+- [x] **Task 1.7**: Build `engine/publisher.py` (Multi-account publisher for YouTube, TikTok US/NG, and Instagram).
+- [x] **Task 1.8**: Create unified CLI entry point (`python -m engine.cli`) to test the modularized pipeline end-to-end.
 
 ---
 
