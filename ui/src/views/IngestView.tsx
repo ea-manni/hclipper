@@ -90,7 +90,7 @@ export const IngestView: React.FC<IngestViewProps> = ({
         addLog(`Imported local media file: ${selected}`, 'info');
       }
     } else {
-      const sample = 'C:/Users/Ebunoluwa/Desktop/niyiadekunle/pipeline/Clip1_You_Cant_Afford_It_Master.mp4';
+      const sample = 'C:/Users/Ebunoluwa/Desktop/hclipper/downloads/sample_sermon.mp4';
       setSourceVideo(sample);
       setStatusMessage(`Selected sample file: ${sample}`);
     }

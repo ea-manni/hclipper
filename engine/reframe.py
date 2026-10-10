@@ -54,10 +54,11 @@ class AutoReframer:
         width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
-        # Target crop width for vertical 9:16
+        # Target crop width for vertical 9:16, 1:1, or 16:9
         crop_w = int(height * aspect_ratio[0] / aspect_ratio[1])
         if crop_w % 2 != 0:
             crop_w += 1
+        crop_w = min(crop_w, width)
         max_x = max(0, width - crop_w)
         default_center = width // 2
 
@@ -153,7 +154,11 @@ class AutoReframer:
         and FFmpeg hardware encoding.
         """
         if not trajectory_data:
-            trajectory_data = self.compute_crop_trajectory(video_path, progress_callback=progress_callback)
+            trajectory_data = self.compute_crop_trajectory(
+                video_path,
+                aspect_ratio=(out_width, out_height),
+                progress_callback=progress_callback
+            )
 
         trajectory = trajectory_data["trajectory"]
         fps = trajectory_data["fps"]

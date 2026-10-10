@@ -3,18 +3,28 @@ import {
   Type, 
   Palette, 
   ArrowRight, 
-  Layers
+  Layers,
+  AtSign
 } from 'lucide-react';
+import { YoutubeIcon, TikTokIcon, InstagramIcon } from '../components/Icons';
 
 interface SubtitlesViewProps {
   onNext: () => void;
 }
 
 export const SubtitlesView: React.FC<SubtitlesViewProps> = ({ onNext }) => {
-  const [headline, setHeadline] = useState('STOP PROVING THINGS TO PEOPLE');
+  const [headline, setHeadline] = useState('DISCOVER YOUR TRUE PURPOSE');
   const [stylePreset, setStylePreset] = useState<'tiktok_bold' | 'dynamic_pop' | 'clean_white'>('tiktok_bold');
   const [includeSocialPills, setIncludeSocialPills] = useState(true);
   const [includeOutro, setIncludeOutro] = useState(true);
+
+  // Flexible User-Configurable Handles
+  const [tiktokHandle, setTiktokHandle] = useState('@creator_shorts');
+  const [showTiktok, setShowTiktok] = useState(true);
+  const [youtubeHandle, setYoutubeHandle] = useState('@CreatorShow');
+  const [showYoutube, setShowYoutube] = useState(true);
+  const [instagramHandle, setInstagramHandle] = useState('@creator_reels');
+  const [showInstagram, setShowInstagram] = useState(true);
 
   return (
     <div className="p-8 max-w-5xl mx-auto space-y-6">
@@ -53,7 +63,7 @@ export const SubtitlesView: React.FC<SubtitlesViewProps> = ({ onNext }) => {
               type="text" 
               value={headline}
               onChange={(e) => setHeadline(e.target.value)}
-              placeholder="e.g. STOP PROVING THINGS TO PEOPLE"
+              placeholder="e.g. DISCOVER YOUR TRUE PURPOSE"
               className="w-full bg-slate-900 border border-white/10 rounded-lg px-4 py-2.5 text-xs text-amber-300 font-bold focus:outline-none focus:border-amber-400/50"
             />
             <p className="text-[11px] text-slate-400">
@@ -107,28 +117,103 @@ export const SubtitlesView: React.FC<SubtitlesViewProps> = ({ onNext }) => {
             </div>
           </div>
 
-          {/* Brand Overlays Toggles */}
-          <div className="glass-card rounded-xl p-5 space-y-3">
+          {/* Brand Overlays Toggles & Social Pill Customizer */}
+          <div className="glass-card rounded-xl p-5 space-y-4">
             <span className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
               <Layers className="w-4 h-4 text-purple-400" />
               Branding & Overlays
             </span>
 
-            <div className="space-y-2 text-xs">
-              <div className="flex items-center justify-between p-2.5 rounded-lg bg-slate-900 border border-white/5">
+            <div className="space-y-3 text-xs">
+              {/* Master Social Pills Toggle */}
+              <div className="flex items-center justify-between p-3 rounded-lg bg-slate-900 border border-white/5">
                 <div>
                   <div className="font-semibold text-slate-200">Animated Social Handle Pills</div>
-                  <div className="text-[10px] text-slate-500">TikTok, YouTube, Instagram badges fade in at 0.5s</div>
+                  <div className="text-[10px] text-slate-500">Overlay custom creator badges (fade in at 0.5s)</div>
                 </div>
                 <input 
                   type="checkbox" 
                   checked={includeSocialPills} 
                   onChange={(e) => setIncludeSocialPills(e.target.checked)}
-                  className="accent-amber-400"
+                  className="accent-amber-400 w-4 h-4 cursor-pointer"
                 />
               </div>
 
-              <div className="flex items-center justify-between p-2.5 rounded-lg bg-slate-900 border border-white/5">
+              {/* Granular Handle Customization */}
+              {includeSocialPills && (
+                <div className="p-3.5 rounded-lg bg-slate-950/80 border border-white/10 space-y-3">
+                  <div className="text-[11px] font-semibold text-slate-300 flex items-center gap-1.5">
+                    <AtSign className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Customize Your Platform Handles</span>
+                  </div>
+
+                  {/* TikTok Input */}
+                  <div className="flex items-center space-x-2">
+                    <input 
+                      type="checkbox" 
+                      checked={showTiktok} 
+                      onChange={(e) => setShowTiktok(e.target.checked)} 
+                      className="accent-amber-400 w-3.5 h-3.5 cursor-pointer"
+                      title="Toggle TikTok pill"
+                    />
+                    <div className="w-6 h-6 rounded bg-slate-900 border border-white/10 flex items-center justify-center shrink-0">
+                      <TikTokIcon className="w-3 h-3 text-emerald-400" />
+                    </div>
+                    <input 
+                      type="text" 
+                      value={tiktokHandle} 
+                      onChange={(e) => setTiktokHandle(e.target.value)}
+                      placeholder="@yourtiktok"
+                      className="flex-1 bg-slate-900 border border-white/10 rounded-md px-2.5 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400/50"
+                    />
+                  </div>
+
+                  {/* YouTube Input */}
+                  <div className="flex items-center space-x-2">
+                    <input 
+                      type="checkbox" 
+                      checked={showYoutube} 
+                      onChange={(e) => setShowYoutube(e.target.checked)} 
+                      className="accent-amber-400 w-3.5 h-3.5 cursor-pointer"
+                      title="Toggle YouTube pill"
+                    />
+                    <div className="w-6 h-6 rounded bg-slate-900 border border-white/10 flex items-center justify-center shrink-0">
+                      <YoutubeIcon className="w-3 h-3 text-red-500" />
+                    </div>
+                    <input 
+                      type="text" 
+                      value={youtubeHandle} 
+                      onChange={(e) => setYoutubeHandle(e.target.value)}
+                      placeholder="@YourYouTube"
+                      className="flex-1 bg-slate-900 border border-white/10 rounded-md px-2.5 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400/50"
+                    />
+                  </div>
+
+                  {/* Instagram Input */}
+                  <div className="flex items-center space-x-2">
+                    <input 
+                      type="checkbox" 
+                      checked={showInstagram} 
+                      onChange={(e) => setShowInstagram(e.target.checked)} 
+                      className="accent-amber-400 w-3.5 h-3.5 cursor-pointer"
+                      title="Toggle Instagram pill"
+                    />
+                    <div className="w-6 h-6 rounded bg-slate-900 border border-white/10 flex items-center justify-center shrink-0">
+                      <InstagramIcon className="w-3 h-3 text-pink-400" />
+                    </div>
+                    <input 
+                      type="text" 
+                      value={instagramHandle} 
+                      onChange={(e) => setInstagramHandle(e.target.value)}
+                      placeholder="@yourinstagram"
+                      className="flex-1 bg-slate-900 border border-white/10 rounded-md px-2.5 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400/50"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Outro Card Toggle */}
+              <div className="flex items-center justify-between p-3 rounded-lg bg-slate-900 border border-white/5">
                 <div>
                   <div className="font-semibold text-slate-200">Branded Outro Card Crossfade</div>
                   <div className="text-[10px] text-slate-500">4.5s call-to-action screen with YouTube subscription prompt</div>
@@ -137,7 +222,7 @@ export const SubtitlesView: React.FC<SubtitlesViewProps> = ({ onNext }) => {
                   type="checkbox" 
                   checked={includeOutro} 
                   onChange={(e) => setIncludeOutro(e.target.checked)}
-                  className="accent-amber-400"
+                  className="accent-amber-400 w-4 h-4 cursor-pointer"
                 />
               </div>
             </div>
@@ -155,11 +240,11 @@ export const SubtitlesView: React.FC<SubtitlesViewProps> = ({ onNext }) => {
             </div>
 
             {/* Video center area */}
-            <div className="my-auto text-center">
+            <div className="my-auto text-center px-2">
               {/* Animated Subtitle Safe-Zone Preview */}
-              <div className="bg-black/50 px-3 py-1.5 rounded-lg backdrop-blur-sm border border-white/5 inline-block">
-                <span className="text-xs font-black tracking-wide text-white font-sans drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]">
-                  WHEN GOD WANTS TO <span className="text-amber-400 underline decoration-amber-400/60">BLESS YOU</span>
+              <div className="bg-black/60 px-3 py-2 rounded-lg backdrop-blur-sm border border-white/5 inline-block max-w-[210px]">
+                <span className="text-[11px] font-black tracking-wide text-white font-sans drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)] leading-relaxed block">
+                  WHEN YOU COMMIT TO YOUR PURPOSE, <span className="text-amber-400 underline decoration-amber-400/60">DISCIPLINE PRECEDES IMPACT</span>
                 </span>
               </div>
             </div>
@@ -172,15 +257,24 @@ export const SubtitlesView: React.FC<SubtitlesViewProps> = ({ onNext }) => {
               <div className="w-5 h-5 rounded-full bg-slate-600" />
             </div>
 
-            {/* Social pills in phone preview */}
+            {/* Dynamic Social Pills in phone preview */}
             {includeSocialPills && (
-              <div className="mb-4 space-y-1 opacity-90 scale-75 origin-bottom-left">
-                <div className="bg-white text-slate-950 px-2 py-0.5 rounded-full text-[9px] font-bold flex items-center gap-1 w-max shadow">
-                  <span className="w-2.5 h-2.5 rounded-full bg-slate-950" /> niyiadekunle6
-                </div>
-                <div className="bg-white text-slate-950 px-2 py-0.5 rounded-full text-[9px] font-bold flex items-center gap-1 w-max shadow">
-                  <span className="w-2.5 h-2.5 rounded-full bg-red-600" /> NIYIADEKUNLETV
-                </div>
+              <div className="mb-4 space-y-1.5 opacity-90 scale-75 origin-bottom-left">
+                {showTiktok && tiktokHandle.trim() && (
+                  <div className="bg-white text-slate-950 px-2.5 py-0.5 rounded-full text-[9px] font-bold flex items-center gap-1.5 w-max shadow">
+                    <span className="w-2 h-2 rounded-full bg-slate-950" /> {tiktokHandle}
+                  </div>
+                )}
+                {showYoutube && youtubeHandle.trim() && (
+                  <div className="bg-white text-slate-950 px-2.5 py-0.5 rounded-full text-[9px] font-bold flex items-center gap-1.5 w-max shadow">
+                    <span className="w-2 h-2 rounded-full bg-red-600" /> {youtubeHandle}
+                  </div>
+                )}
+                {showInstagram && instagramHandle.trim() && (
+                  <div className="bg-white text-slate-950 px-2.5 py-0.5 rounded-full text-[9px] font-bold flex items-center gap-1.5 w-max shadow">
+                    <span className="w-2 h-2 rounded-full bg-gradient-to-tr from-amber-500 to-pink-500" /> {instagramHandle}
+                  </div>
+                )}
               </div>
             )}
 
@@ -196,3 +290,4 @@ export const SubtitlesView: React.FC<SubtitlesViewProps> = ({ onNext }) => {
     </div>
   );
 };
+

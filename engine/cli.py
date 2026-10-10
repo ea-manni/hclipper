@@ -118,6 +118,15 @@ def cmd_trim(args):
 
 def cmd_reframe(args):
     reframer = AutoReframer(model_path=args.model)
+    aspect_map = {
+        "9:16": ((9, 16), 1080, 1920),
+        "1:1": ((1, 1), 1080, 1080),
+        "16:9": ((16, 9), 1920, 1080),
+    }
+    ratio_tuple, out_w, out_h = aspect_map.get(getattr(args, "aspect", "9:16"), ((9, 16), 1080, 1920))
+    deadzone = getattr(args, "deadzone", 25.0)
+    smooth_factor = getattr(args, "smooth", 0.06)
+
     def on_progress(p):
         if args.json:
             emit_json("reframe_progress", p)
@@ -125,7 +134,13 @@ def cmd_reframe(args):
             print(f"[{p.get('phase')}] {p.get('percent')}%", end="\r", flush=True)
 
     if args.trajectory_only:
-        traj = reframer.compute_crop_trajectory(args.input, progress_callback=on_progress)
+        traj = reframer.compute_crop_trajectory(
+            args.input,
+            aspect_ratio=ratio_tuple,
+            deadzone=deadzone,
+            smooth_factor=smooth_factor,
+            progress_callback=on_progress
+        )
         if args.json:
             emit_json("trajectory", traj)
         else:
@@ -135,10 +150,12 @@ def cmd_reframe(args):
     res = reframer.render_reframed_video(
         args.input,
         args.output,
+        out_width=out_w,
+        out_height=out_h,
         progress_callback=on_progress
     )
     if args.json:
-        emit_json("reframe_result", {"success": res, "output": args.output})
+        emit_json("reframe_result", {"success": res, "output": args.output, "aspect": getattr(args, "aspect", "9:16")})
     else:
         print("\nAuto-reframe render completed:", args.output)
 
@@ -275,10 +292,13 @@ def main():
     p_tr.set_defaults(func=cmd_trim)
 
     # Reframe
-    p_rf = subparsers.add_parser("reframe", help="AI face tracking and 9:16 vertical crop", parents=[common_parser])
+    p_rf = subparsers.add_parser("reframe", help="AI face tracking and aspect ratio reframe", parents=[common_parser])
     p_rf.add_argument("input", help="Horizontal 16:9 input video")
-    p_rf.add_argument("output", nargs="?", default="", help="Vertical 9:16 output video")
+    p_rf.add_argument("output", nargs="?", default="", help="Reframed output video")
     p_rf.add_argument("--model", help="Path to YuNet ONNX model")
+    p_rf.add_argument("--aspect", choices=["9:16", "1:1", "16:9"], default="9:16", help="Target aspect ratio")
+    p_rf.add_argument("--deadzone", type=float, default=25.0, help="Deadzone leeway in pixels")
+    p_rf.add_argument("--smooth", type=float, default=0.06, help="Camera pan smoothing factor")
     p_rf.add_argument("--trajectory-only", action="store_true", help="Calculate crop coordinates only")
     p_rf.set_defaults(func=cmd_reframe)
 

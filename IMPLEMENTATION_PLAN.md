@@ -5,7 +5,7 @@ This document outlines the step-by-step phased execution plan to develop, stabil
 ---
 
 ## Phase 1: Engine Modularization & CLI Hardening (Foundation)
-**Objective**: Refactor the proven production scripts from `niyiadekunle` into clean, reusable Python modules with standardized JSON input/output contracts.
+**Objective**: Build clean, reusable Python modules with standardized JSON input/output contracts.
 
 - [x] **Task 1.1**: Initialize project structure in `C:\Users\Ebunoluwa\Desktop\hclipper`:
   - `engine/`: Core Python pipeline packages.

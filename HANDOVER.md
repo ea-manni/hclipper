@@ -24,8 +24,8 @@
 
 ---
 
-## 3. Reference Implementation (Source Code in `niyiadekunle`)
-All the core clipping, DSP, and publishing algorithms were built and tested in `C:\Users\Ebunoluwa\Desktop\niyiadekunle`. Key reference files:
+## 3. Reference Implementation
+The core clipping, DSP, and publishing algorithms were modularized into `hclipper/engine`. Key modules:
 - `pipeline/sermon_clip_maker.py`: Core pipeline orchestration (ingestion, silence trimming, overlays, ducking).
 - `pipeline/batch_update_all_masters.py`: Batch subtitle alignment, hook banner rendering, and FFmpeg filter graphs.
 - `pipeline/moderate_pause_trimmer.py`: Cadence-preserving silence detector (`noise=-33dB:d=0.75s`, preserving 0.35s breathing rhythm).

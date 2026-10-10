@@ -64,10 +64,10 @@ export const PublisherView: React.FC = () => {
   const [activeAccountModal, setActiveAccountModal] = useState<string | null>(null);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [sessionStatuses, setSessionStatuses] = useState({
-    youtube: true,
-    tiktok_ng: true,
+    youtube: false,
+    tiktok_ng: false,
     tiktok_us: false,
-    instagram: true
+    instagram: false
   });
 
   // Edit Caption Modal State
@@ -78,82 +78,82 @@ export const PublisherView: React.FC = () => {
   // Queue Data
   const [queue, setQueue] = useState<QueueItem[]>([
     {
-      id: 'Clip1_You_Cant_Afford_It_Master',
-      title: 'Stop Proving Things To People (You Can\'t Afford It)',
-      filename: 'Clip1_You_Cant_Afford_It_Master.mp4',
-      file_path: 'clips/Clip1_You_Cant_Afford_It_Master.mp4',
+      id: 'Clip1_Discover_Your_Purpose_Master',
+      title: 'Discover Your True Calling & Purpose',
+      filename: 'Clip1_Discover_Your_Purpose_Master.mp4',
+      file_path: 'clips/Clip1_Discover_Your_Purpose_Master.mp4',
       duration: '68s',
-      caption: 'Stop proving things to people! Preached by Pastor Niyi Adekunle.\n\n#Shorts #Reels #TikTok',
+      caption: 'Discover your true purpose and unlock your full potential!\n\n#Shorts #Reels #TikTok #Purpose #Growth',
       status: {
-        youtube: 'posted',
-        tiktok_ng: 'posted',
-        tiktok_us: 'pending',
-        instagram: 'posted'
-      }
-    },
-    {
-      id: 'Clip2_They_Got_There_First_Master',
-      title: 'They Got There First Means Nothing',
-      filename: 'Clip2_They_Got_There_First_Master.mp4',
-      file_path: 'clips/Clip2_They_Got_There_First_Master.mp4',
-      duration: '117s',
-      caption: 'They got there first means nothing! Catch the full message.\n\n#Shorts #Reels #TikTok',
-      status: {
-        youtube: 'posted',
-        tiktok_ng: 'posted',
-        tiktok_us: 'pending',
-        instagram: 'posted'
-      }
-    },
-    {
-      id: 'Clip3_Destiny_Friends_Master',
-      title: '10,000 Friends, But Who Prays For You?',
-      filename: 'Clip3_Destiny_Friends_Master.mp4',
-      file_path: 'clips/Clip3_Destiny_Friends_Master.mp4',
-      duration: '102s',
-      caption: '10,000 Friends, but who prays for you? #PastorNiyiAdekunle',
-      status: {
-        youtube: 'posted',
-        tiktok_ng: 'posted',
-        tiktok_us: 'pending',
-        instagram: 'posted'
-      }
-    },
-    {
-      id: 'Clip4_Something_Huge_Is_Coming_Master',
-      title: 'Something Huge Is Coming in Your Life',
-      filename: 'Clip4_Something_Huge_Is_Coming_Master.mp4',
-      file_path: 'clips/Clip4_Something_Huge_Is_Coming_Master.mp4',
-      duration: '57s',
-      caption: 'Something huge is coming in your life! #Shorts #TikTok',
-      status: {
-        youtube: 'posted',
-        tiktok_ng: 'posted',
-        tiktok_us: 'pending',
-        instagram: 'posted'
-      }
-    },
-    {
-      id: 'Clip5_The_Blessing_That_Makes_Rich_Master',
-      title: 'The Blessing That Makes Rich and Adds No Sorrow',
-      filename: 'Clip5_The_Blessing_That_Makes_Rich_Master.mp4',
-      file_path: 'clips/Clip5_The_Blessing_That_Makes_Rich_Master.mp4',
-      duration: '104s',
-      caption: 'The blessing that makes rich and adds no sorrow.\n\n#Shorts #Reels',
-      status: {
-        youtube: 'posted',
+        youtube: 'pending',
         tiktok_ng: 'pending',
         tiktok_us: 'pending',
         instagram: 'pending'
       }
     },
     {
-      id: 'Clip6_The_Making_In_Secret_Master',
-      title: 'The Making in Secret Before the Manifestation',
-      filename: 'Clip6_The_Making_In_Secret_Master.mp4',
-      file_path: 'clips/Clip6_The_Making_In_Secret_Master.mp4',
+      id: 'Clip2_Consistency_Beats_Talent_Master',
+      title: 'Consistency Beats Talent Every Time',
+      filename: 'Clip2_Consistency_Beats_Talent_Master.mp4',
+      file_path: 'clips/Clip2_Consistency_Beats_Talent_Master.mp4',
+      duration: '117s',
+      caption: 'Consistency beats talent when talent doesn\'t work hard. Keep pushing daily!\n\n#Motivation #Shorts #TikTok #Discipline',
+      status: {
+        youtube: 'pending',
+        tiktok_ng: 'pending',
+        tiktok_us: 'pending',
+        instagram: 'pending'
+      }
+    },
+    {
+      id: 'Clip3_Surround_With_Purpose_Master',
+      title: 'Surround Yourself With Purpose-Driven People',
+      filename: 'Clip3_Surround_With_Purpose_Master.mp4',
+      file_path: 'clips/Clip3_Surround_With_Purpose_Master.mp4',
+      duration: '102s',
+      caption: 'The circle around you shapes your future. Choose your company with intention.\n\n#Wisdom #Leadership #Shorts #Reels',
+      status: {
+        youtube: 'pending',
+        tiktok_ng: 'pending',
+        tiktok_us: 'pending',
+        instagram: 'pending'
+      }
+    },
+    {
+      id: 'Clip4_Turning_Failures_To_Stepping_Stones_Master',
+      title: 'Turning Failures Into Powerful Stepping Stones',
+      filename: 'Clip4_Turning_Failures_To_Stepping_Stones_Master.mp4',
+      file_path: 'clips/Clip4_Turning_Failures_To_Stepping_Stones_Master.mp4',
+      duration: '57s',
+      caption: 'Every setback is a setup for a stronger comeback. Never give up!\n\n#GrowthMindset #Shorts #TikTok #Inspiration',
+      status: {
+        youtube: 'pending',
+        tiktok_ng: 'pending',
+        tiktok_us: 'pending',
+        instagram: 'pending'
+      }
+    },
+    {
+      id: 'Clip5_Daily_Discipline_Master',
+      title: 'The Power of Daily Discipline',
+      filename: 'Clip5_Daily_Discipline_Master.mp4',
+      file_path: 'clips/Clip5_Daily_Discipline_Master.mp4',
+      duration: '104s',
+      caption: 'Daily discipline creates long-term freedom. Small habits build massive results.\n\n#Focus #Discipline #Shorts #Reels',
+      status: {
+        youtube: 'pending',
+        tiktok_ng: 'pending',
+        tiktok_us: 'pending',
+        instagram: 'pending'
+      }
+    },
+    {
+      id: 'Clip6_Building_In_Silence_Master',
+      title: 'Building in Silence Before the Breakthrough',
+      filename: 'Clip6_Building_In_Silence_Master.mp4',
+      file_path: 'clips/Clip6_Building_In_Silence_Master.mp4',
       duration: '64s',
-      caption: 'The making in secret before the manifestation.\n\n#Shorts #Reels',
+      caption: 'Build in silence and let your consistency make the noise. The breakthrough is coming.\n\n#Grind #Focus #Shorts #Reels',
       status: {
         youtube: 'pending',
         tiktok_ng: 'pending',
@@ -393,12 +393,16 @@ export const PublisherView: React.FC = () => {
           </div>
           <div>
             <div className="text-xs font-bold text-white">YouTube Shorts</div>
-            <div className="text-[10px] text-slate-400">@NIYIADEKUNLETV</div>
+            <div className="text-[10px] text-slate-400">
+              {sessionStatuses.youtube ? 'Connected Channel' : 'Click to Authenticate'}
+            </div>
           </div>
-          <div className="text-[10px] text-slate-500 pt-1">Studio Session Saved</div>
+          <div className="text-[10px] text-slate-500 pt-1">
+            {sessionStatuses.youtube ? 'Studio Session Saved' : 'No Session Profile'}
+          </div>
         </div>
 
-        {/* TikTok NG */}
+        {/* TikTok Primary / Global */}
         <div 
           onClick={() => setActiveAccountModal('tiktok_ng')}
           className="glass-card rounded-xl p-4 space-y-2 border-emerald-500/20 cursor-pointer hover:border-emerald-500/50 transition-colors"
@@ -408,14 +412,18 @@ export const PublisherView: React.FC = () => {
             <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
               sessionStatuses.tiktok_ng ? 'text-emerald-400 bg-emerald-500/10' : 'text-amber-400 bg-amber-500/10'
             }`}>
-              {sessionStatuses.tiktok_ng ? '30k+ Fanbase' : 'Click to Login'}
+              {sessionStatuses.tiktok_ng ? 'Connected' : 'Click to Login'}
             </span>
           </div>
           <div>
-            <div className="text-xs font-bold text-white">TikTok Nigeria</div>
-            <div className="text-[10px] text-slate-400">@niyiadekunle6</div>
+            <div className="text-xs font-bold text-white">TikTok (Direct / Global)</div>
+            <div className="text-[10px] text-slate-400">
+              {sessionStatuses.tiktok_ng ? 'Connected Account' : 'Click to Authenticate'}
+            </div>
           </div>
-          <div className="text-[10px] text-slate-500 pt-1">Direct Connection OK</div>
+          <div className="text-[10px] text-slate-500 pt-1">
+            {sessionStatuses.tiktok_ng ? 'Direct Connection OK' : 'No Session Profile'}
+          </div>
         </div>
 
         {/* TikTok US */}
@@ -432,10 +440,14 @@ export const PublisherView: React.FC = () => {
             </span>
           </div>
           <div>
-            <div className="text-xs font-bold text-white">TikTok US</div>
-            <div className="text-[10px] text-slate-400">US Geolocation Enforced</div>
+            <div className="text-xs font-bold text-white">TikTok (US Region)</div>
+            <div className="text-[10px] text-slate-400">
+              {sessionStatuses.tiktok_us ? 'US Session Active' : 'US Geolocation Enforced'}
+            </div>
           </div>
-          <div className="text-[10px] text-slate-500 pt-1">Pre-flight Guard Active</div>
+          <div className="text-[10px] text-slate-500 pt-1">
+            {sessionStatuses.tiktok_us ? 'Pre-flight Guard Active' : 'Requires US Proxy'}
+          </div>
         </div>
 
         {/* Instagram Reels */}
@@ -448,14 +460,18 @@ export const PublisherView: React.FC = () => {
             <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
               sessionStatuses.instagram ? 'text-emerald-400 bg-emerald-500/10' : 'text-amber-400 bg-amber-500/10'
             }`}>
-              {sessionStatuses.instagram ? '2FA Linked' : 'Click to Login'}
+              {sessionStatuses.instagram ? 'Connected' : 'Click to Login'}
             </span>
           </div>
           <div>
             <div className="text-xs font-bold text-white">Instagram Reels</div>
-            <div className="text-[10px] text-slate-400">@niyiadekunle_</div>
+            <div className="text-[10px] text-slate-400">
+              {sessionStatuses.instagram ? 'Connected Account' : 'Click to Authenticate'}
+            </div>
           </div>
-          <div className="text-[10px] text-slate-500 pt-1">Persistent Browser Profile</div>
+          <div className="text-[10px] text-slate-500 pt-1">
+            {sessionStatuses.instagram ? 'Persistent Profile OK' : 'No Session Profile'}
+          </div>
         </div>
       </div>
 

@@ -10,7 +10,8 @@ import {
   Monitor, 
   CheckCircle2, 
   Film,
-  Download
+  Download,
+  Target
 } from 'lucide-react';
 
 interface ReframeViewProps {
@@ -37,9 +38,57 @@ export const ReframeView: React.FC<ReframeViewProps> = ({
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentFrameIndex, setCurrentFrameIndex] = useState(0);
-  const [cropXPercent, setCropXPercent] = useState(38); // default center 38%
+  const [cropXPercent, setCropXPercent] = useState(34); // center default
 
   const videoRef = useRef<HTMLVideoElement>(null);
+
+  // Dynamic Aspect Configuration
+  const getAspectConfig = () => {
+    switch (aspectRatio) {
+      case '1:1':
+        return {
+          widthPct: 56.25, // (1/1) / (16/9) = 9/16 = 56.25%
+          badgeTitle: '1:1 SQUARE CROP',
+          resolution: '1080x1080',
+          cropLabel: '1080 x 1080',
+          subLabel: '(Instagram Feed Square)',
+          buttonLabel: 'Render 1:1 Square Video',
+          cardTitle: 'Render Master 1:1 Square Video',
+          desc: 'Encodes with Intel QSV / NVENC hardware acceleration at 1080x1080 60fps.'
+        };
+      case '16:9':
+        return {
+          widthPct: 100,
+          badgeTitle: '16:9 MASTER FULL FRAME',
+          resolution: '1920x1080',
+          cropLabel: '1920 x 1080',
+          subLabel: '(Full HD Master VOD)',
+          buttonLabel: 'Render 16:9 Master Video',
+          cardTitle: 'Render Master 16:9 Master Video',
+          desc: 'Encodes with Intel QSV / NVENC hardware acceleration at 1920x1080 60fps.'
+        };
+      case '9:16':
+      default:
+        return {
+          widthPct: 31.64, // (9/16) / (16/9) = 81/256 = 31.64%
+          badgeTitle: '9:16 SHORTS CROP',
+          resolution: '1080x1920',
+          cropLabel: '608 x 1080',
+          subLabel: '(Lanczos Full HD Shorts)',
+          buttonLabel: 'Render 9:16 Short',
+          cardTitle: 'Render Master 9:16 Vertical Short',
+          desc: 'Encodes with Intel QSV / NVENC hardware acceleration at 1080x1920 60fps.'
+        };
+    }
+  };
+
+  const config = getAspectConfig();
+
+  // Active crop left coordinate constrained by aspect ratio width
+  const activeLeft = aspectRatio === '16:9' ? 0 : Math.min(Math.max(cropXPercent, 0), 100 - config.widthPct);
+
+  // Center coordinate of the active crop window (where face & camera track)
+  const activeCenter = aspectRatio === '16:9' ? 50 : activeLeft + (config.widthPct / 2);
 
   // Run live analysis via Python engine IPC or simulated playback
   const handleAnalyzeTrajectory = async () => {
@@ -58,7 +107,13 @@ export const ReframeView: React.FC<ReframeViewProps> = ({
         }
       });
 
-      const res = await window.hclipper.runEngine('reframe', [sourceVideo, '--trajectory-only']);
+      const res = await window.hclipper.runEngine('reframe', [
+        sourceVideo, 
+        '--trajectory-only',
+        '--aspect', aspectRatio,
+        '--deadzone', deadzone.toString(),
+        '--smooth', smoothFactor.toString()
+      ]);
       unsub();
       if (!res.success) {
         setIsAnalyzing(false);
@@ -93,7 +148,7 @@ export const ReframeView: React.FC<ReframeViewProps> = ({
         setCurrentFrameIndex((prev) => {
           const next = (prev + 1) % trajectoryData.length;
           const frameCoord = trajectoryData[next];
-          // Convert max crop width 875 to percent (0 - 68%)
+          // Convert crop coordinate to percentage
           const pct = (frameCoord / 1280) * 100;
           setCropXPercent(pct);
           return next;
@@ -109,8 +164,10 @@ export const ReframeView: React.FC<ReframeViewProps> = ({
     setIsRendering(true);
     setRenderProgress(10);
 
+    const aspectSuffix = aspectRatio.replace(':', '_');
+    const targetOut = `C:/Users/Ebunoluwa/Desktop/hclipper/clips/Master_Reframed_${aspectSuffix}.mp4`;
+
     if (window.hclipper && sourceVideo) {
-      const targetOut = 'C:/Users/Ebunoluwa/Desktop/hclipper/clips/Master_Reframed_Clip.mp4';
       const unsub = window.hclipper.onEngineEvent((evt) => {
         if (evt.event === 'reframe_progress') {
           setRenderProgress(evt.percent || 0);
@@ -121,7 +178,13 @@ export const ReframeView: React.FC<ReframeViewProps> = ({
         }
       });
 
-      const res = await window.hclipper.runEngine('reframe', [sourceVideo, targetOut]);
+      const res = await window.hclipper.runEngine('reframe', [
+        sourceVideo, 
+        targetOut,
+        '--aspect', aspectRatio,
+        '--deadzone', deadzone.toString(),
+        '--smooth', smoothFactor.toString()
+      ]);
       unsub();
       if (!res.success) {
         setIsRendering(false);
@@ -134,7 +197,7 @@ export const ReframeView: React.FC<ReframeViewProps> = ({
           clearInterval(interval);
           setRenderProgress(100);
           setIsRendering(false);
-          setRenderedOutput('C:/Users/Ebunoluwa/Desktop/hclipper/clips/Master_Reframed_Clip.mp4');
+          setRenderedOutput(targetOut);
         } else {
           setRenderProgress(p);
         }
@@ -169,7 +232,7 @@ export const ReframeView: React.FC<ReframeViewProps> = ({
 
       {/* Main Preview & Physics Grid */}
       <div className="grid grid-cols-12 gap-6">
-        {/* Left: Interactive 16:9 Stage Canvas with 9:16 Crop Box (8 cols) */}
+        {/* Left: Interactive 16:9 Stage Canvas with Dynamic Crop Box (8 cols) */}
         <div className="col-span-8 glass-card rounded-xl p-5 space-y-4">
           <div className="flex items-center justify-between text-xs">
             <span className="font-semibold text-slate-200 flex items-center gap-1.5">
@@ -199,31 +262,47 @@ export const ReframeView: React.FC<ReframeViewProps> = ({
               />
             )}
             
-            {/* Speaker Silhouette Graphic */}
+            {/* Speaker Silhouette Graphic - Dead-Centered Reticle on Face & Torso */}
             <div 
-              className="absolute bottom-6 flex flex-col items-center transition-all duration-75" 
-              style={{ left: `${cropXPercent + 8}%` }}
+              className="absolute bottom-4 flex flex-col items-center transition-all duration-75 select-none" 
+              style={{ 
+                left: `${activeCenter}%`,
+                transform: 'translateX(-50%)'
+              }}
             >
-              <div className="w-14 h-16 rounded-full bg-slate-700/80 border-2 border-amber-400/80 shadow-lg relative flex items-center justify-center">
-                <span className="text-[9px] font-bold text-amber-300">Face Center</span>
+              {/* Head with Concentric Crosshair & Reticle */}
+              <div className="w-16 h-16 rounded-full bg-slate-700/90 border-2 border-amber-400/90 shadow-xl relative flex items-center justify-center">
+                {/* Target reticle crosshairs */}
+                <div className="absolute w-full h-[1px] bg-amber-400/50" />
+                <div className="absolute h-full w-[1px] bg-amber-400/50" />
+                <div className="w-2.5 h-2.5 rounded-full bg-amber-400 shadow-sm shadow-amber-400/80 z-10" />
+                <div className="absolute inset-1.5 border border-dashed border-amber-400/40 rounded-full animate-spin-slow" />
+                <span className="absolute -bottom-2 text-[8px] font-extrabold uppercase tracking-wider text-amber-300 bg-slate-950/90 px-1 py-0.2 rounded border border-amber-400/40 z-20">
+                  Face Center
+                </span>
               </div>
-              <div className="w-28 h-24 bg-slate-800/80 rounded-t-3xl mt-1 border border-white/10" />
+
+              {/* Neck & Torso */}
+              <div className="w-5 h-2 bg-slate-700/80 -mt-0.5" />
+              <div className="w-32 h-24 bg-slate-800/90 rounded-t-[32px] border border-white/10 shadow-inner flex justify-center pt-2">
+                <Target className="w-4 h-4 text-slate-600/60" />
+              </div>
             </div>
 
-            {/* 9:16 Vertical Crop Window Highlight */}
+            {/* Dynamic Aspect Ratio Crop Window Highlight */}
             <div 
               className="absolute top-0 bottom-0 bg-transparent border-2 border-amber-400 shadow-2xl transition-all duration-75 flex flex-col justify-between p-2 pointer-events-none"
               style={{
-                width: '31.64%',
-                left: `${cropXPercent}%`,
-                boxShadow: '0 0 0 9999px rgba(0, 0, 0, 0.65)'
+                width: `${config.widthPct}%`,
+                left: `${activeLeft}%`,
+                boxShadow: aspectRatio === '16:9' ? 'none' : '0 0 0 9999px rgba(0, 0, 0, 0.65)'
               }}
             >
-              <div className="flex justify-between items-center text-[9px] font-bold text-amber-300 bg-black/80 px-1.5 py-0.5 rounded">
-                <span>9:16 SHORTS CROP</span>
-                <span>1080x1920</span>
+              <div className="flex justify-between items-center text-[9px] font-bold text-amber-300 bg-black/80 px-2 py-0.5 rounded shadow">
+                <span>{config.badgeTitle}</span>
+                <span className="font-mono">{config.resolution}</span>
               </div>
-              <div className="text-center text-[9px] text-amber-300 bg-black/80 px-1 py-0.5 rounded">
+              <div className="text-center text-[9px] text-amber-300 bg-black/80 px-1.5 py-0.5 rounded self-center shadow">
                 Deadzone Pan Camera: Frame {currentFrameIndex}
               </div>
             </div>
@@ -245,12 +324,12 @@ export const ReframeView: React.FC<ReframeViewProps> = ({
                 className="px-4 py-2 bg-amber-400/10 hover:bg-amber-400/20 border border-amber-400/30 text-amber-300 text-xs font-semibold rounded-lg transition-colors flex items-center space-x-1.5"
               >
                 <Sparkles className="w-3.5 h-3.5" />
-                <span>{isAnalyzing ? `Tracking Faces (${analysisProgress}%)...` : 'Analyze YuNet Trajectory'}</span>
+                <span>{isAnalyzing ? `Tracking Faces (${analysisProgress}%)...` : `Analyze YuNet (${aspectRatio})`}</span>
               </button>
             </div>
 
             <span className="text-[11px] text-slate-400">
-              Crop Window: <strong className="text-white">608 x 1080</strong> (Lanczos Full HD)
+              Crop Window: <strong className="text-white">{config.cropLabel}</strong> {config.subLabel}
             </span>
           </div>
 
@@ -259,10 +338,10 @@ export const ReframeView: React.FC<ReframeViewProps> = ({
             <div>
               <div className="text-xs font-bold text-white flex items-center gap-1.5">
                 <Film className="w-4 h-4 text-amber-400" />
-                <span>Render Master 9:16 Vertical Short</span>
+                <span>{config.cardTitle}</span>
               </div>
               <p className="text-[11px] text-slate-400 mt-0.5">
-                Encodes with Intel QSV / NVENC hardware acceleration at 1080x1920 60fps.
+                {config.desc}
               </p>
             </div>
 
@@ -282,7 +361,7 @@ export const ReframeView: React.FC<ReframeViewProps> = ({
                   className="px-5 py-2.5 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 disabled:opacity-50 text-slate-950 font-bold text-xs rounded-lg transition-all shadow-md shadow-amber-500/10 flex items-center space-x-2"
                 >
                   <Download className="w-3.5 h-3.5" />
-                  <span>{isRendering ? `Rendering (${renderProgress}%)...` : 'Render 9:16 Short'}</span>
+                  <span>{isRendering ? `Rendering (${renderProgress}%)...` : config.buttonLabel}</span>
                 </button>
               )}
             </div>
@@ -298,10 +377,13 @@ export const ReframeView: React.FC<ReframeViewProps> = ({
             </span>
             <div className="grid grid-cols-3 gap-2">
               <button
-                onClick={() => setAspectRatio('9:16')}
+                onClick={() => {
+                  setAspectRatio('9:16');
+                  setRenderedOutput(null);
+                }}
                 className={`flex flex-col items-center justify-center p-2.5 rounded-lg border text-center transition-all ${
                   aspectRatio === '9:16'
-                    ? 'bg-amber-400/15 border-amber-400/50 text-amber-300'
+                    ? 'bg-amber-400/15 border-amber-400/50 text-amber-300 shadow-sm shadow-amber-400/20'
                     : 'bg-slate-900 border-white/5 text-slate-400 hover:text-white'
                 }`}
               >
@@ -311,10 +393,13 @@ export const ReframeView: React.FC<ReframeViewProps> = ({
               </button>
 
               <button
-                onClick={() => setAspectRatio('1:1')}
+                onClick={() => {
+                  setAspectRatio('1:1');
+                  setRenderedOutput(null);
+                }}
                 className={`flex flex-col items-center justify-center p-2.5 rounded-lg border text-center transition-all ${
                   aspectRatio === '1:1'
-                    ? 'bg-amber-400/15 border-amber-400/50 text-amber-300'
+                    ? 'bg-amber-400/15 border-amber-400/50 text-amber-300 shadow-sm shadow-amber-400/20'
                     : 'bg-slate-900 border-white/5 text-slate-400 hover:text-white'
                 }`}
               >
@@ -324,10 +409,13 @@ export const ReframeView: React.FC<ReframeViewProps> = ({
               </button>
 
               <button
-                onClick={() => setAspectRatio('16:9')}
+                onClick={() => {
+                  setAspectRatio('16:9');
+                  setRenderedOutput(null);
+                }}
                 className={`flex flex-col items-center justify-center p-2.5 rounded-lg border text-center transition-all ${
                   aspectRatio === '16:9'
-                    ? 'bg-amber-400/15 border-amber-400/50 text-amber-300'
+                    ? 'bg-amber-400/15 border-amber-400/50 text-amber-300 shadow-sm shadow-amber-400/20'
                     : 'bg-slate-900 border-white/5 text-slate-400 hover:text-white'
                 }`}
               >
@@ -399,3 +487,4 @@ export const ReframeView: React.FC<ReframeViewProps> = ({
     </div>
   );
 };
+
