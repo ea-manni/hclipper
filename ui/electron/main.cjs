@@ -118,7 +118,11 @@ ipcMain.handle('hclipper:run-engine', (event, { command, args = [], jobId = null
     }
 
     const binDir = path.join(PROJECT_ROOT, 'bin');
-    const childEnv = { ...process.env };
+    const childEnv = { 
+      ...process.env,
+      PYTHONIOENCODING: 'utf-8',
+      PYTHONUNBUFFERED: '1'
+    };
     if (fs.existsSync(binDir)) {
       childEnv.PATH = `${binDir}${path.delimiter}${childEnv.PATH || ''}`;
     }
@@ -153,9 +157,12 @@ ipcMain.handle('hclipper:run-engine', (event, { command, args = [], jobId = null
 
       const lines = text.split('\n');
       for (const line of lines) {
-        if (line.includes('__HCLIPPER_JSON__')) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+
+        if (trimmed.includes('__HCLIPPER_JSON__')) {
           try {
-            const jsonPart = line.split('__HCLIPPER_JSON__')[1].trim();
+            const jsonPart = trimmed.split('__HCLIPPER_JSON__')[1].trim();
             const parsed = JSON.parse(jsonPart);
             parsedEvents.push(parsed);
             if (mainWindow) {
@@ -168,18 +175,31 @@ ipcMain.handle('hclipper:run-engine', (event, { command, args = [], jobId = null
           } catch (e) {
             // Ignore parse error
           }
+        } else {
+          // Stream raw stdout lines (yt-dlp, ffmpeg, engine logs) to renderer
+          if (mainWindow) {
+            mainWindow.webContents.send('hclipper:engine-log', {
+              jobId: currentJobId,
+              level: 'stdout',
+              text: trimmed
+            });
+          }
         }
       }
     });
 
     child.stderr.on('data', (data) => {
       const errText = data.toString();
-      if (mainWindow) {
-        mainWindow.webContents.send('hclipper:engine-log', {
-          jobId: currentJobId,
-          level: 'stderr',
-          text: errText
-        });
+      const lines = errText.split('\n');
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (trimmed && mainWindow) {
+          mainWindow.webContents.send('hclipper:engine-log', {
+            jobId: currentJobId,
+            level: 'stderr',
+            text: trimmed
+          });
+        }
       }
     });
 
@@ -188,6 +208,13 @@ ipcMain.handle('hclipper:run-engine', (event, { command, args = [], jobId = null
       if (code === 0) {
         resolve({ success: true, jobId: currentJobId, events: parsedEvents, output: rawOutput });
       } else {
+        if (mainWindow) {
+          mainWindow.webContents.send('hclipper:engine-log', {
+            jobId: currentJobId,
+            level: 'error',
+            text: `Process finished with exit code ${code}`
+          });
+        }
         resolve({ success: false, jobId: currentJobId, code, output: rawOutput });
       }
     });

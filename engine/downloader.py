@@ -104,8 +104,6 @@ class MediaDownloader:
         out_template = str(self.download_dir / (f"{output_name}.%(ext)s" if output_name else "%(title)s [%(id)s].%(ext)s"))
 
         def yt_hook(d):
-            if not progress_callback:
-                return
             status = d.get("status")
             if status == "downloading":
                 total_bytes = d.get("total_bytes") or d.get("total_bytes_estimate") or 0
@@ -113,29 +111,44 @@ class MediaDownloader:
                 percent = (downloaded / total_bytes * 100.0) if total_bytes > 0 else 0.0
                 speed = d.get("speed")
                 eta = d.get("eta")
-                progress_callback({
-                    "status": "downloading",
-                    "percent": round(percent, 1),
-                    "downloaded_bytes": downloaded,
-                    "total_bytes": total_bytes,
-                    "speed_bps": speed,
-                    "eta_seconds": eta,
-                    "filename": d.get("filename")
-                })
+
+                # Format human readable speed & eta
+                speed_str = f"{speed / (1024 * 1024):.1f} MB/s" if speed else "N/A"
+                eta_str = f"{int(eta)}s" if eta else "calculating"
+                dl_mb = downloaded / (1024 * 1024)
+                total_mb = total_bytes / (1024 * 1024) if total_bytes > 0 else 0
+
+                # Print human-readable progress line for stdout/electron log streaming
+                print(f"[download] {percent:.1f}% of {total_mb:.1f} MB at {speed_str} (ETA {eta_str})", flush=True)
+
+                if progress_callback:
+                    progress_callback({
+                        "status": "downloading",
+                        "percent": round(percent, 1),
+                        "downloaded_bytes": downloaded,
+                        "total_bytes": total_bytes,
+                        "speed_bps": speed,
+                        "speed_str": speed_str,
+                        "eta_seconds": eta,
+                        "eta_str": eta_str,
+                        "filename": d.get("filename")
+                    })
             elif status == "finished":
-                progress_callback({
-                    "status": "processing",
-                    "percent": 99.0,
-                    "filename": d.get("filename")
-                })
+                print("[download] Stream chunk finished. Post-processing media...", flush=True)
+                if progress_callback:
+                    progress_callback({
+                        "status": "processing",
+                        "percent": 95.0,
+                        "filename": d.get("filename")
+                    })
 
         ydl_opts: Dict[str, Any] = {
             "format": f"bestvideo[height<={max_height}][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<={max_height}]+bestaudio/best[height<={max_height}]/best",
             "outtmpl": out_template,
             "merge_output_format": "mp4",
             "progress_hooks": [yt_hook],
-            "quiet": True,
-            "no_warnings": True,
+            "quiet": False,
+            "no_warnings": False,
         }
 
         if download_subs:
@@ -144,33 +157,49 @@ class MediaDownloader:
             ydl_opts["subtitleslangs"] = ["en", "en-US", "en-GB", "en.*"]
             ydl_opts["subtitlesformat"] = "vtt/srt/best"
 
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=True)
-            merged_filename = ydl.prepare_filename(info)
-            # Ensure mp4 extension
-            base, _ = os.path.splitext(merged_filename)
-            mp4_file = f"{base}.mp4"
-            if not os.path.exists(mp4_file) and os.path.exists(merged_filename):
-                mp4_file = merged_filename
+        print(f"[ingest] Connecting to stream URL: {url}", flush=True)
+        info = None
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(url, download=True)
+        except Exception as e:
+            err_msg = str(e).lower()
+            if download_subs and ("429" in err_msg or "subtitles" in err_msg or "too many requests" in err_msg):
+                print(f"[ingest] YouTube subtitle endpoint rate-limited (HTTP 429). Retrying video-only download stream...", flush=True)
+                ydl_opts.pop("writeautomaticsub", None)
+                ydl_opts.pop("writesubtitles", None)
+                ydl_opts.pop("subtitleslangs", None)
+                ydl_opts.pop("subtitlesformat", None)
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    info = ydl.extract_info(url, download=True)
+            else:
+                raise e
 
-            # Find downloaded subtitles if any
-            sub_file = None
-            for ext in [".en.vtt", ".vtt", ".en.srt", ".srt"]:
-                candidate = f"{base}{ext}"
-                if os.path.exists(candidate):
-                    sub_file = candidate
-                    break
+        merged_filename = ydl.prepare_filename(info)
+        base, _ = os.path.splitext(merged_filename)
+        mp4_file = f"{base}.mp4"
+        if not os.path.exists(mp4_file) and os.path.exists(merged_filename):
+            mp4_file = merged_filename
 
-            result = {
-                "title": info.get("title", ""),
-                "duration": info.get("duration", 0),
-                "video_path": str(Path(mp4_file).resolve()),
-                "subtitle_path": str(Path(sub_file).resolve()) if sub_file else None,
-                "thumbnail": info.get("thumbnail", ""),
-                "channel": info.get("uploader", "")
-            }
+        # Find downloaded subtitles if any
+        sub_file = None
+        for ext in [".en.vtt", ".vtt", ".en.srt", ".srt"]:
+            candidate = f"{base}{ext}"
+            if os.path.exists(candidate):
+                sub_file = candidate
+                break
 
-            if progress_callback:
-                progress_callback({"status": "completed", "percent": 100.0, "file_path": result["video_path"]})
+        result = {
+            "title": info.get("title", ""),
+            "duration": info.get("duration", 0),
+            "video_path": str(Path(mp4_file).resolve()),
+            "subtitle_path": str(Path(sub_file).resolve()) if sub_file else None,
+            "thumbnail": info.get("thumbnail", ""),
+            "channel": info.get("uploader", "")
+        }
 
-            return result
+        if progress_callback:
+            progress_callback({"status": "completed", "percent": 100.0, "file_path": result["video_path"]})
+
+        print(f"[ingest] Download completed successfully: {result['video_path']}", flush=True)
+        return result

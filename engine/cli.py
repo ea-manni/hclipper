@@ -12,6 +12,18 @@ import json
 import argparse
 from pathlib import Path
 
+# Force UTF-8 encoding on Windows to prevent UnicodeEncodeError
+if hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+if hasattr(sys.stderr, "reconfigure"):
+    try:
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
 # Add project root to path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
@@ -28,16 +40,22 @@ from engine.publisher import QueueManager, SocialPublisher
 def emit_json(event_type: str, data: dict):
     """Outputs a JSON event message to stdout for Electron IPC reading."""
     payload = {"event": event_type, **data}
-    print(f"__HCLIPPER_JSON__{json.dumps(payload, ensure_ascii=False)}", flush=True)
+    print(f"__HCLIPPER_JSON__{json.dumps(payload, ensure_ascii=True)}", flush=True)
 
 def cmd_download(args):
     downloader = MediaDownloader(download_dir=args.out)
     if args.info:
-        info = downloader.extract_info(args.url)
-        if args.json:
-            emit_json("info", info)
-        else:
-            print(json.dumps(info, indent=2))
+        try:
+            info = downloader.extract_info(args.url)
+            if args.json:
+                emit_json("info", info)
+            else:
+                print(json.dumps(info, indent=2))
+        except Exception as e:
+            if args.json:
+                emit_json("error", {"error": str(e)})
+            else:
+                print(f"Error extracting info: {e}")
         return
 
     def on_progress(d):
@@ -48,15 +66,22 @@ def cmd_download(args):
             status = d.get("status", "")
             print(f"[{status}] {pct}%", end="\r", flush=True)
 
-    result = downloader.download(
-        args.url,
-        download_subs=not args.no_subs,
-        progress_callback=on_progress
-    )
-    if args.json:
-        emit_json("result", result)
-    else:
-        print("\nDownload finished:", result["video_path"])
+    try:
+        result = downloader.download(
+            args.url,
+            download_subs=not args.no_subs,
+            progress_callback=on_progress
+        )
+        if args.json:
+            emit_json("result", result)
+        else:
+            print("\nDownload finished:", result["video_path"])
+    except Exception as e:
+        if args.json:
+            emit_json("error", {"error": str(e)})
+        else:
+            print(f"\nDownload failed: {e}")
+        sys.exit(1)
 
 def cmd_waveform(args):
     trimmer = TimelineTrimmer()
