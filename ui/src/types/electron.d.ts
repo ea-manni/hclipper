@@ -1,19 +1,28 @@
 export interface HclipperAPI {
   selectFile: (options?: { title?: string; filters?: { name: string; extensions: string[] }[] }) => Promise<string | null>;
-  runEngine: (command: string, args: (string | number)[]) => Promise<{
+  saveFileDialog: (options?: { title?: string; defaultPath?: string }) => Promise<string | null>;
+  openPath: (filePath: string) => Promise<boolean>;
+  showInFolder: (filePath: string) => Promise<boolean>;
+  runEngine: (command: string, args: (string | number)[], jobId?: string) => Promise<{
     success: boolean;
+    jobId?: string;
     events?: any[];
     code?: number;
     output?: string;
   }>;
+  cancelJob: (jobId: string) => Promise<boolean>;
+  readQueue: () => Promise<any[]>;
+  saveQueue: (items: any[]) => Promise<boolean>;
   getSystemInfo: () => Promise<{
     platform: string;
     projectRoot: string;
     assetsDir: string;
     clipsDir: string;
+    downloadsDir: string;
+    sessionsDir: string;
   }>;
   onEngineEvent: (callback: (data: any) => void) => () => void;
-  onEngineLog: (callback: (data: { level: string; text: string }) => void) => () => void;
+  onEngineLog: (callback: (data: { level: string; text: string; jobId?: string }) => void) => () => void;
 }
 
 declare global {

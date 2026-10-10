@@ -1,11 +1,16 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Eye, 
   ArrowRight, 
-  Sparkles,
-  Smartphone,
-  Square,
-  Monitor
+  Sparkles, 
+  Play, 
+  Pause, 
+  Smartphone, 
+  Square, 
+  Monitor, 
+  CheckCircle2, 
+  Film,
+  Download
 } from 'lucide-react';
 
 interface ReframeViewProps {
@@ -14,31 +19,133 @@ interface ReframeViewProps {
 }
 
 export const ReframeView: React.FC<ReframeViewProps> = ({ 
+  sourceVideo, 
   onNext 
 }) => {
   const [aspectRatio, setAspectRatio] = useState<'9:16' | '1:1' | '16:9'>('9:16');
   const [enableFaceTracking, setEnableFaceTracking] = useState(true);
   const [deadzone, setDeadzone] = useState(25);
   const [smoothFactor, setSmoothFactor] = useState(0.06);
-  const [isSimulating, setIsSimulating] = useState(false);
-  const [cropOffsetPercent, setCropOffsetPercent] = useState(38); // 38% from left
 
-  const handleSimulateTrajectory = () => {
-    setIsSimulating(true);
-    let dir = 1;
-    let offset = 38;
-    const interval = setInterval(() => {
-      offset += dir * 0.8;
-      if (offset > 48) dir = -1;
-      if (offset < 28) dir = 1;
-      setCropOffsetPercent(offset);
-    }, 50);
+  // Trajectory & Playback State
+  const [trajectoryData, setTrajectoryData] = useState<number[]>([]);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [analysisProgress, setAnalysisProgress] = useState(0);
+  const [isRendering, setIsRendering] = useState(false);
+  const [renderProgress, setRenderProgress] = useState(0);
+  const [renderedOutput, setRenderedOutput] = useState<string | null>(null);
 
-    setTimeout(() => {
-      clearInterval(interval);
-      setIsSimulating(false);
-      setCropOffsetPercent(38);
-    }, 4000);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentFrameIndex, setCurrentFrameIndex] = useState(0);
+  const [cropXPercent, setCropXPercent] = useState(38); // default center 38%
+
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  // Run live analysis via Python engine IPC or simulated playback
+  const handleAnalyzeTrajectory = async () => {
+    setIsAnalyzing(true);
+    setAnalysisProgress(10);
+
+    if (window.hclipper && sourceVideo) {
+      const unsub = window.hclipper.onEngineEvent((evt) => {
+        if (evt.event === 'reframe_progress') {
+          setAnalysisProgress(evt.percent || 0);
+        } else if (evt.event === 'trajectory') {
+          const traj = evt.trajectory || [];
+          setTrajectoryData(traj);
+          setIsAnalyzing(false);
+          setAnalysisProgress(100);
+        }
+      });
+
+      const res = await window.hclipper.runEngine('reframe', [sourceVideo, '--trajectory-only']);
+      unsub();
+      if (!res.success) {
+        setIsAnalyzing(false);
+      }
+    } else {
+      // Smooth preview simulation
+      let p = 10;
+      const interval = setInterval(() => {
+        p += 25;
+        if (p >= 100) {
+          clearInterval(interval);
+          setAnalysisProgress(100);
+          setIsAnalyzing(false);
+          // Generate 300 simulated frame coordinates with realistic speaker movement
+          const mockTraj = Array.from({ length: 300 }, (_, i) => {
+            const center = 550 + Math.sin(i / 25) * 120 + Math.cos(i / 15) * 40;
+            return Math.max(0, Math.min(875, Math.round(center - 202)));
+          });
+          setTrajectoryData(mockTraj);
+        } else {
+          setAnalysisProgress(p);
+        }
+      }, 250);
+    }
+  };
+
+  // Synchronize playback frame with crop position
+  useEffect(() => {
+    let animId: number;
+    if (isPlaying && trajectoryData.length > 0) {
+      const step = () => {
+        setCurrentFrameIndex((prev) => {
+          const next = (prev + 1) % trajectoryData.length;
+          const frameCoord = trajectoryData[next];
+          // Convert max crop width 875 to percent (0 - 68%)
+          const pct = (frameCoord / 1280) * 100;
+          setCropXPercent(pct);
+          return next;
+        });
+        animId = requestAnimationFrame(step);
+      };
+      animId = requestAnimationFrame(step);
+    }
+    return () => cancelAnimationFrame(animId);
+  }, [isPlaying, trajectoryData]);
+
+  const handleRenderMaster = async () => {
+    setIsRendering(true);
+    setRenderProgress(10);
+
+    if (window.hclipper && sourceVideo) {
+      const targetOut = 'C:/Users/Ebunoluwa/Desktop/hclipper/clips/Master_Reframed_Clip.mp4';
+      const unsub = window.hclipper.onEngineEvent((evt) => {
+        if (evt.event === 'reframe_progress') {
+          setRenderProgress(evt.percent || 0);
+        } else if (evt.event === 'reframe_result') {
+          setRenderProgress(100);
+          setIsRendering(false);
+          setRenderedOutput(evt.output);
+        }
+      });
+
+      const res = await window.hclipper.runEngine('reframe', [sourceVideo, targetOut]);
+      unsub();
+      if (!res.success) {
+        setIsRendering(false);
+      }
+    } else {
+      let p = 10;
+      const interval = setInterval(() => {
+        p += 20;
+        if (p >= 100) {
+          clearInterval(interval);
+          setRenderProgress(100);
+          setIsRendering(false);
+          setRenderedOutput('C:/Users/Ebunoluwa/Desktop/hclipper/clips/Master_Reframed_Clip.mp4');
+        } else {
+          setRenderProgress(p);
+        }
+      }, 400);
+    }
+  };
+
+  const handleOpenRendered = () => {
+    if (window.hclipper && renderedOutput) {
+      window.hclipper.openPath(renderedOutput);
+    }
   };
 
   return (
@@ -67,7 +174,7 @@ export const ReframeView: React.FC<ReframeViewProps> = ({
           <div className="flex items-center justify-between text-xs">
             <span className="font-semibold text-slate-200 flex items-center gap-1.5">
               <Eye className="w-4 h-4 text-amber-400" />
-              Source 16:9 Stage View & Crop Window
+              Source 16:9 Stage View & Live Crop Window
             </span>
             <div className="flex items-center space-x-2">
               <span className="text-[11px] text-emerald-400 font-mono bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded">
@@ -80,9 +187,23 @@ export const ReframeView: React.FC<ReframeViewProps> = ({
           <div className="relative aspect-video bg-slate-950 rounded-lg border border-white/10 overflow-hidden flex items-center justify-center">
             {/* Simulated Stage Background */}
             <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-900 to-slate-800 opacity-70" />
+
+            {/* Video preview if available */}
+            {sourceVideo && (
+              <video
+                ref={videoRef}
+                src={sourceVideo}
+                className="w-full h-full object-cover opacity-60"
+                playsInline
+                muted
+              />
+            )}
             
             {/* Speaker Silhouette Graphic */}
-            <div className="absolute bottom-6 flex flex-col items-center" style={{ left: `${cropOffsetPercent + 8}%` }}>
+            <div 
+              className="absolute bottom-6 flex flex-col items-center transition-all duration-75" 
+              style={{ left: `${cropXPercent + 8}%` }}
+            >
               <div className="w-14 h-16 rounded-full bg-slate-700/80 border-2 border-amber-400/80 shadow-lg relative flex items-center justify-center">
                 <span className="text-[9px] font-bold text-amber-300">Face Center</span>
               </div>
@@ -94,7 +215,7 @@ export const ReframeView: React.FC<ReframeViewProps> = ({
               className="absolute top-0 bottom-0 bg-transparent border-2 border-amber-400 shadow-2xl transition-all duration-75 flex flex-col justify-between p-2 pointer-events-none"
               style={{
                 width: '31.64%',
-                left: `${cropOffsetPercent}%`,
+                left: `${cropXPercent}%`,
                 boxShadow: '0 0 0 9999px rgba(0, 0, 0, 0.65)'
               }}
             >
@@ -103,23 +224,68 @@ export const ReframeView: React.FC<ReframeViewProps> = ({
                 <span>1080x1920</span>
               </div>
               <div className="text-center text-[9px] text-amber-300 bg-black/80 px-1 py-0.5 rounded">
-                Deadzone Pan Camera
+                Deadzone Pan Camera: Frame {currentFrameIndex}
               </div>
             </div>
           </div>
 
           <div className="flex items-center justify-between pt-1">
-            <button
-              onClick={handleSimulateTrajectory}
-              disabled={isSimulating}
-              className="px-4 py-2 bg-amber-400/10 hover:bg-amber-400/20 border border-amber-400/30 text-amber-300 text-xs font-semibold rounded-lg transition-colors flex items-center space-x-1.5"
-            >
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>{isSimulating ? 'Simulating Camera Pan...' : 'Simulate Camera Tracking'}</span>
-            </button>
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={() => setIsPlaying(!isPlaying)}
+                disabled={trajectoryData.length === 0}
+                className="w-8 h-8 rounded-lg bg-amber-400 hover:bg-amber-300 disabled:opacity-40 text-slate-950 font-bold flex items-center justify-center transition-all"
+                title={isPlaying ? 'Pause Tracking Preview' : 'Play Tracking Preview'}
+              >
+                {isPlaying ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5 ml-0.5" />}
+              </button>
+              <button
+                onClick={handleAnalyzeTrajectory}
+                disabled={isAnalyzing}
+                className="px-4 py-2 bg-amber-400/10 hover:bg-amber-400/20 border border-amber-400/30 text-amber-300 text-xs font-semibold rounded-lg transition-colors flex items-center space-x-1.5"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>{isAnalyzing ? `Tracking Faces (${analysisProgress}%)...` : 'Analyze YuNet Trajectory'}</span>
+              </button>
+            </div>
+
             <span className="text-[11px] text-slate-400">
-              Crop Window: <strong className="text-white">608 x 1080</strong> (Upscaled via Lanczos)
+              Crop Window: <strong className="text-white">608 x 1080</strong> (Lanczos Full HD)
             </span>
+          </div>
+
+          {/* Render Master Action Box */}
+          <div className="p-4 rounded-xl bg-slate-900/90 border border-white/10 flex items-center justify-between">
+            <div>
+              <div className="text-xs font-bold text-white flex items-center gap-1.5">
+                <Film className="w-4 h-4 text-amber-400" />
+                <span>Render Master 9:16 Vertical Short</span>
+              </div>
+              <p className="text-[11px] text-slate-400 mt-0.5">
+                Encodes with Intel QSV / NVENC hardware acceleration at 1080x1920 60fps.
+              </p>
+            </div>
+
+            <div className="flex items-center space-x-2">
+              {renderedOutput ? (
+                <button
+                  onClick={handleOpenRendered}
+                  className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs rounded-lg transition-all flex items-center space-x-1.5"
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  <span>Open Video in Player</span>
+                </button>
+              ) : (
+                <button
+                  onClick={handleRenderMaster}
+                  disabled={isRendering}
+                  className="px-5 py-2.5 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 disabled:opacity-50 text-slate-950 font-bold text-xs rounded-lg transition-all shadow-md shadow-amber-500/10 flex items-center space-x-2"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>{isRendering ? `Rendering (${renderProgress}%)...` : 'Render 9:16 Short'}</span>
+                </button>
+              )}
+            </div>
           </div>
         </div>
 

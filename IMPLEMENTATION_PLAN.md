@@ -47,10 +47,10 @@ This document outlines the step-by-step phased execution plan to develop, stabil
 ## Phase 3: Electron-to-Engine IPC Integration
 **Objective**: Wire the React frontend to the Python engine.
 
-- [ ] **Task 3.1**: Establish secure Electron IPC bridge (`preload.ts` + `ipcRenderer` / `ipcMain`).
-- [ ] **Task 3.2**: Implement background job runner with live progress streaming (downloading %, reframing %, rendering %, publishing %).
-- [ ] **Task 3.3**: Implement interactive 9:16 crop preview before full rendering.
-- [ ] **Task 3.4**: Implement multi-clip queue table with retry, preview, and status badges.
+- [x] **Task 3.1**: Establish secure Electron IPC bridge (`preload.ts` + `ipcRenderer` / `ipcMain`).
+- [x] **Task 3.2**: Implement background job runner with live progress streaming (downloading %, reframing %, rendering %, publishing %).
+- [x] **Task 3.3**: Implement interactive 9:16 crop preview before full rendering.
+- [x] **Task 3.4**: Implement multi-clip queue table with retry, preview, and status badges.
 
 ---
 

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   CheckCircle, 
   Clock, 
@@ -6,9 +6,27 @@ import {
   Send, 
   RefreshCw, 
   Edit3,
-  Globe
+  Globe,
+  Play,
+  Save,
+  X
 } from 'lucide-react';
 import { YoutubeIcon, InstagramIcon, TikTokIcon } from '../components/Icons';
+
+interface QueueItem {
+  id: string;
+  title: string;
+  filename: string;
+  file_path: string;
+  duration?: string;
+  caption?: string;
+  status: {
+    youtube?: string;
+    tiktok_ng?: string;
+    tiktok_us?: string;
+    instagram?: string;
+  };
+}
 
 export const PublisherView: React.FC = () => {
   const [selectedRange, setSelectedRange] = useState('1-6');
@@ -20,14 +38,22 @@ export const PublisherView: React.FC = () => {
   });
   const [isPublishing, setIsPublishing] = useState(false);
   const [publishMessage, setPublishMessage] = useState('');
+  const [isScanning, setIsScanning] = useState(false);
 
-  // Sample Queue Data matching reference clips in niyiadekunle
-  const [queue, setQueue] = useState([
+  // Edit Caption Modal State
+  const [editingClip, setEditingClip] = useState<QueueItem | null>(null);
+  const [editTitle, setEditTitle] = useState('');
+  const [editCaption, setEditCaption] = useState('');
+
+  // Queue Data
+  const [queue, setQueue] = useState<QueueItem[]>([
     {
       id: 'Clip1_You_Cant_Afford_It_Master',
       title: 'Stop Proving Things To People (You Can\'t Afford It)',
       filename: 'Clip1_You_Cant_Afford_It_Master.mp4',
+      file_path: 'clips/Clip1_You_Cant_Afford_It_Master.mp4',
       duration: '68s',
+      caption: 'Stop proving things to people! Preached by Pastor Niyi Adekunle.\n\n#Shorts #Reels #TikTok',
       status: {
         youtube: 'posted',
         tiktok_ng: 'posted',
@@ -39,7 +65,9 @@ export const PublisherView: React.FC = () => {
       id: 'Clip2_They_Got_There_First_Master',
       title: 'They Got There First Means Nothing',
       filename: 'Clip2_They_Got_There_First_Master.mp4',
+      file_path: 'clips/Clip2_They_Got_There_First_Master.mp4',
       duration: '117s',
+      caption: 'They got there first means nothing! Catch the full message.\n\n#Shorts #Reels #TikTok',
       status: {
         youtube: 'posted',
         tiktok_ng: 'posted',
@@ -51,7 +79,9 @@ export const PublisherView: React.FC = () => {
       id: 'Clip3_Destiny_Friends_Master',
       title: '10,000 Friends, But Who Prays For You?',
       filename: 'Clip3_Destiny_Friends_Master.mp4',
+      file_path: 'clips/Clip3_Destiny_Friends_Master.mp4',
       duration: '102s',
+      caption: '10,000 Friends, but who prays for you? #PastorNiyiAdekunle',
       status: {
         youtube: 'posted',
         tiktok_ng: 'posted',
@@ -63,7 +93,9 @@ export const PublisherView: React.FC = () => {
       id: 'Clip4_Something_Huge_Is_Coming_Master',
       title: 'Something Huge Is Coming in Your Life',
       filename: 'Clip4_Something_Huge_Is_Coming_Master.mp4',
+      file_path: 'clips/Clip4_Something_Huge_Is_Coming_Master.mp4',
       duration: '57s',
+      caption: 'Something huge is coming in your life! #Shorts #TikTok',
       status: {
         youtube: 'posted',
         tiktok_ng: 'posted',
@@ -75,7 +107,9 @@ export const PublisherView: React.FC = () => {
       id: 'Clip5_The_Blessing_That_Makes_Rich_Master',
       title: 'The Blessing That Makes Rich and Adds No Sorrow',
       filename: 'Clip5_The_Blessing_That_Makes_Rich_Master.mp4',
+      file_path: 'clips/Clip5_The_Blessing_That_Makes_Rich_Master.mp4',
       duration: '104s',
+      caption: 'The blessing that makes rich and adds no sorrow.\n\n#Shorts #Reels',
       status: {
         youtube: 'posted',
         tiktok_ng: 'pending',
@@ -87,7 +121,9 @@ export const PublisherView: React.FC = () => {
       id: 'Clip6_The_Making_In_Secret_Master',
       title: 'The Making in Secret Before the Manifestation',
       filename: 'Clip6_The_Making_In_Secret_Master.mp4',
+      file_path: 'clips/Clip6_The_Making_In_Secret_Master.mp4',
       duration: '64s',
+      caption: 'The making in secret before the manifestation.\n\n#Shorts #Reels',
       status: {
         youtube: 'pending',
         tiktok_ng: 'pending',
@@ -97,28 +133,101 @@ export const PublisherView: React.FC = () => {
     }
   ]);
 
-  const handleBatchPublish = () => {
+  // Load real queue from disk if in Electron
+  const loadQueueFromDisk = async () => {
+    if (window.hclipper) {
+      const items = await window.hclipper.readQueue();
+      if (items && items.length > 0) {
+        setQueue(items);
+      }
+    }
+  };
+
+  useEffect(() => {
+    loadQueueFromDisk();
+  }, []);
+
+  const handleScanClips = async () => {
+    setIsScanning(true);
+    if (window.hclipper) {
+      await window.hclipper.runEngine('publish', ['--scan']);
+      await loadQueueFromDisk();
+      setIsScanning(false);
+      setPublishMessage('Scanned clips/ directory and updated queue.');
+    } else {
+      setTimeout(() => {
+        setIsScanning(false);
+        setPublishMessage('Scanned clips/ directory. Queue is up to date.');
+      }, 800);
+    }
+  };
+
+  const handleBatchPublish = async () => {
     setIsPublishing(true);
     setPublishMessage(`Executing automated social publish for Clips ${selectedRange}...`);
 
-    setTimeout(() => {
+    const plats = [];
+    if (selectedPlatforms.instagram) plats.push('ig');
+    if (selectedPlatforms.tiktok_ng) plats.push('tt_ng');
+    if (selectedPlatforms.tiktok_us) plats.push('tt_us');
+    if (selectedPlatforms.youtube) plats.push('yt');
+
+    if (window.hclipper) {
+      const res = await window.hclipper.runEngine('publish', [
+        '--publish', selectedRange,
+        '--platforms', plats.join(',')
+      ]);
       setIsPublishing(false);
-      setPublishMessage(`Clips ${selectedRange} successfully published to selected platforms!`);
-      setQueue((prev) =>
-        prev.map((item) => ({
-          ...item,
-          status: {
-            ...item.status,
-            tiktok_ng: selectedPlatforms.tiktok_ng ? 'posted' : item.status.tiktok_ng,
-            instagram: selectedPlatforms.instagram ? 'posted' : item.status.instagram,
-            youtube: selectedPlatforms.youtube ? 'posted' : item.status.youtube
-          }
-        }))
-      );
-    }, 2000);
+      if (res.success) {
+        setPublishMessage(`Clips ${selectedRange} successfully published!`);
+        await loadQueueFromDisk();
+      } else {
+        setPublishMessage(`Publishing completed with status logged in console.`);
+      }
+    } else {
+      setTimeout(() => {
+        setIsPublishing(false);
+        setPublishMessage(`Clips ${selectedRange} successfully published to selected platforms!`);
+        setQueue((prev) =>
+          prev.map((item) => ({
+            ...item,
+            status: {
+              ...item.status,
+              tiktok_ng: selectedPlatforms.tiktok_ng ? 'posted' : item.status.tiktok_ng,
+              instagram: selectedPlatforms.instagram ? 'posted' : item.status.instagram,
+              youtube: selectedPlatforms.youtube ? 'posted' : item.status.youtube
+            }
+          }))
+        );
+      }, 2000);
+    }
   };
 
-  const renderBadge = (status: string) => {
+  const openVideoInPlayer = (filePath: string) => {
+    if (window.hclipper) {
+      window.hclipper.openPath(filePath);
+    }
+  };
+
+  const openCaptionModal = (clip: QueueItem) => {
+    setEditingClip(clip);
+    setEditTitle(clip.title);
+    setEditCaption(clip.caption || '');
+  };
+
+  const saveCaptionModal = async () => {
+    if (!editingClip) return;
+    const updated = queue.map((it) => 
+      it.id === editingClip.id ? { ...it, title: editTitle, caption: editCaption } : it
+    );
+    setQueue(updated);
+    if (window.hclipper) {
+      await window.hclipper.saveQueue(updated);
+    }
+    setEditingClip(null);
+  };
+
+  const renderBadge = (status?: string) => {
     if (status === 'posted') {
       return (
         <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded">
@@ -150,13 +259,16 @@ export const PublisherView: React.FC = () => {
             Automate publishing to YouTube Shorts, TikTok (US & Nigeria accounts), and Instagram Reels with session persistence.
           </p>
         </div>
-        <button
-          onClick={() => {}}
-          className="px-3.5 py-1.5 bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10 rounded-lg text-xs font-semibold flex items-center space-x-1.5"
-        >
-          <RefreshCw className="w-3.5 h-3.5" />
-          <span>Refresh Sessions</span>
-        </button>
+        <div className="flex items-center space-x-2">
+          <button
+            onClick={handleScanClips}
+            disabled={isScanning}
+            className="px-3.5 py-1.5 bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10 rounded-lg text-xs font-semibold flex items-center space-x-1.5"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isScanning ? 'animate-spin' : ''}`} />
+            <span>Scan Clips Directory</span>
+          </button>
+        </div>
       </div>
 
       {/* Account Profiles Grid */}
@@ -321,9 +433,19 @@ export const PublisherView: React.FC = () => {
                 <td className="py-3.5 px-3">{renderBadge(item.status.tiktok_ng)}</td>
                 <td className="py-3.5 px-3">{renderBadge(item.status.instagram)}</td>
                 <td className="py-3.5 px-3">{renderBadge(item.status.tiktok_us)}</td>
-                <td className="py-3.5 px-4 text-right">
-                  <button className="px-2.5 py-1 bg-white/5 hover:bg-white/10 text-slate-300 rounded text-[11px] font-medium border border-white/10 inline-flex items-center gap-1">
-                    <Edit3 className="w-3 h-3" /> Caption
+                <td className="py-3.5 px-4 text-right space-x-1.5">
+                  <button 
+                    onClick={() => openVideoInPlayer(item.file_path)}
+                    className="p-1.5 bg-white/5 hover:bg-white/10 text-slate-300 rounded border border-white/10 inline-flex items-center"
+                    title="Play Video"
+                  >
+                    <Play className="w-3 h-3 text-amber-400" />
+                  </button>
+                  <button 
+                    onClick={() => openCaptionModal(item)}
+                    className="px-2.5 py-1 bg-white/5 hover:bg-white/10 text-slate-300 rounded text-[11px] font-medium border border-white/10 inline-flex items-center gap-1"
+                  >
+                    <Edit3 className="w-3 h-3" /> Edit
                   </button>
                 </td>
               </tr>
@@ -331,6 +453,58 @@ export const PublisherView: React.FC = () => {
           </tbody>
         </table>
       </div>
+
+      {/* Edit Caption & Metadata Modal */}
+      {editingClip && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="glass-card bg-[#0e121a] rounded-xl border border-white/15 w-full max-w-lg p-6 space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-white/10 pb-3">
+              <h3 className="text-sm font-bold text-white">Edit Clip Metadata & Social Caption</h3>
+              <button onClick={() => setEditingClip(null)} className="text-slate-400 hover:text-white">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div>
+                <label className="text-[11px] font-semibold text-slate-400 block mb-1">Title</label>
+                <input 
+                  type="text" 
+                  value={editTitle} 
+                  onChange={(e) => setEditTitle(e.target.value)}
+                  className="w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2 text-white font-medium focus:outline-none focus:border-amber-400"
+                />
+              </div>
+
+              <div>
+                <label className="text-[11px] font-semibold text-slate-400 block mb-1">Caption & Hashtags</label>
+                <textarea 
+                  rows={6}
+                  value={editCaption} 
+                  onChange={(e) => setEditCaption(e.target.value)}
+                  className="w-full bg-slate-950 border border-white/10 rounded-lg p-3 text-slate-200 font-sans focus:outline-none focus:border-amber-400 leading-relaxed"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end space-x-2 pt-2 border-t border-white/10">
+              <button 
+                onClick={() => setEditingClip(null)}
+                className="px-4 py-2 bg-white/5 hover:bg-white/10 text-slate-300 rounded-lg text-xs"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={saveCaptionModal}
+                className="px-5 py-2 bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold rounded-lg text-xs flex items-center space-x-1.5"
+              >
+                <Save className="w-3.5 h-3.5" />
+                <span>Save Changes</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
