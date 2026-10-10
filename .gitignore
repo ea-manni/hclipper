@@ -1,0 +1,48 @@
+# OS Files
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Node & Electron
+node_modules/
+ui/node_modules/
+dist/
+ui/dist/
+out/
+ui/out/
+*.log
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+env/
+
+# Media and Temp Workspaces
+*.mp4
+*.mov
+*.mkv
+*.webm
+*.wav
+*.mp3
+temp/
+output/
+clips/
+downloads/
+
+# Session and Auth Profiles
+sessions/
+*.json
+!package.json
+!tsconfig.json
+!pipeline/publisher/clips_queue.example.json
+.env
+.env.local
+
+# Build outputs
+*.exe
+*.msi
+*.zip
+*.tar.gz
