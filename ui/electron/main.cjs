@@ -108,23 +108,81 @@ ipcMain.handle('hclipper:show-in-folder', async (event, filePath) => {
   return false;
 });
 
-// IPC Handler: Run Python Engine Command with Job Tracking
-ipcMain.handle('hclipper:run-engine', (event, { command, args = [], jobId = null }) => {
-  return new Promise((resolve, reject) => {
-    let pythonExe = process.platform === 'win32' ? 'python' : 'python3';
-    const bundledPython = path.join(PROJECT_ROOT, 'python', 'python.exe');
-    if (fs.existsSync(bundledPython)) {
-      pythonExe = bundledPython;
+// Helper: Auto-detect Python executable across system paths & virtualenvs
+function detectPythonExecutable() {
+  const candidates = [
+    path.join(PROJECT_ROOT, 'python', 'python.exe'),
+    path.join(process.resourcesPath, 'python', 'python.exe'),
+    path.join(PROJECT_ROOT, 'bin', 'python.exe'),
+    path.join(PROJECT_ROOT, '.venv', 'Scripts', 'python.exe'),
+    path.join(PROJECT_ROOT, 'venv', 'Scripts', 'python.exe'),
+    path.join(__dirname, '..', '..', '.venv', 'Scripts', 'python.exe'),
+    path.join(__dirname, '..', '..', 'venv', 'Scripts', 'python.exe'),
+  ];
+
+  if (process.platform === 'win32') {
+    const localAppData = process.env.LOCALAPPDATA;
+    if (localAppData) {
+      const pythonProgramsDir = path.join(localAppData, 'Programs', 'Python');
+      if (fs.existsSync(pythonProgramsDir)) {
+        try {
+          const versions = fs.readdirSync(pythonProgramsDir);
+          for (const ver of versions.sort().reverse()) {
+            candidates.push(path.join(pythonProgramsDir, ver, 'python.exe'));
+          }
+        } catch (e) {}
+      }
+      candidates.push(path.join(localAppData, 'Programs', 'Python', 'Launcher', 'py.exe'));
     }
 
+    const drives = ['C:', 'D:'];
+    for (const drive of drives) {
+      for (const ver of ['Python314', 'Python313', 'Python312', 'Python311', 'Python310']) {
+        candidates.push(path.join(`${drive}\\`, ver, 'python.exe'));
+        candidates.push(path.join(`${drive}\\`, 'Program Files', ver, 'python.exe'));
+        candidates.push(path.join(`${drive}\\`, 'Program Files (x86)', ver, 'python.exe'));
+      }
+    }
+    candidates.push('C:\\Windows\\py.exe');
+  }
+
+  for (const candidate of candidates) {
+    if (candidate && fs.existsSync(candidate)) {
+      return candidate;
+    }
+  }
+
+  try {
+    const lookupCmd = process.platform === 'win32' ? 'where.exe python' : 'which python3';
+    const output = require('child_process').execSync(lookupCmd, { encoding: 'utf8', windowsHide: true });
+    const lines = output.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    for (const line of lines) {
+      if (fs.existsSync(line)) {
+        return line;
+      }
+    }
+  } catch (e) {}
+
+  return process.platform === 'win32' ? 'python.exe' : 'python3';
+}
+
+// IPC Handler: Run Python Engine Command with Job Tracking
+ipcMain.handle('hclipper:run-engine', (event, { command, args = [], jobId = null }) => {
+  return new Promise((resolve) => {
+    const pythonExe = detectPythonExecutable();
     const binDir = path.join(PROJECT_ROOT, 'bin');
     const childEnv = { 
       ...process.env,
       PYTHONIOENCODING: 'utf-8',
-      PYTHONUNBUFFERED: '1'
+      PYTHONUNBUFFERED: '1',
+      PYTHONPATH: `${PROJECT_ROOT}${path.delimiter}${process.env.PYTHONPATH || ''}`
     };
-    if (fs.existsSync(binDir)) {
-      childEnv.PATH = `${binDir}${path.delimiter}${childEnv.PATH || ''}`;
+
+    const pythonDir = path.dirname(pythonExe);
+    const pythonScripts = path.join(pythonDir, 'Scripts');
+    const extraPaths = [binDir, pythonDir, pythonScripts].filter(p => fs.existsSync(p));
+    if (extraPaths.length > 0) {
+      childEnv.PATH = `${extraPaths.join(path.delimiter)}${path.delimiter}${childEnv.PATH || ''}`;
     }
 
     const currentJobId = jobId || `job_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
@@ -221,7 +279,20 @@ ipcMain.handle('hclipper:run-engine', (event, { command, args = [], jobId = null
 
     child.on('error', (err) => {
       activeJobs.delete(currentJobId);
-      reject(err);
+      if (mainWindow) {
+        mainWindow.webContents.send('hclipper:engine-log', {
+          jobId: currentJobId,
+          level: 'error',
+          text: `Engine launch failed: ${err.message}`
+        });
+        mainWindow.webContents.send('hclipper:engine-event', {
+          jobId: currentJobId,
+          command,
+          event: 'error',
+          error: `Could not launch Python engine: ${err.message}. Please verify Python 3.10+ is installed.`
+        });
+      }
+      resolve({ success: false, jobId: currentJobId, error: err.message, output: rawOutput });
     });
   });
 });
