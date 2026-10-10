@@ -25,17 +25,17 @@ This document outlines the step-by-step phased execution plan to develop, stabil
 ## Phase 2: Desktop GUI Scaffolding & Visual Studio Layout
 **Objective**: Build the modern, responsive Electron + React interface.
 
-- [ ] **Task 2.1**: Initialize Electron + Vite + React + TypeScript + Tailwind CSS project in `ui/`.
-- [ ] **Task 2.2**: Implement Studio Dark Theme with glassmorphism, accent colors, and responsive layout.
-- [ ] **Task 2.3**: Build **Source Ingestion Screen**:
+- [x] **Task 2.1**: Initialize Electron + Vite + React + TypeScript + Tailwind CSS project in `ui/`.
+- [x] **Task 2.2**: Implement Studio Dark Theme with glassmorphism, accent colors, and responsive layout.
+- [x] **Task 2.3**: Build **Source Ingestion Screen**:
   - URL input box with platform auto-detection (YouTube / Facebook).
   - Drag-and-drop local file dropzone.
   - Real-time download progress bar.
-- [ ] **Task 2.4**: Build **Timeline & Waveform Scrubber**:
+- [x] **Task 2.4**: Build **Timeline & Waveform Scrubber**:
   - Integrate Wavesurfer.js for smooth audio waveform navigation.
   - Draggable start/end in-out markers with millisecond timestamp inputs.
   - Video playback preview with play/pause, scrub, and loop shortcuts.
-- [ ] **Task 2.5**: Build **Clip Inspector & Style Customizer**:
+- [x] **Task 2.5**: Build **Clip Inspector & Style Customizer**:
   - Top hook banner editor (headline text, font size, banner style).
   - Aspect ratio toggle: 9:16 Vertical, 1:1 Square, 16:9 Landscape.
   - Face tracking enable/disable switch.

@@ -1,16 +1,12 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState } from 'react';
 import { 
-  Play, 
-  Pause, 
   Scissors, 
   Sparkles, 
-  Volume2, 
   Sliders, 
   Music, 
-  ArrowRight,
-  FastForward,
-  Rewind
+  ArrowRight
 } from 'lucide-react';
+import { WaveformPlayer } from '../components/WaveformPlayer';
 
 interface TimelineViewProps {
   sourceVideo: string;
@@ -21,9 +17,10 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
   sourceVideo, 
   onNext 
 }) => {
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [startTime, setStartTime] = useState('00:50:57.000');
-  const [endTime, setEndTime] = useState('00:52:05.000');
+  const [inTime, setInTime] = useState(12.0); // 12 seconds
+  const [outTime, setOutTime] = useState(80.0); // 80 seconds
+  const [activePlayhead, setActivePlayhead] = useState(12.0);
+
   const [cadenceTrim, setCadenceTrim] = useState(true);
   const [noiseThreshold, setNoiseThreshold] = useState('-33dB');
   const [minSilence, setMinSilence] = useState(0.75);
@@ -32,41 +29,6 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
   const [musicVolume, setMusicVolume] = useState(8); // 8% = 0.08
   const [isProcessing, setIsProcessing] = useState(false);
   const [timeSaved, setTimeSaved] = useState<number | null>(null);
-
-  // Generate waveform peaks for visual canvas
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    const width = canvas.width;
-    const height = canvas.height;
-    ctx.clearRect(0, 0, width, height);
-
-    const barCount = 120;
-    const barWidth = width / barCount - 1.5;
-
-    for (let i = 0; i < barCount; i++) {
-      const progress = i / barCount;
-      const wave = Math.sin(progress * 15) * 0.4 + Math.cos(progress * 30) * 0.3;
-      const noise = (Math.sin(i * 99) * 0.5 + 0.5) * 0.5;
-      const barHeight = Math.max(6, (wave + noise) * height * 0.7);
-
-      const x = i * (barWidth + 1.5);
-      const y = (height - barHeight) / 2;
-
-      if (progress >= 0.2 && progress <= 0.85) {
-        ctx.fillStyle = '#eab308';
-      } else {
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
-      }
-
-      ctx.fillRect(x, y, barWidth, barHeight);
-    }
-  }, []);
 
   const handleTestCadenceTrim = async () => {
     setIsProcessing(true);
@@ -93,9 +55,9 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold font-display text-white">Timeline & Audio DSP Chain</h2>
+          <h2 className="text-2xl font-bold font-display text-white">Timeline & Waveform Scrubber</h2>
           <p className="text-xs text-slate-400 mt-1">
-            Millisecond-accurate in/out marking, breathing-cadence dead air trimming, and broadcast loudness mastering.
+            Millisecond-accurate in/out range marking, breath-cadence pause compression, and vocal mastering.
           </p>
         </div>
         <button
@@ -107,81 +69,16 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
         </button>
       </div>
 
-      {/* Waveform Scrubber Card */}
-      <div className="glass-card rounded-xl p-5 space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-2 text-xs font-semibold text-slate-200">
-            <Volume2 className="w-4 h-4 text-amber-400" />
-            <span>Interactive Audio Waveform Track</span>
-          </div>
-          <div className="text-xs font-mono text-amber-400 bg-amber-400/10 px-2.5 py-1 rounded border border-amber-400/20">
-            Current: 00:00:12.400
-          </div>
-        </div>
-
-        {/* Canvas Waveform */}
-        <div className="relative h-28 bg-slate-950/80 rounded-lg p-2 border border-white/5 overflow-hidden flex items-center justify-center">
-          <canvas 
-            ref={canvasRef} 
-            width={900} 
-            height={90} 
-            className="w-full h-full cursor-pointer"
-          />
-          {/* In-Out Range Highlight Bar */}
-          <div 
-            className="absolute top-0 bottom-0 bg-amber-400/15 border-l-2 border-r-2 border-amber-400 pointer-events-none"
-            style={{ left: '20%', right: '15%' }}
-          >
-            <div className="absolute top-1 left-2 text-[10px] font-bold text-amber-300 bg-black/60 px-1 rounded">
-              IN: {startTime}
-            </div>
-            <div className="absolute top-1 right-2 text-[10px] font-bold text-amber-300 bg-black/60 px-1 rounded">
-              OUT: {endTime}
-            </div>
-          </div>
-        </div>
-
-        {/* Player Controls */}
-        <div className="flex items-center justify-between pt-1">
-          <div className="flex items-center space-x-2">
-            <button 
-              onClick={() => setIsPlaying(!isPlaying)}
-              className="w-9 h-9 rounded-full bg-amber-400 hover:bg-amber-300 text-slate-950 flex items-center justify-center font-bold transition-all shadow-md shadow-amber-500/20"
-            >
-              {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 ml-0.5" />}
-            </button>
-            <button className="w-8 h-8 rounded-lg bg-white/5 hover:bg-white/10 text-slate-300 flex items-center justify-center">
-              <Rewind className="w-3.5 h-3.5" />
-            </button>
-            <button className="w-8 h-8 rounded-lg bg-white/5 hover:bg-white/10 text-slate-300 flex items-center justify-center">
-              <FastForward className="w-3.5 h-3.5" />
-            </button>
-          </div>
-
-          <div className="flex items-center space-x-3 text-xs">
-            <div className="flex items-center space-x-1.5 bg-slate-900 border border-white/10 px-3 py-1.5 rounded-lg">
-              <span className="text-slate-400 text-[11px]">In:</span>
-              <input 
-                type="text" 
-                value={startTime} 
-                onChange={(e) => setStartTime(e.target.value)}
-                className="w-24 bg-transparent font-mono text-amber-300 focus:outline-none"
-              />
-            </div>
-            <div className="flex items-center space-x-1.5 bg-slate-900 border border-white/10 px-3 py-1.5 rounded-lg">
-              <span className="text-slate-400 text-[11px]">Out:</span>
-              <input 
-                type="text" 
-                value={endTime} 
-                onChange={(e) => setEndTime(e.target.value)}
-                className="w-24 bg-transparent font-mono text-amber-300 focus:outline-none"
-              />
-            </div>
-            <div className="text-[11px] text-slate-400 bg-white/5 px-3 py-1.5 rounded-lg border border-white/5">
-              Duration: <span className="font-bold text-white">68.0s (1m 08s)</span>
-            </div>
-          </div>
-        </div>
+      {/* Wavesurfer.js Interactive Scrubber */}
+      <div className="glass-card rounded-xl p-5">
+        <WaveformPlayer 
+          mediaUrl={sourceVideo}
+          inTime={inTime}
+          outTime={outTime}
+          onTimeUpdate={(t) => setActivePlayhead(t)}
+          onSetInPoint={() => setInTime(activePlayhead)}
+          onSetOutPoint={() => setOutTime(activePlayhead)}
+        />
       </div>
 
       {/* Cadence Pause Trimmer & Audio DSP Grid */}
