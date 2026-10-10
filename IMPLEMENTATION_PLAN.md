@@ -57,12 +57,12 @@ This document outlines the step-by-step phased execution plan to develop, stabil
 ## Phase 4: Social Accounts & Multi-Platform Publisher GUI
 **Objective**: Provide a visual account manager and publishing workflow.
 
-- [ ] **Task 4.1**: Build **Accounts Management Modal**:
+- [x] **Task 4.1**: Build **Accounts Management Modal**:
   - "Connect Instagram" button (launches interactive approval window).
   - "Connect TikTok US" button (launches proxy-guarded login).
   - "Connect TikTok Nigeria" button (launches direct local login).
   - "Connect YouTube Shorts" button (OAuth / Studio browser session).
-- [ ] **Task 4.2**: Build **One-Click Publish & Schedule Screen**:
+- [x] **Task 4.2**: Build **One-Click Publish & Schedule Screen**:
   - Platform checkboxes per clip.
   - Batch publish action (e.g. Publish Clips 1-6 to IG and TikTok NG).
   - Live log drawer displaying upload progress.

@@ -161,11 +161,61 @@ def cmd_publish(args):
     qm = QueueManager()
     if args.scan:
         count = qm.scan_clips_directory()
-        print(f"Scanned clips. Added {count} new clips. Total: {len(qm.items)}")
+        if args.json:
+            emit_json("scan_result", {"new_count": count, "total": len(qm.items)})
+        else:
+            print(f"Scanned clips. Added {count} new clips. Total: {len(qm.items)}")
     elif args.list:
-        print(json.dumps(qm.items, indent=2))
+        if args.json:
+            emit_json("queue_items", {"items": qm.items})
+        else:
+            print(json.dumps(qm.items, indent=2))
+    elif args.publish:
+        publisher = SocialPublisher()
+        platforms = [p.strip() for p in args.platforms.split(",") if p.strip()]
+
+        def progress_cb(clip_id, platform, status, pct):
+            if args.json:
+                emit_json("publish_progress", {
+                    "clip_id": clip_id,
+                    "platform": platform,
+                    "status": status,
+                    "progress": pct
+                })
+            else:
+                print(f"[{pct}%] {clip_id} -> {platform}: {status}")
+
+        print(f"Publishing clips matching '{args.publish}' to {platforms}...")
+        res = publisher.publish_batch(args.publish, platforms, on_progress=progress_cb)
+        if args.json:
+            emit_json("publish_result", res)
+        else:
+            print(f"Batch completed: {res.get('published_count', 0)} operations.")
     else:
-        print("Use --scan or --list for publisher queue.")
+        print("Use --scan, --list, or --publish for publisher queue.")
+
+def cmd_login(args):
+    publisher = SocialPublisher()
+    print(f"Opening interactive session for {args.platform}...")
+    try:
+        profile_path = publisher.launch_browser_session(args.platform)
+        if args.json:
+            emit_json("login_result", {"success": True, "platform": args.platform, "profile_path": profile_path})
+        else:
+            print(f"Successfully authenticated and saved session for {args.platform}!")
+    except Exception as e:
+        if args.json:
+            emit_json("login_result", {"success": False, "platform": args.platform, "error": str(e)})
+        else:
+            print(f"Login failed: {e}")
+
+def cmd_session_status(args):
+    publisher = SocialPublisher()
+    status = publisher.check_session_status()
+    if args.json:
+        emit_json("session_status", status)
+    else:
+        print(json.dumps(status, indent=2))
 
 def main():
     common_parser = argparse.ArgumentParser(add_help=False)
@@ -235,7 +285,18 @@ def main():
     p_pb = subparsers.add_parser("publish", help="Manage social publishing queue", parents=[common_parser])
     p_pb.add_argument("--scan", action="store_true", help="Scan clips directory")
     p_pb.add_argument("--list", action="store_true", help="List queued clips")
+    p_pb.add_argument("--publish", help="Publish range (e.g. 1-6)")
+    p_pb.add_argument("--platforms", default="ig,tt_ng,yt", help="Comma-separated platforms")
     p_pb.set_defaults(func=cmd_publish)
+
+    # Login
+    p_lg = subparsers.add_parser("login", help="Launch interactive browser login", parents=[common_parser])
+    p_lg.add_argument("--platform", required=True, choices=["youtube", "tiktok", "tiktok_ng", "instagram"], help="Target platform")
+    p_lg.set_defaults(func=cmd_login)
+
+    # Session Status
+    p_ss = subparsers.add_parser("session-status", help="Check session login status", parents=[common_parser])
+    p_ss.set_defaults(func=cmd_session_status)
 
     args = parser.parse_args()
     args.func(args)

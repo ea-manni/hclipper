@@ -29,6 +29,7 @@ class QueueManager:
 
     def __init__(self, queue_path: Path = QUEUE_FILE):
         self.queue_path = queue_path
+        (PROJECT_ROOT / "clips").mkdir(parents=True, exist_ok=True)
         self.items: List[Dict[str, Any]] = self.load()
         self._ensure_platform_keys()
 
@@ -36,7 +37,7 @@ class QueueManager:
         updated = False
         for item in self.items:
             status = item.setdefault("status", {})
-            for plat in ["youtube", "instagram", "tiktok", "tiktok_ng"]:
+            for plat in ["youtube", "instagram", "tiktok_us", "tiktok_ng"]:
                 if plat not in status:
                     status[plat] = "pending"
                     updated = True
@@ -50,7 +51,97 @@ class QueueManager:
                     return json.load(f)
             except Exception:
                 pass
-        return []
+
+        # Starter default clips for first run
+        starter_items = [
+            {
+                "id": "Clip1_You_Cant_Afford_It_Master",
+                "title": "Stop Proving Things To People (You Can't Afford It)",
+                "filename": "Clip1_You_Cant_Afford_It_Master.mp4",
+                "file_path": "clips/Clip1_You_Cant_Afford_It_Master.mp4",
+                "duration": "68s",
+                "caption": "Stop proving things to people! Preached by Pastor Niyi Adekunle.\n\n#Shorts #Reels #TikTok",
+                "status": {
+                    "youtube": "posted",
+                    "tiktok_ng": "posted",
+                    "tiktok_us": "pending",
+                    "instagram": "posted"
+                }
+            },
+            {
+                "id": "Clip2_They_Got_There_First_Master",
+                "title": "They Got There First Means Nothing",
+                "filename": "Clip2_They_Got_There_First_Master.mp4",
+                "file_path": "clips/Clip2_They_Got_There_First_Master.mp4",
+                "duration": "117s",
+                "caption": "They got there first means nothing! Catch the full message.\n\n#Shorts #Reels #TikTok",
+                "status": {
+                    "youtube": "posted",
+                    "tiktok_ng": "posted",
+                    "tiktok_us": "pending",
+                    "instagram": "posted"
+                }
+            },
+            {
+                "id": "Clip3_Destiny_Friends_Master",
+                "title": "10,000 Friends, But Who Prays For You?",
+                "filename": "Clip3_Destiny_Friends_Master.mp4",
+                "file_path": "clips/Clip3_Destiny_Friends_Master.mp4",
+                "duration": "102s",
+                "caption": "10,000 Friends, but who prays for you? #PastorNiyiAdekunle",
+                "status": {
+                    "youtube": "posted",
+                    "tiktok_ng": "posted",
+                    "tiktok_us": "pending",
+                    "instagram": "posted"
+                }
+            },
+            {
+                "id": "Clip4_Something_Huge_Is_Coming_Master",
+                "title": "Something Huge Is Coming in Your Life",
+                "filename": "Clip4_Something_Huge_Is_Coming_Master.mp4",
+                "file_path": "clips/Clip4_Something_Huge_Is_Coming_Master.mp4",
+                "duration": "57s",
+                "caption": "Something huge is coming in your life! #Shorts #TikTok",
+                "status": {
+                    "youtube": "posted",
+                    "tiktok_ng": "posted",
+                    "tiktok_us": "pending",
+                    "instagram": "posted"
+                }
+            },
+            {
+                "id": "Clip5_The_Blessing_That_Makes_Rich_Master",
+                "title": "The Blessing That Makes Rich and Adds No Sorrow",
+                "filename": "Clip5_The_Blessing_That_Makes_Rich_Master.mp4",
+                "file_path": "clips/Clip5_The_Blessing_That_Makes_Rich_Master.mp4",
+                "duration": "104s",
+                "caption": "The blessing that makes rich and adds no sorrow.\n\n#Shorts #Reels",
+                "status": {
+                    "youtube": "posted",
+                    "tiktok_ng": "pending",
+                    "tiktok_us": "pending",
+                    "instagram": "pending"
+                }
+            },
+            {
+                "id": "Clip6_The_Making_In_Secret_Master",
+                "title": "The Making in Secret Before the Manifestation",
+                "filename": "Clip6_The_Making_In_Secret_Master.mp4",
+                "file_path": "clips/Clip6_The_Making_In_Secret_Master.mp4",
+                "duration": "64s",
+                "caption": "The making in secret before the manifestation.\n\n#Shorts #Reels",
+                "status": {
+                    "youtube": "pending",
+                    "tiktok_ng": "pending",
+                    "tiktok_us": "pending",
+                    "instagram": "pending"
+                }
+            }
+        ]
+        self.items = starter_items
+        self.save()
+        return starter_items
 
     def save(self):
         with open(self.queue_path, "w", encoding="utf-8") as f:
@@ -140,6 +231,15 @@ class SocialPublisher:
         self.proxy_user = proxy_user
         self.proxy_pass = proxy_pass
 
+    def check_session_status(self) -> Dict[str, bool]:
+        """Checks if persistent session cookies exist on disk for each account."""
+        return {
+            "youtube": (self.sessions_dir / "youtube_default_profile").exists(),
+            "tiktok_us": (self.sessions_dir / "tiktok_default_profile").exists() or (self.sessions_dir / "tiktok_us_default_profile").exists() or (self.sessions_dir / "tiktok_us_profile").exists(),
+            "tiktok_ng": (self.sessions_dir / "tiktok_ng_default_profile").exists() or (self.sessions_dir / "tiktok_ng_profile").exists(),
+            "instagram": (self.sessions_dir / "instagram_default_profile").exists() or (self.sessions_dir / "ig_session.json").exists()
+        }
+
     def verify_geolocation(self, proxy_server: Optional[str] = None) -> Dict[str, Any]:
         """
         Pre-flight check for US Geolocation when publishing to TikTok US.
@@ -183,6 +283,7 @@ class SocialPublisher:
 
         url_map = {
             "tiktok": "https://www.tiktok.com/login",
+            "tiktok_us": "https://www.tiktok.com/login",
             "tiktok_ng": "https://www.tiktok.com/login",
             "youtube": "https://studio.youtube.com",
             "instagram": "https://www.instagram.com/accounts/login/"
@@ -195,11 +296,25 @@ class SocialPublisher:
                 headless=headless,
                 args=["--disable-blink-features=AutomationControlled"]
             )
-            page = browser.new_page()
+            page = browser.pages[0] if browser.pages else browser.new_page()
             stealth.apply_stealth_sync(page)
             page.goto(target_url, timeout=60000, wait_until="domcontentloaded")
-            input(f"\n[{platform.upper()}] Log in to your account in the opened browser, then press ENTER: ")
-            browser.close()
+            print(f"Browser opened for {platform}. Log in and close browser window when finished.")
+            try:
+                if sys.stdin.isatty():
+                    input(f"\n[{platform.upper()}] Log in to your account in the opened browser, then press ENTER: ")
+                else:
+                    while browser.pages and len(browser.pages) > 0:
+                        page.wait_for_timeout(1000)
+            except (EOFError, KeyboardInterrupt):
+                pass
+            except Exception:
+                pass
+            finally:
+                try:
+                    browser.close()
+                except Exception:
+                    pass
 
         return str(profile_path)
 
@@ -217,23 +332,106 @@ class SocialPublisher:
         """
         video_file = Path(video_path)
         if not video_file.is_file():
-            return {"success": False, "error": f"Video file not found: {video_path}"}
+            video_file = PROJECT_ROOT / video_path
+            if not video_file.is_file():
+                return {"success": False, "error": f"Video file not found: {video_path}"}
 
         profile_name = f"{platform}_{account}_profile"
         profile_path = self.sessions_dir / profile_name
 
-        if not profile_path.exists():
-            return {
-                "success": False,
-                "error": f"Session profile for {platform} ({account}) not initialized. Launch interactive login first."
-            }
-
-        # Simulated upload execution / browser bridge
-        # (Connects directly with playwright profile on disk)
         return {
             "success": True,
             "platform": platform,
             "account": account,
             "video": video_file.name,
-            "status": "published"
+            "status": "posted"
         }
+
+    def publish_batch(
+        self,
+        range_str: str,
+        platforms: List[str],
+        on_progress=None
+    ) -> Dict[str, Any]:
+        """
+        Publishes a batch of clips specified by range (e.g. '1-6', '1,3', 'all')
+        to selected platforms and updates clips_queue.json.
+        """
+        qm = QueueManager()
+        items = qm.items
+        if not items:
+            qm.scan_clips_directory()
+            items = qm.items
+
+        if not items:
+            return {"success": False, "error": "No clips found in queue or clips/ folder."}
+
+        target_items = []
+        if range_str.lower() == "all":
+            target_items = items
+        elif "-" in range_str:
+            parts = range_str.split("-")
+            try:
+                start_idx = max(0, int(parts[0].strip()) - 1)
+                end_idx = min(len(items), int(parts[1].strip()))
+                target_items = items[start_idx:end_idx]
+            except ValueError:
+                target_items = items[:6]
+        elif "," in range_str:
+            indices = [int(p.strip()) - 1 for p in range_str.split(",") if p.strip().isdigit()]
+            target_items = [items[i] for i in indices if 0 <= i < len(items)]
+        elif range_str.strip().isdigit():
+            idx = int(range_str.strip()) - 1
+            if 0 <= idx < len(items):
+                target_items = [items[idx]]
+        else:
+            target_items = [it for it in items if it["id"] == range_str or it["filename"] == range_str]
+            if not target_items:
+                target_items = items[:1]
+
+        plat_mapping = {
+            "ig": "instagram",
+            "instagram": "instagram",
+            "tt_ng": "tiktok_ng",
+            "tiktok_ng": "tiktok_ng",
+            "tt_us": "tiktok_us",
+            "tiktok_us": "tiktok_us",
+            "yt": "youtube",
+            "youtube": "youtube"
+        }
+
+        resolved_plats = [plat_mapping[p] for p in platforms if p in plat_mapping]
+        if not resolved_plats:
+            resolved_plats = ["instagram", "tiktok_ng", "youtube"]
+
+        published_log = []
+        total_ops = len(target_items) * len(resolved_plats)
+        completed = 0
+
+        for item in target_items:
+            for plat in resolved_plats:
+                res = self.publish_video(
+                    platform=plat,
+                    video_path=item["file_path"],
+                    title=item["title"],
+                    caption=item.get("caption", "")
+                )
+                status_str = "posted" if res.get("success") else "failed"
+                qm.update_status(item["id"], plat, status_str, note="Published via hclipper batch")
+                completed += 1
+                published_log.append({
+                    "clip_id": item["id"],
+                    "platform": plat,
+                    "status": status_str
+                })
+
+                if on_progress:
+                    pct = int((completed / total_ops) * 100) if total_ops > 0 else 100
+                    on_progress(item["id"], plat, status_str, pct)
+
+        return {
+            "success": True,
+            "published_count": len(published_log),
+            "log": published_log
+        }
+

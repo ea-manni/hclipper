@@ -1,15 +1,21 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   CheckCircle, 
   Clock, 
   AlertCircle, 
   Send, 
   RefreshCw, 
-  Edit3,
-  Globe,
-  Play,
-  Save,
-  X
+  Edit3, 
+  Globe, 
+  Play, 
+  Save, 
+  X, 
+  ShieldCheck, 
+  LogIn,
+  Terminal,
+  ChevronDown,
+  ChevronUp,
+  Trash2
 } from 'lucide-react';
 import { YoutubeIcon, InstagramIcon, TikTokIcon } from '../components/Icons';
 
@@ -28,6 +34,13 @@ interface QueueItem {
   };
 }
 
+interface LogEntry {
+  id: string;
+  time: string;
+  text: string;
+  type: 'info' | 'success' | 'warn' | 'error';
+}
+
 export const PublisherView: React.FC = () => {
   const [selectedRange, setSelectedRange] = useState('1-6');
   const [selectedPlatforms, setSelectedPlatforms] = useState({
@@ -39,6 +52,23 @@ export const PublisherView: React.FC = () => {
   const [isPublishing, setIsPublishing] = useState(false);
   const [publishMessage, setPublishMessage] = useState('');
   const [isScanning, setIsScanning] = useState(false);
+
+  // Live Log Drawer State
+  const [logs, setLogs] = useState<LogEntry[]>([
+    { id: '1', time: new Date().toLocaleTimeString(), text: 'Publisher engine ready. Persistent sessions synced.', type: 'info' }
+  ]);
+  const [showLogDrawer, setShowLogDrawer] = useState(true);
+  const logContainerRef = useRef<HTMLDivElement>(null);
+
+  // Accounts Modal State
+  const [activeAccountModal, setActiveAccountModal] = useState<string | null>(null);
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [sessionStatuses, setSessionStatuses] = useState({
+    youtube: true,
+    tiktok_ng: true,
+    tiktok_us: false,
+    instagram: true
+  });
 
   // Edit Caption Modal State
   const [editingClip, setEditingClip] = useState<QueueItem | null>(null);
@@ -133,31 +163,83 @@ export const PublisherView: React.FC = () => {
     }
   ]);
 
-  // Load real queue from disk if in Electron
+  const addLog = (text: string, type: 'info' | 'success' | 'warn' | 'error' = 'info') => {
+    setLogs((prev) => [
+      ...prev.slice(-150),
+      { id: Math.random().toString(36).substring(2, 9), time: new Date().toLocaleTimeString(), text, type }
+    ]);
+  };
+
   const loadQueueFromDisk = async () => {
     if (window.hclipper) {
       const items = await window.hclipper.readQueue();
       if (items && items.length > 0) {
         setQueue(items);
       }
+      // Check session status
+      const res = await window.hclipper.runEngine('session-status', []);
+      if (res.events && res.events.length > 0) {
+        const lastEvt = res.events[res.events.length - 1];
+        if (lastEvt.event === 'session_status') {
+          setSessionStatuses({
+            youtube: lastEvt.youtube,
+            tiktok_ng: lastEvt.tiktok_ng,
+            tiktok_us: lastEvt.tiktok_us,
+            instagram: lastEvt.instagram
+          });
+        }
+      }
     }
   };
 
   useEffect(() => {
     loadQueueFromDisk();
+
+    if (window.hclipper) {
+      const unsubLog = window.hclipper.onEngineLog((data: { level: string; text: string; jobId?: string }) => {
+        addLog(data.text, data.level === 'stderr' ? 'warn' : 'info');
+      });
+      const unsubEvt = window.hclipper.onEngineEvent((evt: any) => {
+        if (evt.event === 'publish_progress') {
+          addLog(`[${evt.progress}%] ${evt.clip_id} -> ${evt.platform}: ${evt.status.toUpperCase()}`, evt.status === 'posted' ? 'success' : 'warn');
+        } else if (evt.event === 'publish_result') {
+          addLog(`Batch publish finished: ${evt.published_count || 0} operations executed.`, evt.success ? 'success' : 'warn');
+        } else if (evt.event === 'login_result') {
+          if (evt.success) {
+            addLog(`Session profile created for ${evt.platform}!`, 'success');
+          } else {
+            addLog(`Session error on ${evt.platform}: ${evt.error}`, 'error');
+          }
+        }
+      });
+
+      return () => {
+        unsubLog();
+        unsubEvt();
+      };
+    }
   }, []);
+
+  useEffect(() => {
+    if (logContainerRef.current) {
+      logContainerRef.current.scrollTop = logContainerRef.current.scrollHeight;
+    }
+  }, [logs]);
 
   const handleScanClips = async () => {
     setIsScanning(true);
+    addLog('Scanning clips/ directory for rendered short clips...', 'info');
     if (window.hclipper) {
       await window.hclipper.runEngine('publish', ['--scan']);
       await loadQueueFromDisk();
       setIsScanning(false);
       setPublishMessage('Scanned clips/ directory and updated queue.');
+      addLog('Scan completed. Queue synchronized.', 'success');
     } else {
       setTimeout(() => {
         setIsScanning(false);
         setPublishMessage('Scanned clips/ directory. Queue is up to date.');
+        addLog('Simulated scan completed.', 'success');
       }, 800);
     }
   };
@@ -165,6 +247,7 @@ export const PublisherView: React.FC = () => {
   const handleBatchPublish = async () => {
     setIsPublishing(true);
     setPublishMessage(`Executing automated social publish for Clips ${selectedRange}...`);
+    addLog(`Initiating batch publish for Clips ${selectedRange}...`, 'info');
 
     const plats = [];
     if (selectedPlatforms.instagram) plats.push('ig');
@@ -180,14 +263,17 @@ export const PublisherView: React.FC = () => {
       setIsPublishing(false);
       if (res.success) {
         setPublishMessage(`Clips ${selectedRange} successfully published!`);
+        addLog(`Clips ${selectedRange} batch completed successfully.`, 'success');
         await loadQueueFromDisk();
       } else {
         setPublishMessage(`Publishing completed with status logged in console.`);
+        addLog(`Publishing finished with warnings/errors.`, 'warn');
       }
     } else {
       setTimeout(() => {
         setIsPublishing(false);
         setPublishMessage(`Clips ${selectedRange} successfully published to selected platforms!`);
+        addLog(`Mock publish completed for Clips ${selectedRange}`, 'success');
         setQueue((prev) =>
           prev.map((item) => ({
             ...item,
@@ -200,6 +286,25 @@ export const PublisherView: React.FC = () => {
           }))
         );
       }, 2000);
+    }
+  };
+
+  const handleConnectSession = async (platformKey: string) => {
+    setIsLoggingIn(true);
+    addLog(`Launching interactive browser session for ${platformKey}...`, 'info');
+    if (window.hclipper) {
+      const pKey = platformKey === 'tiktok_us' ? 'tiktok' : platformKey;
+      await window.hclipper.runEngine('login', ['--platform', pKey]);
+      setIsLoggingIn(false);
+      setActiveAccountModal(null);
+      await loadQueueFromDisk();
+    } else {
+      setTimeout(() => {
+        setIsLoggingIn(false);
+        setActiveAccountModal(null);
+        setSessionStatuses((prev) => ({ ...prev, [platformKey]: true }));
+        addLog(`Simulated login session connected for ${platformKey}`, 'success');
+      }, 1500);
     }
   };
 
@@ -256,7 +361,7 @@ export const PublisherView: React.FC = () => {
         <div>
           <h2 className="text-2xl font-bold font-display text-white">Multi-Account Social Publisher</h2>
           <p className="text-xs text-slate-400 mt-1">
-            Automate publishing to YouTube Shorts, TikTok (US & Nigeria accounts), and Instagram Reels with session persistence.
+            Automate publishing to YouTube Shorts, TikTok (US & Nigeria accounts), and Instagram Reels with persistent browser sessions.
           </p>
         </div>
         <div className="flex items-center space-x-2">
@@ -274,10 +379,17 @@ export const PublisherView: React.FC = () => {
       {/* Account Profiles Grid */}
       <div className="grid grid-cols-4 gap-4">
         {/* YouTube */}
-        <div className="glass-card rounded-xl p-4 space-y-2 border-red-500/20">
+        <div 
+          onClick={() => setActiveAccountModal('youtube')}
+          className="glass-card rounded-xl p-4 space-y-2 border-red-500/20 cursor-pointer hover:border-red-500/50 transition-colors"
+        >
           <div className="flex items-center justify-between">
             <YoutubeIcon className="w-5 h-5 text-red-500" />
-            <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded">Active</span>
+            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+              sessionStatuses.youtube ? 'text-emerald-400 bg-emerald-500/10' : 'text-amber-400 bg-amber-500/10'
+            }`}>
+              {sessionStatuses.youtube ? 'Connected' : 'Click to Login'}
+            </span>
           </div>
           <div>
             <div className="text-xs font-bold text-white">YouTube Shorts</div>
@@ -287,10 +399,17 @@ export const PublisherView: React.FC = () => {
         </div>
 
         {/* TikTok NG */}
-        <div className="glass-card rounded-xl p-4 space-y-2 border-emerald-500/20">
+        <div 
+          onClick={() => setActiveAccountModal('tiktok_ng')}
+          className="glass-card rounded-xl p-4 space-y-2 border-emerald-500/20 cursor-pointer hover:border-emerald-500/50 transition-colors"
+        >
           <div className="flex items-center justify-between">
             <TikTokIcon className="w-5 h-5 text-emerald-400" />
-            <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded">30k+ Fanbase</span>
+            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+              sessionStatuses.tiktok_ng ? 'text-emerald-400 bg-emerald-500/10' : 'text-amber-400 bg-amber-500/10'
+            }`}>
+              {sessionStatuses.tiktok_ng ? '30k+ Fanbase' : 'Click to Login'}
+            </span>
           </div>
           <div>
             <div className="text-xs font-bold text-white">TikTok Nigeria</div>
@@ -300,10 +419,17 @@ export const PublisherView: React.FC = () => {
         </div>
 
         {/* TikTok US */}
-        <div className="glass-card rounded-xl p-4 space-y-2 border-sky-500/20">
+        <div 
+          onClick={() => setActiveAccountModal('tiktok_us')}
+          className="glass-card rounded-xl p-4 space-y-2 border-sky-500/20 cursor-pointer hover:border-sky-500/50 transition-colors"
+        >
           <div className="flex items-center justify-between">
             <Globe className="w-5 h-5 text-sky-400" />
-            <span className="text-[10px] font-bold text-sky-400 bg-sky-500/10 px-1.5 py-0.5 rounded">VPN Guarded</span>
+            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+              sessionStatuses.tiktok_us ? 'text-sky-400 bg-sky-500/10' : 'text-amber-400 bg-amber-500/10'
+            }`}>
+              {sessionStatuses.tiktok_us ? 'VPN Guarded' : 'Setup Profile'}
+            </span>
           </div>
           <div>
             <div className="text-xs font-bold text-white">TikTok US</div>
@@ -313,10 +439,17 @@ export const PublisherView: React.FC = () => {
         </div>
 
         {/* Instagram Reels */}
-        <div className="glass-card rounded-xl p-4 space-y-2 border-pink-500/20">
+        <div 
+          onClick={() => setActiveAccountModal('instagram')}
+          className="glass-card rounded-xl p-4 space-y-2 border-pink-500/20 cursor-pointer hover:border-pink-500/50 transition-colors"
+        >
           <div className="flex items-center justify-between">
             <InstagramIcon className="w-5 h-5 text-pink-500" />
-            <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded">2FA Linked</span>
+            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+              sessionStatuses.instagram ? 'text-emerald-400 bg-emerald-500/10' : 'text-amber-400 bg-amber-500/10'
+            }`}>
+              {sessionStatuses.instagram ? '2FA Linked' : 'Click to Login'}
+            </span>
           </div>
           <div>
             <div className="text-xs font-bold text-white">Instagram Reels</div>
@@ -453,6 +586,107 @@ export const PublisherView: React.FC = () => {
           </tbody>
         </table>
       </div>
+
+      {/* Live Log Drawer */}
+      <div className="glass-card rounded-xl overflow-hidden border-white/10">
+        <div 
+          onClick={() => setShowLogDrawer(!showLogDrawer)}
+          className="p-3 bg-slate-950/80 border-b border-white/5 flex items-center justify-between cursor-pointer select-none hover:bg-slate-950 transition-colors"
+        >
+          <div className="flex items-center space-x-2">
+            <Terminal className="w-4 h-4 text-amber-400" />
+            <span className="text-xs font-bold text-slate-200">Live Execution Console & Upload Activity</span>
+            <span className="text-[10px] font-mono bg-white/5 px-2 py-0.5 rounded text-slate-400 border border-white/5">
+              {logs.length} events
+            </span>
+          </div>
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setLogs([]);
+              }}
+              title="Clear Logs"
+              className="p-1 hover:bg-white/10 text-slate-400 hover:text-slate-200 rounded text-xs transition-colors"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+            <button className="text-slate-400 hover:text-white">
+              {showLogDrawer ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+            </button>
+          </div>
+        </div>
+
+        {showLogDrawer && (
+          <div 
+            ref={logContainerRef}
+            className="p-3 bg-[#080b11] h-36 overflow-y-auto font-mono text-[11px] space-y-1 select-text scrollbar-thin scrollbar-thumb-white/10"
+          >
+            {logs.length === 0 ? (
+              <div className="text-slate-600 italic">No output logged yet. Run a publish or login job to see real-time events.</div>
+            ) : (
+              logs.map((log) => (
+                <div key={log.id} className="flex items-start space-x-2 leading-relaxed">
+                  <span className="text-slate-600 shrink-0 font-mono">[{log.time}]</span>
+                  <span className={
+                    log.type === 'success' ? 'text-emerald-400 font-semibold' :
+                    log.type === 'error' ? 'text-red-400 font-semibold' :
+                    log.type === 'warn' ? 'text-amber-300' :
+                    'text-slate-300'
+                  }>
+                    {log.text}
+                  </span>
+                </div>
+              ))
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Account Session Modal */}
+      {activeAccountModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="glass-card bg-[#0e121a] rounded-xl border border-white/15 w-full max-w-md p-6 space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-white/10 pb-3">
+              <h3 className="text-sm font-bold text-white capitalize flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 text-amber-400" />
+                Connect {activeAccountModal.replace('_', ' ').toUpperCase()}
+              </h3>
+              <button onClick={() => setActiveAccountModal(null)} className="text-slate-400 hover:text-white">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs text-slate-300">
+              <p>
+                Clicking the button below launches an isolated, persistent browser window:
+              </p>
+              <ol className="list-decimal list-inside space-y-1.5 text-[11px] text-slate-400">
+                <li>Log in to your account credentials securely.</li>
+                <li>Approve any 2FA or SMS verification prompt on your mobile device.</li>
+                <li>Cookies and session tokens are saved locally in <code className="text-amber-300">sessions/</code> with zero cloud transmission.</li>
+              </ol>
+            </div>
+
+            <div className="flex justify-end space-x-2 pt-2 border-t border-white/10">
+              <button 
+                onClick={() => setActiveAccountModal(null)}
+                className="px-4 py-2 bg-white/5 hover:bg-white/10 text-slate-300 rounded-lg text-xs"
+              >
+                Close
+              </button>
+              <button 
+                onClick={() => handleConnectSession(activeAccountModal)}
+                disabled={isLoggingIn}
+                className="px-5 py-2 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 font-bold rounded-lg text-xs flex items-center space-x-1.5"
+              >
+                <LogIn className="w-3.5 h-3.5" />
+                <span>{isLoggingIn ? 'Launching Session...' : 'Launch Interactive Login'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Edit Caption & Metadata Modal */}
       {editingClip && (
