@@ -43,8 +43,12 @@ sessions/
 .env
 .env.local
 
-# Build outputs
+# Build outputs & Bundled Binaries
+release/
+ui/release/
+bin/
 *.exe
 *.msi
 *.zip
 *.tar.gz
+*.blockmap

@@ -11,17 +11,22 @@ __version__ = "1.0.0"
 __author__ = "hclipper contributors"
 
 import shutil
-import subprocess
+import os
 from pathlib import Path
 
 # Base project paths
 ENGINE_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = ENGINE_DIR.parent
+BIN_DIR = PROJECT_ROOT / "bin"
 ASSETS_DIR = PROJECT_ROOT / "assets"
 MODELS_DIR = ASSETS_DIR / "models"
 FONTS_DIR = ASSETS_DIR / "fonts"
 AUDIO_DIR = ASSETS_DIR / "audio"
 BRANDING_DIR = ASSETS_DIR / "branding"
+
+# Prepend bundled binaries directory to PATH for zero-config discovery
+if BIN_DIR.is_dir():
+    os.environ["PATH"] = str(BIN_DIR) + os.pathsep + os.environ.get("PATH", "")
 
 DEFAULT_MODEL_PATH = MODELS_DIR / "face_detection_yunet_2023mar.onnx"
 

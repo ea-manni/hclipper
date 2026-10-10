@@ -4,7 +4,9 @@ const { spawn } = require('child_process');
 const fs = require('fs');
 
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
-const PROJECT_ROOT = path.resolve(__dirname, '..', '..');
+const PROJECT_ROOT = app.isPackaged 
+  ? process.resourcesPath 
+  : path.resolve(__dirname, '..', '..');
 
 let mainWindow = null;
 const activeJobs = new Map();
@@ -109,14 +111,36 @@ ipcMain.handle('hclipper:show-in-folder', async (event, filePath) => {
 // IPC Handler: Run Python Engine Command with Job Tracking
 ipcMain.handle('hclipper:run-engine', (event, { command, args = [], jobId = null }) => {
   return new Promise((resolve, reject) => {
-    const pythonExe = process.platform === 'win32' ? 'python' : 'python3';
-    const cliArgs = ['-m', 'engine.cli', command, ...args, '--json'];
-    const currentJobId = jobId || `job_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    let pythonExe = process.platform === 'win32' ? 'python' : 'python3';
+    const bundledPython = path.join(PROJECT_ROOT, 'python', 'python.exe');
+    if (fs.existsSync(bundledPython)) {
+      pythonExe = bundledPython;
+    }
 
-    const child = spawn(pythonExe, cliArgs, {
-      cwd: PROJECT_ROOT,
-      shell: false
-    });
+    const binDir = path.join(PROJECT_ROOT, 'bin');
+    const childEnv = { ...process.env };
+    if (fs.existsSync(binDir)) {
+      childEnv.PATH = `${binDir}${path.delimiter}${childEnv.PATH || ''}`;
+    }
+
+    const currentJobId = jobId || `job_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const bundledEngineExe = path.join(PROJECT_ROOT, 'bin', 'hclipper-engine.exe');
+
+    let child;
+    if (fs.existsSync(bundledEngineExe)) {
+      child = spawn(bundledEngineExe, [command, ...args, '--json'], {
+        cwd: PROJECT_ROOT,
+        env: childEnv,
+        shell: false
+      });
+    } else {
+      const cliArgs = ['-m', 'engine.cli', command, ...args, '--json'];
+      child = spawn(pythonExe, cliArgs, {
+        cwd: PROJECT_ROOT,
+        env: childEnv,
+        shell: false
+      });
+    }
 
     activeJobs.set(currentJobId, child);
 

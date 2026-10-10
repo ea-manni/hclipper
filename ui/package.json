@@ -4,13 +4,65 @@
   "version": "1.0.0",
   "type": "module",
   "description": "100% Free, Local-First AI Short-Form Video Studio",
+  "author": "hclipper contributors",
+  "homepage": "https://github.com/ea-manni/hclipper",
   "main": "electron/main.cjs",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
     "electron:dev": "electron .",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "dist": "npm run build && electron-builder --win",
+    "dist:dir": "npm run build && electron-builder --win --dir",
+    "dist:portable": "npm run build && electron-builder --win portable"
+  },
+  "build": {
+    "appId": "com.hclipper.studio",
+    "productName": "hclipper Studio",
+    "copyright": "Copyright © 2026 hclipper contributors",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "../engine",
+        "to": "engine",
+        "filter": ["**/*", "!**/__pycache__/*"]
+      },
+      {
+        "from": "../assets",
+        "to": "assets"
+      },
+      {
+        "from": "../bin",
+        "to": "bin"
+      }
+    ],
+    "win": {
+      "icon": "../assets/branding/icon.ico",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "hclipper Studio",
+      "installerIcon": "../assets/branding/icon.ico",
+      "uninstallerIcon": "../assets/branding/icon.ico",
+      "uninstallDisplayName": "hclipper Studio"
+    }
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.3.3",
