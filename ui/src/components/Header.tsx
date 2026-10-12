@@ -102,7 +102,13 @@ export const Header: React.FC<HeaderProps> = () => {
                 v1.0 Studio
               </span>
             </div>
-            <p className="text-[10px] text-slate-400 -mt-0.5">Local AI Video Repurposing</p>
+            <button
+              onClick={() => window.hclipper?.openPath?.('https://github.com/ea-manni')}
+              className="text-[10px] text-slate-400 hover:text-amber-300 transition-colors -mt-0.5 text-left block"
+              title="A product of Daysman Solutions Limited (Open GitHub: @ea-manni)"
+            >
+              by Daysman Solutions Limited
+            </button>
           </div>
         </div>
 

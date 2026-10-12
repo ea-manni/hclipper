@@ -3,8 +3,12 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Platform: Windows](https://img.shields.io/badge/Platform-Windows%2010%20%7C%2011-blue.svg)](https://github.com/ea-manni/hclipper)
+[![Product of: Daysman Solutions Limited](https://img.shields.io/badge/Product%20of-Daysman%20Solutions%20Limited-amber.svg)](https://github.com/ea-manni)
+[![Author: @ea--manni](https://img.shields.io/badge/Author-%40ea--manni-sky.svg)](https://github.com/ea-manni)
 [![Cost: 100% Free](https://img.shields.io/badge/Cost-100%25%20Free%20%26%20Open%20Source-emerald.svg)](https://github.com/ea-manni/hclipper)
-[![Privacy: Local--First](https://img.shields.io/badge/Privacy-100%25%20Local--First-purple.svg)](https://github.com/ea-manni/hclipper)
+
+> 🏢 **hclipper is an open-source product of Daysman Solutions Limited.**  
+> 💼 **Looking to hire / contract?** Built by [@ea-manni](https://github.com/ea-manni). Available for custom AI video processing pipelines, Electron desktop development, and full-stack engineering contracts.
 
 **hclipper** is a 100% free, open-source desktop application that empowers content creators, church media teams, podcasters, and educators to transform long-form video (YouTube, Facebook, local MP4/MOV) into viral vertical (9:16) shorts with automated AI face-tracking, cadence-aware silence trimming, broadcast audio mastering, animated captions, and multi-platform publishing (**TikTok**, **Instagram Reels**, **YouTube Shorts**).
 
@@ -127,7 +131,19 @@ python -m engine.cli publish --publish 1-6 --platforms ig,tt_ng,yt
 - [Community Outreach Playbook](COMMUNITY_OUTREACH.md) - Pitches and templates for church networks and podcasters.
 - [Code of Conduct](CODE_OF_CONDUCT.md) - Community participation standards.
 
+## 🏢 Author & Company Attribution
+
+**hclipper** is an open-source product created and actively maintained by **Daysman Solutions Limited**.
+
+- **Company**: Daysman Solutions Limited
+- **Creator & Lead Maintainer**: [@ea-manni](https://github.com/ea-manni)
+- **GitHub Repository**: [https://github.com/ea-manni/hclipper](https://github.com/ea-manni/hclipper)
+- **Work / Hiring Inquiries**: Looking for a senior software engineer or contract team to build production desktop applications, automated video/audio AI pipelines, or scalable web platforms? Reach out through GitHub: [@ea-manni](https://github.com/ea-manni).
+
 ---
 
 ## ⚖️ License
-Distributed under the **MIT License**. Free for personal, commercial, and ministry use.
+
+Distributed under the **MIT License**. Copyright (c) 2026 Daysman Solutions Limited.
+
+Free for personal, commercial, and ministry use with standard MIT attribution. See [LICENSE](LICENSE) for details.

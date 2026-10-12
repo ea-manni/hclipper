@@ -10,7 +10,8 @@ import {
   CheckCircle2,
   Folder,
   Layers,
-  ChevronRight
+  ChevronRight,
+  ExternalLink
 } from 'lucide-react';
 import { useWorkflow } from '../context/WorkflowContext';
 
@@ -218,6 +219,31 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <Terminal className="w-3.5 h-3.5 text-slate-400" />
           <span>Engine Live Logs</span>
         </button>
+
+        {/* Daysman Solutions Limited Open-Source Attribution & Hire Link */}
+        <div className="pt-2 px-1 text-[10px] text-slate-500 border-t border-white/5 space-y-1 mt-1">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold text-slate-300">Daysman Solutions</span>
+            <span className="text-[9px] font-mono text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-1 py-0.2 rounded font-bold">
+              MIT OSS
+            </span>
+          </div>
+          <p className="text-[10px] text-slate-400 leading-tight">
+            Product of <strong className="text-white">Daysman Solutions Limited</strong>
+          </p>
+          <button
+            onClick={() => {
+              if (window.hclipper?.openPath) {
+                window.hclipper.openPath('https://github.com/ea-manni');
+              }
+            }}
+            className="w-full flex items-center justify-center space-x-1.5 py-1.5 px-2 rounded-lg bg-amber-400/10 hover:bg-amber-400/20 text-amber-300 border border-amber-400/20 transition-all font-semibold text-[10px] group mt-1"
+            title="Open Developer GitHub Profile (Available for Hire)"
+          >
+            <span>GitHub: @ea-manni</span>
+            <ExternalLink className="w-2.5 h-2.5 text-amber-400 group-hover:translate-x-0.5 transition-transform" />
+          </button>
+        </div>
       </div>
     </aside>
   );

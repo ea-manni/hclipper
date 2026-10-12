@@ -3,8 +3,8 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "description": "100% Free, Local-First AI Short-Form Video Studio",
-  "author": "hclipper contributors",
+  "description": "100% Free, Local-First AI Short-Form Video Studio by Daysman Solutions Limited",
+  "author": "Daysman Solutions Limited <https://github.com/ea-manni>",
   "homepage": "https://github.com/ea-manni/hclipper",
   "main": "electron/main.cjs",
   "scripts": {
@@ -18,9 +18,9 @@
     "dist:portable": "npm run build && electron-builder --win portable"
   },
   "build": {
-    "appId": "com.hclipper.studio",
+    "appId": "com.daysmansolutions.hclipper",
     "productName": "hclipper Studio",
-    "copyright": "Copyright © 2026 hclipper contributors",
+    "copyright": "Copyright © 2026 Daysman Solutions Limited",
     "directories": {
       "output": "release"
     },

@@ -90,9 +90,13 @@ ipcMain.handle('hclipper:save-file-dialog', async (event, options) => {
   return result.filePath;
 });
 
-// IPC Handler: Open Path in OS Explorer / Default Video Player
+// IPC Handler: Open Path in OS Explorer / Default Video Player / Browser
 ipcMain.handle('hclipper:open-path', async (event, filePath) => {
   if (!filePath) return false;
+  if (filePath.startsWith('http://') || filePath.startsWith('https://')) {
+    await shell.openExternal(filePath);
+    return true;
+  }
   const resolved = path.isAbsolute(filePath) ? filePath : path.join(PROJECT_ROOT, filePath);
   if (fs.existsSync(resolved)) {
     await shell.openPath(resolved);
