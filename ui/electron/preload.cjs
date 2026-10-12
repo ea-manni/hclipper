@@ -9,6 +9,12 @@ contextBridge.exposeInMainWorld('hclipper', {
   cancelJob: (jobId) => ipcRenderer.invoke('hclipper:cancel-job', jobId),
   readQueue: () => ipcRenderer.invoke('hclipper:read-queue'),
   saveQueue: (items) => ipcRenderer.invoke('hclipper:save-queue', items),
+  readProjects: () => ipcRenderer.invoke('hclipper:read-projects'),
+  saveProjects: (projects) => ipcRenderer.invoke('hclipper:save-projects', projects),
+  selectDirectory: (options) => ipcRenderer.invoke('hclipper:select-directory', options),
+  openFolder: (folderPath) => ipcRenderer.invoke('hclipper:open-folder', folderPath),
+  getSettings: () => ipcRenderer.invoke('hclipper:get-settings'),
+  saveSettings: (settings) => ipcRenderer.invoke('hclipper:save-settings', settings),
   getSystemInfo: () => ipcRenderer.invoke('hclipper:get-system-info'),
   onEngineEvent: (callback) => {
     const handler = (event, data) => callback(data);

@@ -12,6 +12,7 @@ __author__ = "hclipper contributors"
 
 import shutil
 import os
+import subprocess
 from pathlib import Path
 
 # Base project paths

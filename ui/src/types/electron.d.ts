@@ -13,6 +13,12 @@ export interface HclipperAPI {
   cancelJob: (jobId: string) => Promise<boolean>;
   readQueue: () => Promise<any[]>;
   saveQueue: (items: any[]) => Promise<boolean>;
+  readProjects: () => Promise<any[] | null>;
+  saveProjects: (projects: any[]) => Promise<boolean>;
+  selectDirectory: (options?: { title?: string }) => Promise<string | null>;
+  openFolder: (folderPath: string) => Promise<boolean>;
+  getSettings: () => Promise<{ downloadsDir: string; clipsDir: string; [key: string]: any }>;
+  saveSettings: (settings: { downloadsDir?: string; clipsDir?: string; [key: string]: any }) => Promise<boolean>;
   getSystemInfo: () => Promise<{
     platform: string;
     projectRoot: string;

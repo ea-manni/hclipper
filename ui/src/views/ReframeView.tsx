@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   Eye, 
   ArrowRight, 
@@ -9,52 +9,87 @@ import {
   Square, 
   Monitor, 
   CheckCircle2, 
-  Film,
-  Download,
-  Target
+  Film, 
+  Target, 
+  FolderOpen, 
+  Loader2, 
+  RefreshCw, 
+  Zap, 
+  Layers
 } from 'lucide-react';
+import { useWorkflow } from '../context/WorkflowContext';
 
 interface ReframeViewProps {
-  sourceVideo: string;
   onNext: () => void;
+  onNavigateToScout: () => void;
 }
 
 export const ReframeView: React.FC<ReframeViewProps> = ({ 
-  sourceVideo, 
-  onNext 
+  onNext,
+  onNavigateToScout 
 }) => {
-  const [aspectRatio, setAspectRatio] = useState<'9:16' | '1:1' | '16:9'>('9:16');
-  const [enableFaceTracking, setEnableFaceTracking] = useState(true);
-  const [deadzone, setDeadzone] = useState(25);
-  const [smoothFactor, setSmoothFactor] = useState(0.06);
+  const { 
+    sourceVideo, 
+    reframeState, 
+    setReframeState, 
+    startAnalyzeTrajectory, 
+    startRenderClip, 
+    startBatchRenderAll,
+    clips, 
+    activeClipIndex, 
+    selectClip
+  } = useWorkflow();
 
-  // Trajectory & Playback State
-  const [trajectoryData, setTrajectoryData] = useState<number[]>([]);
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [analysisProgress, setAnalysisProgress] = useState(0);
-  const [isRendering, setIsRendering] = useState(false);
-  const [renderProgress, setRenderProgress] = useState(0);
-  const [renderedOutput, setRenderedOutput] = useState<string | null>(null);
+  const {
+    aspectRatio,
+    deadzone,
+    smoothFactor,
+    trajectoryData,
+    isAnalyzing,
+    analysisProgress,
+    isRendering,
+    renderProgress,
+    renderedOutput
+  } = reframeState;
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentFrameIndex, setCurrentFrameIndex] = useState(0);
-  const [cropXPercent, setCropXPercent] = useState(34); // center default
+  const [cropXPercent, setCropXPercent] = useState(34);
+  const [isBatchRendering, setIsBatchRendering] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement>(null);
+
+  const activeClip = clips[activeClipIndex] || {
+    id: 'Clip1',
+    title: 'Discover Your Divine Calling & Purpose',
+    start: 15.0,
+    end: 45.0,
+    isRendered: false
+  };
+
+  // Convert Windows path to file:/// URL
+  const formattedSourceVideo = useMemo(() => {
+    if (!sourceVideo) return '';
+    if (sourceVideo.startsWith('http://') || sourceVideo.startsWith('https://') || sourceVideo.startsWith('file://')) {
+      return sourceVideo;
+    }
+    const normalized = sourceVideo.replace(/\\/g, '/');
+    return normalized.startsWith('/') ? `file://${normalized}` : `file:///${normalized}`;
+  }, [sourceVideo]);
 
   // Dynamic Aspect Configuration
   const getAspectConfig = () => {
     switch (aspectRatio) {
       case '1:1':
         return {
-          widthPct: 56.25, // (1/1) / (16/9) = 9/16 = 56.25%
+          widthPct: 56.25,
           badgeTitle: '1:1 SQUARE CROP',
           resolution: '1080x1080',
           cropLabel: '1080 x 1080',
           subLabel: '(Instagram Feed Square)',
           buttonLabel: 'Render 1:1 Square Video',
-          cardTitle: 'Render Master 1:1 Square Video',
-          desc: 'Encodes with Intel QSV / NVENC hardware acceleration at 1080x1080 60fps.'
+          cardTitle: 'Render 1:1 Square Video',
+          desc: 'Encodes natively with Intel QSV / NVENC GPU hardware acceleration at 1080x1080.'
         };
       case '16:9':
         return {
@@ -64,81 +99,27 @@ export const ReframeView: React.FC<ReframeViewProps> = ({
           cropLabel: '1920 x 1080',
           subLabel: '(Full HD Master VOD)',
           buttonLabel: 'Render 16:9 Master Video',
-          cardTitle: 'Render Master 16:9 Master Video',
-          desc: 'Encodes with Intel QSV / NVENC hardware acceleration at 1920x1080 60fps.'
+          cardTitle: 'Render 16:9 Master Video',
+          desc: 'Encodes natively with Intel QSV / NVENC GPU hardware acceleration at 1920x1080.'
         };
       case '9:16':
       default:
         return {
-          widthPct: 31.64, // (9/16) / (16/9) = 81/256 = 31.64%
+          widthPct: 31.64,
           badgeTitle: '9:16 SHORTS CROP',
           resolution: '1080x1920',
           cropLabel: '608 x 1080',
           subLabel: '(Lanczos Full HD Shorts)',
-          buttonLabel: 'Render 9:16 Short',
-          cardTitle: 'Render Master 9:16 Vertical Short',
-          desc: 'Encodes with Intel QSV / NVENC hardware acceleration at 1080x1920 60fps.'
+          buttonLabel: 'Render 9:16 Short (GPU)',
+          cardTitle: 'Render 9:16 Vertical Short',
+          desc: 'Encodes natively with Intel QSV / NVENC GPU hardware acceleration at 1080x1920.'
         };
     }
   };
 
   const config = getAspectConfig();
-
-  // Active crop left coordinate constrained by aspect ratio width
   const activeLeft = aspectRatio === '16:9' ? 0 : Math.min(Math.max(cropXPercent, 0), 100 - config.widthPct);
-
-  // Center coordinate of the active crop window (where face & camera track)
   const activeCenter = aspectRatio === '16:9' ? 50 : activeLeft + (config.widthPct / 2);
-
-  // Run live analysis via Python engine IPC or simulated playback
-  const handleAnalyzeTrajectory = async () => {
-    setIsAnalyzing(true);
-    setAnalysisProgress(10);
-
-    if (window.hclipper && sourceVideo) {
-      const unsub = window.hclipper.onEngineEvent((evt) => {
-        if (evt.event === 'reframe_progress') {
-          setAnalysisProgress(evt.percent || 0);
-        } else if (evt.event === 'trajectory') {
-          const traj = evt.trajectory || [];
-          setTrajectoryData(traj);
-          setIsAnalyzing(false);
-          setAnalysisProgress(100);
-        }
-      });
-
-      const res = await window.hclipper.runEngine('reframe', [
-        sourceVideo, 
-        '--trajectory-only',
-        '--aspect', aspectRatio,
-        '--deadzone', deadzone.toString(),
-        '--smooth', smoothFactor.toString()
-      ]);
-      unsub();
-      if (!res.success) {
-        setIsAnalyzing(false);
-      }
-    } else {
-      // Smooth preview simulation
-      let p = 10;
-      const interval = setInterval(() => {
-        p += 25;
-        if (p >= 100) {
-          clearInterval(interval);
-          setAnalysisProgress(100);
-          setIsAnalyzing(false);
-          // Generate 300 simulated frame coordinates with realistic speaker movement
-          const mockTraj = Array.from({ length: 300 }, (_, i) => {
-            const center = 550 + Math.sin(i / 25) * 120 + Math.cos(i / 15) * 40;
-            return Math.max(0, Math.min(875, Math.round(center - 202)));
-          });
-          setTrajectoryData(mockTraj);
-        } else {
-          setAnalysisProgress(p);
-        }
-      }, 250);
-    }
-  };
 
   // Synchronize playback frame with crop position
   useEffect(() => {
@@ -148,7 +129,6 @@ export const ReframeView: React.FC<ReframeViewProps> = ({
         setCurrentFrameIndex((prev) => {
           const next = (prev + 1) % trajectoryData.length;
           const frameCoord = trajectoryData[next];
-          // Convert crop coordinate to percentage
           const pct = (frameCoord / 1280) * 100;
           setCropXPercent(pct);
           return next;
@@ -160,88 +140,97 @@ export const ReframeView: React.FC<ReframeViewProps> = ({
     return () => cancelAnimationFrame(animId);
   }, [isPlaying, trajectoryData]);
 
-  const handleRenderMaster = async () => {
-    setIsRendering(true);
-    setRenderProgress(10);
-
-    const aspectSuffix = aspectRatio.replace(':', '_');
-    const targetOut = `C:/Users/Ebunoluwa/Desktop/hclipper/clips/Master_Reframed_${aspectSuffix}.mp4`;
-
-    if (window.hclipper && sourceVideo) {
-      const unsub = window.hclipper.onEngineEvent((evt) => {
-        if (evt.event === 'reframe_progress') {
-          setRenderProgress(evt.percent || 0);
-        } else if (evt.event === 'reframe_result') {
-          setRenderProgress(100);
-          setIsRendering(false);
-          setRenderedOutput(evt.output);
-        }
-      });
-
-      const res = await window.hclipper.runEngine('reframe', [
-        sourceVideo, 
-        targetOut,
-        '--aspect', aspectRatio,
-        '--deadzone', deadzone.toString(),
-        '--smooth', smoothFactor.toString()
-      ]);
-      unsub();
-      if (!res.success) {
-        setIsRendering(false);
-      }
-    } else {
-      let p = 10;
-      const interval = setInterval(() => {
-        p += 20;
-        if (p >= 100) {
-          clearInterval(interval);
-          setRenderProgress(100);
-          setIsRendering(false);
-          setRenderedOutput(targetOut);
-        } else {
-          setRenderProgress(p);
-        }
-      }, 400);
-    }
-  };
-
   const handleOpenRendered = () => {
     if (window.hclipper && renderedOutput) {
       window.hclipper.openPath(renderedOutput);
     }
   };
 
+  const handleShowInFolder = () => {
+    if (window.hclipper && renderedOutput) {
+      window.hclipper.showInFolder(renderedOutput);
+    }
+  };
+
+  const handleRenderActiveClip = async () => {
+    await startRenderClip(activeClipIndex);
+  };
+
+  const handleBatchRenderAll = async () => {
+    setIsBatchRendering(true);
+    await startBatchRenderAll();
+    setIsBatchRendering(false);
+  };
+
   return (
-    <div className="p-8 max-w-5xl mx-auto space-y-6">
-      {/* Header */}
+    <div className="p-8 max-w-6xl mx-auto space-y-7">
+      {/* View Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold font-display text-white">AI Smart Auto-Reframing</h2>
-          <p className="text-xs text-slate-400 mt-1">
-            YuNet ONNX neural network centers the speaker dynamically with deadzone camera pan physics.
+          <div className="flex items-center space-x-2.5">
+            <h2 className="text-2xl font-bold font-display text-white">
+              AI Auto-Reframe & Face Tracking
+            </h2>
+            <span className="bg-amber-400/10 text-amber-400 border border-amber-400/20 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">
+              Step 4 of 6
+            </span>
+          </div>
+          <p className="text-xs text-slate-400 mt-1 max-w-2xl">
+            OpenCV YuNet ONNX face detection centers the speaker dynamically using deadzone camera physics. Hardware encoding completes targeted shorts in seconds.
           </p>
         </div>
+
         <button
-          onClick={onNext}
-          className="px-5 py-2.5 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 font-bold text-xs rounded-lg transition-all shadow-md shadow-amber-500/10 flex items-center space-x-2"
+          onClick={onNavigateToScout}
+          className="px-3.5 py-1.5 bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10 rounded-lg text-xs font-semibold flex items-center space-x-1.5"
         >
-          <span>Proceed to Captions & Hook</span>
-          <ArrowRight className="w-3.5 h-3.5" />
+          <Layers className="w-3.5 h-3.5 text-amber-400" />
+          <span>Switch / Add Clips (Step 2)</span>
         </button>
       </div>
 
-      {/* Main Preview & Physics Grid */}
+      {/* Clip Selector Tabs (Pills) */}
+      <div className="space-y-2">
+        <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+          Select Clip to Reframe ({activeClipIndex + 1} of {clips.length}):
+        </label>
+        <div className="flex items-center space-x-2 overflow-x-auto pb-1 scrollbar-none">
+          {clips.map((c, i) => {
+            const isCur = activeClipIndex === i;
+            return (
+              <button
+                key={c.id || i}
+                onClick={() => selectClip(i)}
+                className={`px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap border transition-all flex items-center space-x-2 ${
+                  isCur
+                    ? 'bg-amber-400 text-slate-950 border-amber-300 shadow-md shadow-amber-500/20 font-bold'
+                    : 'bg-slate-900 hover:bg-slate-800 text-slate-300 border-white/10'
+                }`}
+              >
+                <span className="font-mono text-[11px] opacity-80">#{i + 1}</span>
+                <span className="truncate max-w-[150px]">{c.title}</span>
+                {c.isRendered ? (
+                  <CheckCircle2 className="w-3 h-3 text-emerald-950" />
+                ) : (
+                  <span className="text-[10px] opacity-60">Pending</span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       <div className="grid grid-cols-12 gap-6">
-        {/* Left: Interactive 16:9 Stage Canvas with Dynamic Crop Box (8 cols) */}
+        {/* Left: 16:9 Viewport & Reframe Simulation Canvas (8 cols) */}
         <div className="col-span-8 glass-card rounded-xl p-5 space-y-4">
           <div className="flex items-center justify-between text-xs">
             <span className="font-semibold text-slate-200 flex items-center gap-1.5">
               <Eye className="w-4 h-4 text-amber-400" />
-              Source 16:9 Stage View & Live Crop Window
+              Clip #{activeClipIndex + 1} Face Tracking & 9:16 Crop Window
             </span>
             <div className="flex items-center space-x-2">
               <span className="text-[11px] text-emerald-400 font-mono bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded">
-                CPU YuNet: 60+ FPS
+                Intel QSV Hardware Accel
               </span>
             </div>
           </div>
@@ -252,14 +241,16 @@ export const ReframeView: React.FC<ReframeViewProps> = ({
             <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-900 to-slate-800 opacity-70" />
 
             {/* Video preview if available */}
-            {sourceVideo && (
+            {formattedSourceVideo ? (
               <video
                 ref={videoRef}
-                src={sourceVideo}
+                src={formattedSourceVideo}
                 className="w-full h-full object-cover opacity-60"
                 playsInline
                 muted
               />
+            ) : (
+              <div className="text-slate-600 text-xs">No media loaded</div>
             )}
             
             {/* Speaker Silhouette Graphic - Dead-Centered Reticle on Face & Torso */}
@@ -272,17 +263,13 @@ export const ReframeView: React.FC<ReframeViewProps> = ({
             >
               {/* Head with Concentric Crosshair & Reticle */}
               <div className="w-16 h-16 rounded-full bg-slate-700/90 border-2 border-amber-400/90 shadow-xl relative flex items-center justify-center">
-                {/* Target reticle crosshairs */}
                 <div className="absolute w-full h-[1px] bg-amber-400/50" />
                 <div className="absolute h-full w-[1px] bg-amber-400/50" />
-                <div className="w-2.5 h-2.5 rounded-full bg-amber-400 shadow-sm shadow-amber-400/80 z-10" />
-                <div className="absolute inset-1.5 border border-dashed border-amber-400/40 rounded-full animate-spin-slow" />
-                <span className="absolute -bottom-2 text-[8px] font-extrabold uppercase tracking-wider text-amber-300 bg-slate-950/90 px-1 py-0.2 rounded border border-amber-400/40 z-20">
-                  Face Center
+                <div className="w-6 h-6 rounded-full border border-amber-300/80" />
+                <span className="absolute -top-5 bg-amber-400 text-slate-950 font-bold text-[8px] px-1 rounded uppercase tracking-wider">
+                  YuNet Face Lock
                 </span>
               </div>
-
-              {/* Neck & Torso */}
               <div className="w-5 h-2 bg-slate-700/80 -mt-0.5" />
               <div className="w-32 h-24 bg-slate-800/90 rounded-t-[32px] border border-white/10 shadow-inner flex justify-center pt-2">
                 <Target className="w-4 h-4 text-slate-600/60" />
@@ -319,12 +306,21 @@ export const ReframeView: React.FC<ReframeViewProps> = ({
                 {isPlaying ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5 ml-0.5" />}
               </button>
               <button
-                onClick={handleAnalyzeTrajectory}
-                disabled={isAnalyzing}
-                className="px-4 py-2 bg-amber-400/10 hover:bg-amber-400/20 border border-amber-400/30 text-amber-300 text-xs font-semibold rounded-lg transition-colors flex items-center space-x-1.5"
+                onClick={startAnalyzeTrajectory}
+                disabled={isAnalyzing || isRendering}
+                className="px-4 py-2 bg-amber-400/10 hover:bg-amber-400/20 disabled:opacity-50 border border-amber-400/30 text-amber-300 text-xs font-semibold rounded-lg transition-colors flex items-center space-x-1.5"
               >
-                <Sparkles className="w-3.5 h-3.5" />
-                <span>{isAnalyzing ? `Tracking Faces (${analysisProgress}%)...` : `Analyze YuNet (${aspectRatio})`}</span>
+                {isAnalyzing ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Tracking Faces ({analysisProgress}%)...</span>
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-3.5 h-3.5" />
+                    <span>Test YuNet Face Lock ({aspectRatio})</span>
+                  </>
+                )}
               </button>
             </div>
 
@@ -333,35 +329,60 @@ export const ReframeView: React.FC<ReframeViewProps> = ({
             </span>
           </div>
 
-          {/* Render Master Action Box */}
+          {/* Render Action Box */}
           <div className="p-4 rounded-xl bg-slate-900/90 border border-white/10 flex items-center justify-between">
             <div>
               <div className="text-xs font-bold text-white flex items-center gap-1.5">
                 <Film className="w-4 h-4 text-amber-400" />
-                <span>{config.cardTitle}</span>
+                <span>Render Clip #{activeClipIndex + 1} ({activeClip.title})</span>
               </div>
               <p className="text-[11px] text-slate-400 mt-0.5">
-                {config.desc}
+                Encodes targeted segment ({(activeClip.end - activeClip.start).toFixed(0)}s) with Intel QSV GPU in ~5 seconds.
               </p>
             </div>
 
             <div className="flex items-center space-x-2">
-              {renderedOutput ? (
-                <button
-                  onClick={handleOpenRendered}
-                  className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs rounded-lg transition-all flex items-center space-x-1.5"
-                >
-                  <CheckCircle2 className="w-3.5 h-3.5" />
-                  <span>Open Video in Player</span>
-                </button>
+              {renderedOutput && !isRendering ? (
+                <div className="flex items-center space-x-2">
+                  <button
+                    onClick={handleOpenRendered}
+                    className="px-4 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs rounded-lg transition-all flex items-center space-x-1.5 shadow-md shadow-emerald-500/20"
+                  >
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    <span>Open in Player</span>
+                  </button>
+                  <button
+                    onClick={handleShowInFolder}
+                    className="px-3 py-2.5 bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10 font-medium text-xs rounded-lg transition-all flex items-center space-x-1"
+                    title="Show in Folder"
+                  >
+                    <FolderOpen className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    onClick={handleRenderActiveClip}
+                    className="p-2.5 text-slate-400 hover:text-amber-400 transition-colors"
+                    title="Re-render with current settings"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               ) : (
                 <button
-                  onClick={handleRenderMaster}
-                  disabled={isRendering}
+                  onClick={handleRenderActiveClip}
+                  disabled={isRendering || !sourceVideo}
                   className="px-5 py-2.5 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 disabled:opacity-50 text-slate-950 font-bold text-xs rounded-lg transition-all shadow-md shadow-amber-500/10 flex items-center space-x-2"
                 >
-                  <Download className="w-3.5 h-3.5" />
-                  <span>{isRendering ? `Rendering (${renderProgress}%)...` : config.buttonLabel}</span>
+                  {isRendering ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Rendering ({renderProgress}%)...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Zap className="w-3.5 h-3.5" />
+                      <span>Render Clip #{activeClipIndex + 1} (GPU)</span>
+                    </>
+                  )}
                 </button>
               )}
             </div>
@@ -370,121 +391,136 @@ export const ReframeView: React.FC<ReframeViewProps> = ({
 
         {/* Right: Reframing Physics & Aspect Controls (4 cols) */}
         <div className="col-span-4 space-y-4">
-          {/* Aspect Ratio Selector */}
-          <div className="glass-card rounded-xl p-4 space-y-3">
+          {/* Aspect Ratio Picker */}
+          <div className="glass-card rounded-xl p-5 space-y-3">
             <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">
               Output Aspect Ratio
             </span>
             <div className="grid grid-cols-3 gap-2">
               <button
-                onClick={() => {
-                  setAspectRatio('9:16');
-                  setRenderedOutput(null);
-                }}
-                className={`flex flex-col items-center justify-center p-2.5 rounded-lg border text-center transition-all ${
+                onClick={() => setReframeState((prev) => ({ ...prev, aspectRatio: '9:16' }))}
+                className={`p-3 rounded-lg border text-center transition-all ${
                   aspectRatio === '9:16'
-                    ? 'bg-amber-400/15 border-amber-400/50 text-amber-300 shadow-sm shadow-amber-400/20'
+                    ? 'bg-amber-400/10 border-amber-400/50 text-white'
                     : 'bg-slate-900 border-white/5 text-slate-400 hover:text-white'
                 }`}
               >
-                <Smartphone className="w-4 h-4 mb-1" />
-                <span className="text-[11px] font-bold">9:16 Vertical</span>
-                <span className="text-[9px] text-slate-500">TikTok/Shorts</span>
+                <Smartphone className="w-5 h-5 mx-auto mb-1 text-amber-400" />
+                <div className="text-xs font-bold">9:16</div>
+                <div className="text-[9px] text-slate-500">TikTok/Reels</div>
               </button>
 
               <button
-                onClick={() => {
-                  setAspectRatio('1:1');
-                  setRenderedOutput(null);
-                }}
-                className={`flex flex-col items-center justify-center p-2.5 rounded-lg border text-center transition-all ${
+                onClick={() => setReframeState((prev) => ({ ...prev, aspectRatio: '1:1' }))}
+                className={`p-3 rounded-lg border text-center transition-all ${
                   aspectRatio === '1:1'
-                    ? 'bg-amber-400/15 border-amber-400/50 text-amber-300 shadow-sm shadow-amber-400/20'
+                    ? 'bg-amber-400/10 border-amber-400/50 text-white'
                     : 'bg-slate-900 border-white/5 text-slate-400 hover:text-white'
                 }`}
               >
-                <Square className="w-4 h-4 mb-1" />
-                <span className="text-[11px] font-bold">1:1 Square</span>
-                <span className="text-[9px] text-slate-500">Instagram Feed</span>
+                <Square className="w-5 h-5 mx-auto mb-1 text-sky-400" />
+                <div className="text-xs font-bold">1:1</div>
+                <div className="text-[9px] text-slate-500">Instagram</div>
               </button>
 
               <button
-                onClick={() => {
-                  setAspectRatio('16:9');
-                  setRenderedOutput(null);
-                }}
-                className={`flex flex-col items-center justify-center p-2.5 rounded-lg border text-center transition-all ${
+                onClick={() => setReframeState((prev) => ({ ...prev, aspectRatio: '16:9' }))}
+                className={`p-3 rounded-lg border text-center transition-all ${
                   aspectRatio === '16:9'
-                    ? 'bg-amber-400/15 border-amber-400/50 text-amber-300 shadow-sm shadow-amber-400/20'
+                    ? 'bg-amber-400/10 border-amber-400/50 text-white'
                     : 'bg-slate-900 border-white/5 text-slate-400 hover:text-white'
                 }`}
               >
-                <Monitor className="w-4 h-4 mb-1" />
-                <span className="text-[11px] font-bold">16:9 Master</span>
-                <span className="text-[9px] text-slate-500">YouTube VOD</span>
+                <Monitor className="w-5 h-5 mx-auto mb-1 text-emerald-400" />
+                <div className="text-xs font-bold">16:9</div>
+                <div className="text-[9px] text-slate-500">Landscape</div>
               </button>
             </div>
           </div>
 
           {/* Camera Physics */}
-          <div className="glass-card rounded-xl p-4 space-y-4">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">
-                Camera Physics
-              </span>
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input 
-                  type="checkbox" 
-                  checked={enableFaceTracking} 
-                  onChange={(e) => setEnableFaceTracking(e.target.checked)} 
-                  className="sr-only peer" 
-                />
-                <div className="w-8 h-4 bg-slate-800 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-amber-400"></div>
-              </label>
+          <div className="glass-card rounded-xl p-5 space-y-4">
+            <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">
+              Camera Deadzone Physics
+            </span>
+
+            <div className="space-y-1.5">
+              <div className="flex justify-between text-xs text-slate-400">
+                <span>Deadzone Leeway</span>
+                <span className="font-mono text-white font-bold">{deadzone}px</span>
+              </div>
+              <input 
+                type="range" 
+                min="0" 
+                max="80" 
+                value={deadzone}
+                onChange={(e) => setReframeState((prev) => ({ ...prev, deadzone: parseInt(e.target.value) }))}
+                className="w-full accent-amber-400 bg-slate-800 rounded-lg cursor-pointer h-1.5"
+              />
+              <p className="text-[10px] text-slate-500">
+                Prevents jittery camera pan when speaker makes slight head movements.
+              </p>
             </div>
 
-            <div className="space-y-3 text-xs">
-              <div>
-                <div className="flex justify-between text-[11px] text-slate-400 mb-1">
-                  <span>Deadzone Leeway:</span>
-                  <span className="font-mono text-amber-300 font-bold">{deadzone} px</span>
-                </div>
-                <input 
-                  type="range" 
-                  min="10" 
-                  max="60" 
-                  value={deadzone}
-                  onChange={(e) => setDeadzone(parseInt(e.target.value))}
-                  className="w-full accent-amber-400 h-1 bg-slate-800 rounded-lg cursor-pointer"
-                />
-                <span className="text-[10px] text-slate-500">
-                  Prevents camera micro-jitter during subtle speaker hand gestures.
-                </span>
+            <div className="space-y-1.5">
+              <div className="flex justify-between text-xs text-slate-400">
+                <span>Camera Pan Smooth Factor</span>
+                <span className="font-mono text-white font-bold">{smoothFactor}</span>
               </div>
-
-              <div>
-                <div className="flex justify-between text-[11px] text-slate-400 mb-1">
-                  <span>Pan Easing Rate:</span>
-                  <span className="font-mono text-amber-300 font-bold">{smoothFactor}</span>
-                </div>
-                <input 
-                  type="range" 
-                  min="0.02" 
-                  max="0.15" 
-                  step="0.01"
-                  value={smoothFactor}
-                  onChange={(e) => setSmoothFactor(parseFloat(e.target.value))}
-                  className="w-full accent-amber-400 h-1 bg-slate-800 rounded-lg cursor-pointer"
-                />
-                <span className="text-[10px] text-slate-500">
-                  Cinematic camera acceleration when the speaker walks across stage.
-                </span>
-              </div>
+              <input 
+                type="range" 
+                min="0.01" 
+                max="0.2" 
+                step="0.01"
+                value={smoothFactor}
+                onChange={(e) => setReframeState((prev) => ({ ...prev, smoothFactor: parseFloat(e.target.value) }))}
+                className="w-full accent-amber-400 bg-slate-800 rounded-lg cursor-pointer h-1.5"
+              />
+              <p className="text-[10px] text-slate-500">
+                Controls how fluidly the crop follows rapid stage pacing.
+              </p>
             </div>
           </div>
+
+          {/* Batch Render Quick Card */}
+          <div className="glass-card rounded-xl p-5 space-y-3 bg-gradient-to-br from-slate-900 to-amber-950/20 border-amber-500/20">
+            <div className="flex items-center space-x-2">
+              <Zap className="w-4 h-4 text-amber-400" />
+              <span className="text-xs font-bold text-white uppercase tracking-wider">
+                Batch Render All {clips.length} Clips
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-400">
+              Renders all discovered viral moments into 9:16 vertical shorts sequentially using Intel QSV hardware acceleration.
+            </p>
+            <button
+              onClick={handleBatchRenderAll}
+              disabled={isBatchRendering || isRendering}
+              className="w-full py-2 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 font-bold text-xs rounded-lg transition-all shadow-md shadow-amber-500/10 flex items-center justify-center space-x-1.5 disabled:opacity-50"
+            >
+              <span>{isBatchRendering ? 'Rendering Batch...' : `⚡ Batch Render All ${clips.length} Clips`}</span>
+            </button>
+          </div>
         </div>
+      </div>
+
+      {/* Navigation Footer */}
+      <div className="flex items-center justify-between pt-4 border-t border-white/10">
+        <button
+          onClick={onNavigateToScout}
+          className="px-4 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-slate-400 text-xs font-semibold"
+        >
+          ← Back to Step 2: AI Clip Scout
+        </button>
+
+        <button
+          onClick={onNext}
+          className="px-6 py-2.5 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 font-bold text-xs rounded-lg flex items-center space-x-2 shadow-lg shadow-amber-500/20"
+        >
+          <span>Proceed to Step 5: Captions & Hooks</span>
+          <ArrowRight className="w-3.5 h-3.5" />
+        </button>
       </div>
     </div>
   );
 };
-

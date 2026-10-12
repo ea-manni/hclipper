@@ -198,11 +198,26 @@ export const IngestView: React.FC<IngestViewProps> = ({
   return (
     <div className="p-8 max-w-5xl mx-auto space-y-6">
       {/* Title */}
-      <div>
-        <h2 className="text-2xl font-bold font-display text-white">Source Media Ingestion</h2>
-        <p className="text-xs text-slate-400 mt-1">
-          Import church sermons, podcast episodes, or livestreams from YouTube, Facebook, or your local drive.
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <div className="flex items-center space-x-2.5">
+            <h2 className="text-2xl font-bold font-display text-white">Source Media Ingestion</h2>
+            <span className="bg-amber-400/10 text-amber-400 border border-amber-400/20 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">
+              Step 1 of 6
+            </span>
+          </div>
+          <p className="text-xs text-slate-400 mt-1">
+            Import church sermons, podcast episodes, or livestreams from YouTube, Facebook, or your local drive.
+          </p>
+        </div>
+
+        <button
+          onClick={() => window.hclipper?.openFolder?.('downloads')}
+          className="px-3.5 py-1.5 bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10 rounded-lg text-xs font-semibold flex items-center space-x-1.5"
+        >
+          <FolderOpen className="w-3.5 h-3.5 text-amber-400" />
+          <span>Open Downloads Folder</span>
+        </button>
       </div>
 
       {/* URL Stream Downloader Card */}
@@ -449,7 +464,7 @@ export const IngestView: React.FC<IngestViewProps> = ({
             onClick={onNext}
             className="px-5 py-2.5 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 font-bold text-xs rounded-lg transition-all shadow-md shadow-amber-500/10 flex items-center space-x-2"
           >
-            <span>Proceed to Timeline & DSP</span>
+            <span>Proceed to Step 2: AI Clip Scout</span>
             <ArrowRight className="w-3.5 h-3.5" />
           </button>
         </div>

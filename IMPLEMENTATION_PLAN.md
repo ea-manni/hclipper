@@ -86,3 +86,9 @@ This document outlines the step-by-step phased execution plan to develop, stabil
 - [x] **Task 6.2**: Add `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, and issue templates.
 - [x] **Task 6.3**: Build and configure standalone Windows `.exe` installer (`hclipper Studio Setup 1.0.0.exe`) for GitHub release.
 - [x] **Task 6.4**: Write outreach guide / pitch for church networks and creator communities (`COMMUNITY_OUTREACH.md`).
+
+---
+
+## Next Steps & Future Enhancements
+
+For tracked improvements, user-configurable directory management, and upcoming features, see **[`PENDING_WORK.md`](./PENDING_WORK.md)**.

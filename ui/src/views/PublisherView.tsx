@@ -10,17 +10,22 @@ import {
   Play, 
   Save, 
   X, 
-  ShieldCheck, 
   LogIn,
   Terminal,
   ChevronDown,
   ChevronUp,
-  Trash2
+  FolderOpen,
+  Folder,
+  ExternalLink,
+  Film
 } from 'lucide-react';
 import { YoutubeIcon, InstagramIcon, TikTokIcon } from '../components/Icons';
+import { useWorkflow } from '../context/WorkflowContext';
 
 interface QueueItem {
   id: string;
+  projectId?: string;
+  projectName?: string;
   title: string;
   filename: string;
   file_path: string;
@@ -42,7 +47,9 @@ interface LogEntry {
 }
 
 export const PublisherView: React.FC = () => {
-  const [selectedRange, setSelectedRange] = useState('1-6');
+  const { projects, switchProject, setActiveTab } = useWorkflow();
+  const [selectedRange, setSelectedRange] = useState('1-3');
+  const [selectedProjectFilter, setSelectedProjectFilter] = useState('all');
   const [selectedPlatforms, setSelectedPlatforms] = useState({
     instagram: true,
     tiktok_ng: true,
@@ -53,9 +60,17 @@ export const PublisherView: React.FC = () => {
   const [publishMessage, setPublishMessage] = useState('');
   const [isScanning, setIsScanning] = useState(false);
 
+  // Live Video Player Modal
+  const [previewVideo, setPreviewVideo] = useState<{
+    url: string;
+    title: string;
+    filename: string;
+    filePath: string;
+  } | null>(null);
+
   // Live Log Drawer State
   const [logs, setLogs] = useState<LogEntry[]>([
-    { id: '1', time: new Date().toLocaleTimeString(), text: 'Publisher engine ready. Persistent sessions synced.', type: 'info' }
+    { id: '1', time: new Date().toLocaleTimeString(), text: 'Publisher engine ready. Real clips loaded from disk.', type: 'info' }
   ]);
   const [showLogDrawer, setShowLogDrawer] = useState(true);
   const logContainerRef = useRef<HTMLDivElement>(null);
@@ -75,93 +90,8 @@ export const PublisherView: React.FC = () => {
   const [editTitle, setEditTitle] = useState('');
   const [editCaption, setEditCaption] = useState('');
 
-  // Queue Data
-  const [queue, setQueue] = useState<QueueItem[]>([
-    {
-      id: 'Clip1_Discover_Your_Purpose_Master',
-      title: 'Discover Your True Calling & Purpose',
-      filename: 'Clip1_Discover_Your_Purpose_Master.mp4',
-      file_path: 'clips/Clip1_Discover_Your_Purpose_Master.mp4',
-      duration: '68s',
-      caption: 'Discover your true purpose and unlock your full potential!\n\n#Shorts #Reels #TikTok #Purpose #Growth',
-      status: {
-        youtube: 'pending',
-        tiktok_ng: 'pending',
-        tiktok_us: 'pending',
-        instagram: 'pending'
-      }
-    },
-    {
-      id: 'Clip2_Consistency_Beats_Talent_Master',
-      title: 'Consistency Beats Talent Every Time',
-      filename: 'Clip2_Consistency_Beats_Talent_Master.mp4',
-      file_path: 'clips/Clip2_Consistency_Beats_Talent_Master.mp4',
-      duration: '117s',
-      caption: 'Consistency beats talent when talent doesn\'t work hard. Keep pushing daily!\n\n#Motivation #Shorts #TikTok #Discipline',
-      status: {
-        youtube: 'pending',
-        tiktok_ng: 'pending',
-        tiktok_us: 'pending',
-        instagram: 'pending'
-      }
-    },
-    {
-      id: 'Clip3_Surround_With_Purpose_Master',
-      title: 'Surround Yourself With Purpose-Driven People',
-      filename: 'Clip3_Surround_With_Purpose_Master.mp4',
-      file_path: 'clips/Clip3_Surround_With_Purpose_Master.mp4',
-      duration: '102s',
-      caption: 'The circle around you shapes your future. Choose your company with intention.\n\n#Wisdom #Leadership #Shorts #Reels',
-      status: {
-        youtube: 'pending',
-        tiktok_ng: 'pending',
-        tiktok_us: 'pending',
-        instagram: 'pending'
-      }
-    },
-    {
-      id: 'Clip4_Turning_Failures_To_Stepping_Stones_Master',
-      title: 'Turning Failures Into Powerful Stepping Stones',
-      filename: 'Clip4_Turning_Failures_To_Stepping_Stones_Master.mp4',
-      file_path: 'clips/Clip4_Turning_Failures_To_Stepping_Stones_Master.mp4',
-      duration: '57s',
-      caption: 'Every setback is a setup for a stronger comeback. Never give up!\n\n#GrowthMindset #Shorts #TikTok #Inspiration',
-      status: {
-        youtube: 'pending',
-        tiktok_ng: 'pending',
-        tiktok_us: 'pending',
-        instagram: 'pending'
-      }
-    },
-    {
-      id: 'Clip5_Daily_Discipline_Master',
-      title: 'The Power of Daily Discipline',
-      filename: 'Clip5_Daily_Discipline_Master.mp4',
-      file_path: 'clips/Clip5_Daily_Discipline_Master.mp4',
-      duration: '104s',
-      caption: 'Daily discipline creates long-term freedom. Small habits build massive results.\n\n#Focus #Discipline #Shorts #Reels',
-      status: {
-        youtube: 'pending',
-        tiktok_ng: 'pending',
-        tiktok_us: 'pending',
-        instagram: 'pending'
-      }
-    },
-    {
-      id: 'Clip6_Building_In_Silence_Master',
-      title: 'Building in Silence Before the Breakthrough',
-      filename: 'Clip6_Building_In_Silence_Master.mp4',
-      file_path: 'clips/Clip6_Building_In_Silence_Master.mp4',
-      duration: '64s',
-      caption: 'Build in silence and let your consistency make the noise. The breakthrough is coming.\n\n#Grind #Focus #Shorts #Reels',
-      status: {
-        youtube: 'pending',
-        tiktok_ng: 'pending',
-        tiktok_us: 'pending',
-        instagram: 'pending'
-      }
-    }
-  ]);
+  // Queue Data (Strictly real files on disk — zero mock placeholders)
+  const [queue, setQueue] = useState<QueueItem[]>([]);
 
   const addLog = (text: string, type: 'info' | 'success' | 'warn' | 'error' = 'info') => {
     setLogs((prev) => [
@@ -173,8 +103,11 @@ export const PublisherView: React.FC = () => {
   const loadQueueFromDisk = async () => {
     if (window.hclipper) {
       const items = await window.hclipper.readQueue();
-      if (items && items.length > 0) {
+      if (items && Array.isArray(items) && items.length > 0) {
         setQueue(items);
+      } else {
+        // Trigger automatic scan if queue file was empty
+        await handleScanClips();
       }
       // Check session status
       const res = await window.hclipper.runEngine('session-status', []);
@@ -231,16 +164,16 @@ export const PublisherView: React.FC = () => {
     addLog('Scanning clips/ directory for rendered short clips...', 'info');
     if (window.hclipper) {
       await window.hclipper.runEngine('publish', ['--scan']);
-      await loadQueueFromDisk();
+      const items = await window.hclipper.readQueue();
+      if (items) setQueue(items);
       setIsScanning(false);
-      setPublishMessage('Scanned clips/ directory and updated queue.');
-      addLog('Scan completed. Queue synchronized.', 'success');
+      setPublishMessage('Scanned clips/ directory and updated queue with verified files.');
+      addLog(`Scan completed. Found ${items?.length || 0} real clips in queue.`, 'success');
     } else {
       setTimeout(() => {
         setIsScanning(false);
         setPublishMessage('Scanned clips/ directory. Queue is up to date.');
-        addLog('Simulated scan completed.', 'success');
-      }, 800);
+      }, 600);
     }
   };
 
@@ -274,18 +207,7 @@ export const PublisherView: React.FC = () => {
         setIsPublishing(false);
         setPublishMessage(`Clips ${selectedRange} successfully published to selected platforms!`);
         addLog(`Mock publish completed for Clips ${selectedRange}`, 'success');
-        setQueue((prev) =>
-          prev.map((item) => ({
-            ...item,
-            status: {
-              ...item.status,
-              tiktok_ng: selectedPlatforms.tiktok_ng ? 'posted' : item.status.tiktok_ng,
-              instagram: selectedPlatforms.instagram ? 'posted' : item.status.instagram,
-              youtube: selectedPlatforms.youtube ? 'posted' : item.status.youtube
-            }
-          }))
-        );
-      }, 2000);
+      }, 1500);
     }
   };
 
@@ -298,18 +220,33 @@ export const PublisherView: React.FC = () => {
       setIsLoggingIn(false);
       setActiveAccountModal(null);
       await loadQueueFromDisk();
-    } else {
-      setTimeout(() => {
-        setIsLoggingIn(false);
-        setActiveAccountModal(null);
-        setSessionStatuses((prev) => ({ ...prev, [platformKey]: true }));
-        addLog(`Simulated login session connected for ${platformKey}`, 'success');
-      }, 1500);
     }
   };
 
-  const openVideoInPlayer = (filePath: string) => {
-    if (window.hclipper) {
+  // Open Real In-App Interactive Video Player Modal
+  const openVideoInPlayer = (item: QueueItem) => {
+    const rawPath = item.file_path;
+    const url = rawPath.startsWith('http') || rawPath.startsWith('file:')
+      ? rawPath
+      : `file:///${rawPath.replace(/\\/g, '/')}`;
+
+    setPreviewVideo({
+      url,
+      title: item.title,
+      filename: item.filename,
+      filePath: rawPath
+    });
+    addLog(`Playing video: ${item.filename}`, 'info');
+  };
+
+  const openInExplorer = (filePath: string) => {
+    if (window.hclipper?.showInFolder) {
+      window.hclipper.showInFolder(filePath);
+    }
+  };
+
+  const openInDefaultOSPlayer = (filePath: string) => {
+    if (window.hclipper?.openPath) {
       window.hclipper.openPath(filePath);
     }
   };
@@ -330,6 +267,7 @@ export const PublisherView: React.FC = () => {
       await window.hclipper.saveQueue(updated);
     }
     setEditingClip(null);
+    addLog(`Updated caption metadata for ${editingClip.filename}`, 'success');
   };
 
   const renderBadge = (status?: string) => {
@@ -359,19 +297,31 @@ export const PublisherView: React.FC = () => {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold font-display text-white">Multi-Account Social Publisher</h2>
+          <div className="flex items-center space-x-2.5">
+            <h2 className="text-2xl font-bold font-display text-white">Social Publisher & Clips Queue</h2>
+            <span className="bg-amber-400/10 text-amber-400 border border-amber-400/20 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">
+              Step 6 of 6
+            </span>
+          </div>
           <p className="text-xs text-slate-400 mt-1">
-            Automate publishing to YouTube Shorts, TikTok (US & Nigeria accounts), and Instagram Reels with persistent browser sessions.
+            Real playable clips rendered on your machine. Preview with built-in player and publish across TikTok, Instagram Reels, and YouTube Shorts.
           </p>
         </div>
         <div className="flex items-center space-x-2">
+          <button
+            onClick={() => window.hclipper?.openFolder?.('clips')}
+            className="px-3.5 py-1.5 bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10 rounded-lg text-xs font-semibold flex items-center space-x-1.5"
+          >
+            <FolderOpen className="w-3.5 h-3.5 text-amber-400" />
+            <span>Open Clips Folder</span>
+          </button>
           <button
             onClick={handleScanClips}
             disabled={isScanning}
             className="px-3.5 py-1.5 bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10 rounded-lg text-xs font-semibold flex items-center space-x-1.5"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isScanning ? 'animate-spin' : ''}`} />
-            <span>Scan Clips Directory</span>
+            <span>Scan Disk Clips</span>
           </button>
         </div>
       </div>
@@ -397,9 +347,6 @@ export const PublisherView: React.FC = () => {
               {sessionStatuses.youtube ? 'Connected Channel' : 'Click to Authenticate'}
             </div>
           </div>
-          <div className="text-[10px] text-slate-500 pt-1">
-            {sessionStatuses.youtube ? 'Studio Session Saved' : 'No Session Profile'}
-          </div>
         </div>
 
         {/* TikTok Primary / Global */}
@@ -421,8 +368,26 @@ export const PublisherView: React.FC = () => {
               {sessionStatuses.tiktok_ng ? 'Connected Account' : 'Click to Authenticate'}
             </div>
           </div>
-          <div className="text-[10px] text-slate-500 pt-1">
-            {sessionStatuses.tiktok_ng ? 'Direct Connection OK' : 'No Session Profile'}
+        </div>
+
+        {/* Instagram */}
+        <div 
+          onClick={() => setActiveAccountModal('instagram')}
+          className="glass-card rounded-xl p-4 space-y-2 border-pink-500/20 cursor-pointer hover:border-pink-500/50 transition-colors"
+        >
+          <div className="flex items-center justify-between">
+            <InstagramIcon className="w-5 h-5 text-pink-500" />
+            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+              sessionStatuses.instagram ? 'text-emerald-400 bg-emerald-500/10' : 'text-amber-400 bg-amber-500/10'
+            }`}>
+              {sessionStatuses.instagram ? 'Connected' : 'Click to Login'}
+            </span>
+          </div>
+          <div>
+            <div className="text-xs font-bold text-white">Instagram Reels</div>
+            <div className="text-[10px] text-slate-400">
+              {sessionStatuses.instagram ? 'Connected Profile' : 'Click to Authenticate'}
+            </div>
           </div>
         </div>
 
@@ -442,50 +407,22 @@ export const PublisherView: React.FC = () => {
           <div>
             <div className="text-xs font-bold text-white">TikTok (US Region)</div>
             <div className="text-[10px] text-slate-400">
-              {sessionStatuses.tiktok_us ? 'US Session Active' : 'US Geolocation Enforced'}
+              {sessionStatuses.tiktok_us ? 'US Session Active' : 'US Proxy Guard'}
             </div>
-          </div>
-          <div className="text-[10px] text-slate-500 pt-1">
-            {sessionStatuses.tiktok_us ? 'Pre-flight Guard Active' : 'Requires US Proxy'}
-          </div>
-        </div>
-
-        {/* Instagram Reels */}
-        <div 
-          onClick={() => setActiveAccountModal('instagram')}
-          className="glass-card rounded-xl p-4 space-y-2 border-pink-500/20 cursor-pointer hover:border-pink-500/50 transition-colors"
-        >
-          <div className="flex items-center justify-between">
-            <InstagramIcon className="w-5 h-5 text-pink-500" />
-            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
-              sessionStatuses.instagram ? 'text-emerald-400 bg-emerald-500/10' : 'text-amber-400 bg-amber-500/10'
-            }`}>
-              {sessionStatuses.instagram ? 'Connected' : 'Click to Login'}
-            </span>
-          </div>
-          <div>
-            <div className="text-xs font-bold text-white">Instagram Reels</div>
-            <div className="text-[10px] text-slate-400">
-              {sessionStatuses.instagram ? 'Connected Account' : 'Click to Authenticate'}
-            </div>
-          </div>
-          <div className="text-[10px] text-slate-500 pt-1">
-            {sessionStatuses.instagram ? 'Persistent Profile OK' : 'No Session Profile'}
           </div>
         </div>
       </div>
 
-      {/* Batch Publish Control Bar */}
-      <div className="glass-card rounded-xl p-4 flex items-center justify-between bg-amber-400/[0.02] border-amber-400/20">
+      {/* Publishing Controls */}
+      <div className="glass-card rounded-xl p-5 border-white/10 flex items-center justify-between">
         <div className="flex items-center space-x-6 text-xs">
           <div className="flex items-center space-x-2">
-            <span className="text-slate-400 font-semibold">Publish Range:</span>
+            <span className="text-slate-400 font-semibold uppercase text-[11px]">Clip Range:</span>
             <input 
               type="text" 
               value={selectedRange} 
               onChange={(e) => setSelectedRange(e.target.value)}
-              placeholder="e.g. 1-6"
-              className="w-16 bg-slate-900 border border-white/10 rounded px-2 py-1 font-mono text-amber-300 font-bold text-center focus:outline-none"
+              className="bg-slate-900 border border-white/10 rounded px-2.5 py-1 text-white font-mono w-20 text-center focus:outline-none focus:border-amber-400"
             />
           </div>
 
@@ -519,26 +456,16 @@ export const PublisherView: React.FC = () => {
               />
               <span className="text-slate-300 font-medium">YouTube Shorts</span>
             </label>
-
-            <label className="flex items-center space-x-1.5 cursor-pointer">
-              <input 
-                type="checkbox" 
-                checked={selectedPlatforms.tiktok_us}
-                onChange={(e) => setSelectedPlatforms({ ...selectedPlatforms, tiktok_us: e.target.checked })}
-                className="accent-amber-400"
-              />
-              <span className="text-slate-300 font-medium">TikTok US (VPN)</span>
-            </label>
           </div>
         </div>
 
         <button
           onClick={handleBatchPublish}
-          disabled={isPublishing}
+          disabled={isPublishing || queue.length === 0}
           className="px-6 py-2.5 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 disabled:opacity-50 text-slate-950 font-bold text-xs rounded-lg transition-all shadow-md shadow-amber-500/10 flex items-center space-x-2"
         >
           <Send className="w-3.5 h-3.5" />
-          <span>{isPublishing ? 'Publishing Selected...' : `Publish Clips ${selectedRange}`}</span>
+          <span>{isPublishing ? 'Publishing Selected...' : `Publish Selected Clips (${selectedRange})`}</span>
         </button>
       </div>
 
@@ -549,61 +476,155 @@ export const PublisherView: React.FC = () => {
         </div>
       )}
 
-      {/* Central Queue Table */}
-      <div className="glass-card rounded-xl overflow-hidden">
-        <div className="p-4 border-b border-white/5 flex items-center justify-between">
-          <span className="text-xs font-bold text-slate-200 uppercase tracking-wider">
-            Clips Queue & Platform Matrix
-          </span>
-          <span className="text-xs text-slate-400">Total in Queue: {queue.length} Clips</span>
-        </div>
-
-        <table className="w-full text-left text-xs">
-          <thead className="bg-slate-950/60 text-slate-400 text-[10px] uppercase font-bold tracking-wider">
-            <tr>
-              <th className="py-3 px-4">Clip Title</th>
-              <th className="py-3 px-3">Dur</th>
-              <th className="py-3 px-3">YouTube</th>
-              <th className="py-3 px-3">TikTok NG</th>
-              <th className="py-3 px-3">Instagram</th>
-              <th className="py-3 px-3">TikTok US</th>
-              <th className="py-3 px-4 text-right">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-white/5">
-            {queue.map((item) => (
-              <tr key={item.id} className="hover:bg-white/[0.02] transition-colors">
-                <td className="py-3.5 px-4">
-                  <div className="font-semibold text-white">{item.title}</div>
-                  <div className="text-[10px] text-slate-500 font-mono">{item.filename}</div>
-                </td>
-                <td className="py-3.5 px-3 font-mono text-slate-400">{item.duration}</td>
-                <td className="py-3.5 px-3">{renderBadge(item.status.youtube)}</td>
-                <td className="py-3.5 px-3">{renderBadge(item.status.tiktok_ng)}</td>
-                <td className="py-3.5 px-3">{renderBadge(item.status.instagram)}</td>
-                <td className="py-3.5 px-3">{renderBadge(item.status.tiktok_us)}</td>
-                <td className="py-3.5 px-4 text-right space-x-1.5">
-                  <button 
-                    onClick={() => openVideoInPlayer(item.file_path)}
-                    className="p-1.5 bg-white/5 hover:bg-white/10 text-slate-300 rounded border border-white/10 inline-flex items-center"
-                    title="Play Video"
-                  >
-                    <Play className="w-3 h-3 text-amber-400" />
-                  </button>
-                  <button 
-                    onClick={() => openCaptionModal(item)}
-                    className="px-2.5 py-1 bg-white/5 hover:bg-white/10 text-slate-300 rounded text-[11px] font-medium border border-white/10 inline-flex items-center gap-1"
-                  >
-                    <Edit3 className="w-3 h-3" /> Edit
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      {/* Holistic Multi-Project Filter Pills */}
+      <div className="flex items-center space-x-2 overflow-x-auto pb-1 pt-1">
+        <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 shrink-0 flex items-center space-x-1.5">
+          <Folder className="w-3.5 h-3.5 text-amber-400" />
+          <span>Project Filter:</span>
+        </span>
+        <button
+          onClick={() => setSelectedProjectFilter('all')}
+          className={`px-3 py-1 rounded-full text-xs font-semibold shrink-0 transition-all ${
+            selectedProjectFilter === 'all'
+              ? 'bg-amber-500 text-slate-950 font-bold shadow-md shadow-amber-500/20'
+              : 'bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10'
+          }`}
+        >
+          All Projects ({queue.length})
+        </button>
+        {projects.map((proj) => {
+          const count = queue.filter(
+            (q) => q.projectId === proj.id || q.projectName === proj.name || (!q.projectId && proj.id === 'proj_pastor_david')
+          ).length;
+          return (
+            <button
+              key={proj.id}
+              onClick={() => setSelectedProjectFilter(proj.id)}
+              className={`px-3 py-1 rounded-full text-xs font-medium shrink-0 flex items-center space-x-1.5 transition-all ${
+                selectedProjectFilter === proj.id
+                  ? 'bg-amber-500 text-slate-950 font-bold shadow-md shadow-amber-500/20'
+                  : 'bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10'
+              }`}
+            >
+              <span>{proj.name}</span>
+              <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${
+                selectedProjectFilter === proj.id ? 'bg-black/30 text-slate-900 font-bold' : 'bg-white/10 text-slate-400'
+              }`}>
+                {count}
+              </span>
+            </button>
+          );
+        })}
       </div>
 
-      {/* Live Log Drawer */}
+      {/* Central Queue Table — Real Files Only */}
+      <div className="glass-card rounded-xl overflow-hidden border-white/10">
+        <div className="p-4 border-b border-white/5 flex items-center justify-between">
+          <div className="flex items-center space-x-2">
+            <span className="text-xs font-bold text-slate-200 uppercase tracking-wider">
+              Holistic Playable Clips Queue
+            </span>
+            <span className="text-[10px] font-mono bg-amber-400/10 text-amber-300 border border-amber-400/20 px-2 py-0.5 rounded-full font-bold">
+              {queue.filter(
+                (item) =>
+                  selectedProjectFilter === 'all' ||
+                  item.projectId === selectedProjectFilter ||
+                  (!item.projectId && selectedProjectFilter === 'proj_pastor_david')
+              ).length} Clips Visible
+            </span>
+          </div>
+          <span className="text-xs text-slate-400">All clips verified on local disk across all projects</span>
+        </div>
+
+        {queue.length === 0 ? (
+          <div className="p-8 text-center text-slate-500 space-y-2">
+            <Film className="w-8 h-8 mx-auto text-slate-600 opacity-50" />
+            <div className="text-xs font-semibold text-slate-400">No rendered clips found in queue</div>
+            <p className="text-[11px] text-slate-600">
+              Click "Scan Disk Clips" or render clips in Step 2 / Step 4 to populate your queue.
+            </p>
+          </div>
+        ) : (
+          <table className="w-full text-left text-xs">
+            <thead className="bg-slate-950/60 text-slate-400 text-[10px] uppercase font-bold tracking-wider">
+              <tr>
+                <th className="py-3 px-4">Clip Title & Project</th>
+                <th className="py-3 px-3">Duration</th>
+                <th className="py-3 px-3">YouTube</th>
+                <th className="py-3 px-3">TikTok NG</th>
+                <th className="py-3 px-3">Instagram</th>
+                <th className="py-3 px-4 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-white/5">
+              {queue
+                .filter(
+                  (item) =>
+                    selectedProjectFilter === 'all' ||
+                    item.projectId === selectedProjectFilter ||
+                    (!item.projectId && selectedProjectFilter === 'proj_pastor_david')
+                )
+                .map((item) => (
+                  <tr key={item.id} className="hover:bg-white/[0.02] transition-colors">
+                    <td className="py-3.5 px-4">
+                      <div className="font-semibold text-white">{item.title}</div>
+                      <div className="flex items-center space-x-2 mt-1">
+                        <span className="text-[10px] text-amber-400 font-medium bg-amber-400/10 border border-amber-400/20 px-1.5 py-0.5 rounded flex items-center space-x-1">
+                          <Folder className="w-2.5 h-2.5 text-amber-400 shrink-0" />
+                          <span className="truncate max-w-[200px]">{item.projectName || 'Pastor David Ogbueli — Discover Destiny'}</span>
+                        </span>
+                        <span className="text-[10px] text-slate-600">•</span>
+                        <span className="text-[10px] text-slate-500 font-mono">{item.filename}</span>
+                      </div>
+                    </td>
+                    <td className="py-3.5 px-3 font-mono text-slate-400">{item.duration || '30s'}</td>
+                    <td className="py-3.5 px-3">{renderBadge(item.status?.youtube)}</td>
+                    <td className="py-3.5 px-3">{renderBadge(item.status?.tiktok_ng)}</td>
+                    <td className="py-3.5 px-3">{renderBadge(item.status?.instagram)}</td>
+                    <td className="py-3.5 px-4 text-right space-x-1.5">
+                      {/* Play in Built-in Video Player */}
+                      <button 
+                        onClick={() => openVideoInPlayer(item)}
+                        className="px-2.5 py-1.5 bg-amber-400 hover:bg-amber-300 text-slate-950 rounded font-bold text-[11px] inline-flex items-center gap-1 shadow-sm transition-all"
+                        title="Play Video in Built-in Player"
+                      >
+                        <Play className="w-3 h-3 fill-slate-950" /> Play
+                      </button>
+                      {/* Jump to Project Studio */}
+                      <button 
+                        onClick={() => {
+                          if (item.projectId) switchProject(item.projectId);
+                          setActiveTab('reframe');
+                        }}
+                        className="p-1.5 bg-sky-500/10 hover:bg-sky-500/20 text-sky-400 rounded border border-sky-500/30 inline-flex items-center"
+                        title="Open in Project Studio"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" />
+                      </button>
+                      {/* Reveal in Explorer */}
+                      <button 
+                        onClick={() => openInExplorer(item.file_path)}
+                        className="p-1.5 bg-white/5 hover:bg-white/10 text-slate-300 rounded border border-white/10 inline-flex items-center"
+                        title="Reveal in File Explorer"
+                      >
+                        <FolderOpen className="w-3.5 h-3.5" />
+                      </button>
+                      {/* Edit Caption */}
+                      <button 
+                        onClick={() => openCaptionModal(item)}
+                        className="px-2.5 py-1 bg-white/5 hover:bg-white/10 text-slate-300 rounded text-[11px] font-medium border border-white/10 inline-flex items-center gap-1"
+                      >
+                        <Edit3 className="w-3 h-3" /> Edit
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      {/* Live Log Console Drawer */}
       <div className="glass-card rounded-xl overflow-hidden border-white/10">
         <div 
           onClick={() => setShowLogDrawer(!showLogDrawer)}
@@ -611,145 +632,170 @@ export const PublisherView: React.FC = () => {
         >
           <div className="flex items-center space-x-2">
             <Terminal className="w-4 h-4 text-amber-400" />
-            <span className="text-xs font-bold text-slate-200">Live Execution Console & Upload Activity</span>
+            <span className="text-xs font-bold text-slate-200">Execution Console & Activity Log</span>
             <span className="text-[10px] font-mono bg-white/5 px-2 py-0.5 rounded text-slate-400 border border-white/5">
               {logs.length} events
             </span>
           </div>
-          <div className="flex items-center space-x-2">
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                setLogs([]);
-              }}
-              title="Clear Logs"
-              className="p-1 hover:bg-white/10 text-slate-400 hover:text-slate-200 rounded text-xs transition-colors"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-            </button>
-            <button className="text-slate-400 hover:text-white">
-              {showLogDrawer ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-            </button>
-          </div>
+          {showLogDrawer ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
         </div>
 
         {showLogDrawer && (
           <div 
             ref={logContainerRef}
-            className="p-3 bg-[#080b11] h-36 overflow-y-auto font-mono text-[11px] space-y-1 select-text scrollbar-thin scrollbar-thumb-white/10"
+            className="p-3 bg-slate-950 font-mono text-[11px] h-36 overflow-y-auto space-y-1 select-text"
           >
-            {logs.length === 0 ? (
-              <div className="text-slate-600 italic">No output logged yet. Run a publish or login job to see real-time events.</div>
-            ) : (
-              logs.map((log) => (
-                <div key={log.id} className="flex items-start space-x-2 leading-relaxed">
-                  <span className="text-slate-600 shrink-0 font-mono">[{log.time}]</span>
-                  <span className={
-                    log.type === 'success' ? 'text-emerald-400 font-semibold' :
-                    log.type === 'error' ? 'text-red-400 font-semibold' :
-                    log.type === 'warn' ? 'text-amber-300' :
-                    'text-slate-300'
-                  }>
-                    {log.text}
-                  </span>
-                </div>
-              ))
-            )}
+            {logs.map((log) => (
+              <div key={log.id} className="flex items-start space-x-2">
+                <span className="text-slate-600 shrink-0">[{log.time}]</span>
+                <span className={
+                  log.type === 'success' ? 'text-emerald-400' :
+                  log.type === 'warn' ? 'text-amber-400' :
+                  log.type === 'error' ? 'text-red-400' : 'text-slate-300'
+                }>
+                  {log.text}
+                </span>
+              </div>
+            ))}
           </div>
         )}
       </div>
 
-      {/* Account Session Modal */}
-      {activeAccountModal && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="glass-card bg-[#0e121a] rounded-xl border border-white/15 w-full max-w-md p-6 space-y-4 shadow-2xl">
+      {/* REAL IN-APP INTERACTIVE VIDEO PLAYER MODAL */}
+      {previewVideo && (
+        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="glass-card bg-[#090c14] border border-white/15 rounded-2xl max-w-lg w-full p-5 space-y-4 shadow-2xl">
             <div className="flex items-center justify-between border-b border-white/10 pb-3">
-              <h3 className="text-sm font-bold text-white capitalize flex items-center gap-2">
-                <ShieldCheck className="w-4 h-4 text-amber-400" />
-                Connect {activeAccountModal.replace('_', ' ').toUpperCase()}
-              </h3>
-              <button onClick={() => setActiveAccountModal(null)} className="text-slate-400 hover:text-white">
-                <X className="w-4 h-4" />
+              <div>
+                <h3 className="text-sm font-bold text-white">{previewVideo.title}</h3>
+                <span className="text-[10px] text-slate-400 font-mono">{previewVideo.filename}</span>
+              </div>
+              <button 
+                onClick={() => setPreviewVideo(null)}
+                className="p-1 rounded-lg hover:bg-white/10 text-slate-400 hover:text-white"
+              >
+                <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="space-y-3 text-xs text-slate-300">
-              <p>
-                Clicking the button below launches an isolated, persistent browser window:
-              </p>
-              <ol className="list-decimal list-inside space-y-1.5 text-[11px] text-slate-400">
-                <li>Log in to your account credentials securely.</li>
-                <li>Approve any 2FA or SMS verification prompt on your mobile device.</li>
-                <li>Cookies and session tokens are saved locally in <code className="text-amber-300">sessions/</code> with zero cloud transmission.</li>
-              </ol>
+            {/* Vertical 9:16 Video Player Container */}
+            <div className="relative aspect-[9/16] max-h-[65vh] mx-auto bg-black rounded-xl overflow-hidden border border-white/10 shadow-2xl flex items-center justify-center">
+              <video
+                src={previewVideo.url}
+                controls
+                autoPlay
+                className="w-full h-full object-cover"
+              />
             </div>
 
-            <div className="flex justify-end space-x-2 pt-2 border-t border-white/10">
-              <button 
-                onClick={() => setActiveAccountModal(null)}
-                className="px-4 py-2 bg-white/5 hover:bg-white/10 text-slate-300 rounded-lg text-xs"
+            {/* Modal Actions */}
+            <div className="flex items-center justify-between pt-2 border-t border-white/10">
+              <button
+                onClick={() => openInExplorer(previewVideo.filePath)}
+                className="px-3 py-1.5 bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10 rounded-lg text-xs font-semibold flex items-center space-x-1.5"
               >
-                Close
+                <FolderOpen className="w-3.5 h-3.5 text-amber-400" />
+                <span>Show in Windows Explorer</span>
               </button>
-              <button 
-                onClick={() => handleConnectSession(activeAccountModal)}
-                disabled={isLoggingIn}
-                className="px-5 py-2 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 font-bold rounded-lg text-xs flex items-center space-x-1.5"
+              <button
+                onClick={() => openInDefaultOSPlayer(previewVideo.filePath)}
+                className="px-3.5 py-1.5 bg-amber-400 hover:bg-amber-300 text-slate-950 rounded-lg text-xs font-bold flex items-center space-x-1.5"
               >
-                <LogIn className="w-3.5 h-3.5" />
-                <span>{isLoggingIn ? 'Launching Session...' : 'Launch Interactive Login'}</span>
+                <ExternalLink className="w-3.5 h-3.5" />
+                <span>Open in Windows Player</span>
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Edit Caption & Metadata Modal */}
+      {/* Edit Caption Modal */}
       {editingClip && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="glass-card bg-[#0e121a] rounded-xl border border-white/15 w-full max-w-lg p-6 space-y-4 shadow-2xl">
+          <div className="glass-card bg-[#0d1017] border border-white/15 rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl">
             <div className="flex items-center justify-between border-b border-white/10 pb-3">
               <h3 className="text-sm font-bold text-white">Edit Clip Metadata & Social Caption</h3>
-              <button onClick={() => setEditingClip(null)} className="text-slate-400 hover:text-white">
+              <button 
+                onClick={() => setEditingClip(null)}
+                className="p-1 rounded-lg hover:bg-white/10 text-slate-400 hover:text-white"
+              >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="space-y-3 text-xs">
+            <div className="space-y-3">
               <div>
-                <label className="text-[11px] font-semibold text-slate-400 block mb-1">Title</label>
+                <label className="text-[11px] font-bold text-slate-400 uppercase">Clip Title:</label>
                 <input 
                   type="text" 
-                  value={editTitle} 
+                  value={editTitle}
                   onChange={(e) => setEditTitle(e.target.value)}
-                  className="w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2 text-white font-medium focus:outline-none focus:border-amber-400"
+                  className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-xs text-white mt-1 focus:outline-none focus:border-amber-400"
                 />
               </div>
 
               <div>
-                <label className="text-[11px] font-semibold text-slate-400 block mb-1">Caption & Hashtags</label>
+                <label className="text-[11px] font-bold text-slate-400 uppercase">Social Caption & Hashtags:</label>
                 <textarea 
-                  rows={6}
-                  value={editCaption} 
+                  rows={4}
+                  value={editCaption}
                   onChange={(e) => setEditCaption(e.target.value)}
-                  className="w-full bg-slate-950 border border-white/10 rounded-lg p-3 text-slate-200 font-sans focus:outline-none focus:border-amber-400 leading-relaxed"
+                  className="w-full bg-slate-900 border border-white/10 rounded-lg p-3 text-xs text-slate-200 mt-1 focus:outline-none focus:border-amber-400 leading-relaxed font-sans"
                 />
               </div>
             </div>
 
-            <div className="flex justify-end space-x-2 pt-2 border-t border-white/10">
+            <div className="flex justify-end space-x-2 pt-2">
               <button 
                 onClick={() => setEditingClip(null)}
-                className="px-4 py-2 bg-white/5 hover:bg-white/10 text-slate-300 rounded-lg text-xs"
+                className="px-3.5 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-slate-300 text-xs font-medium"
               >
                 Cancel
               </button>
               <button 
                 onClick={saveCaptionModal}
-                className="px-5 py-2 bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold rounded-lg text-xs flex items-center space-x-1.5"
+                className="px-4 py-1.5 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-bold flex items-center space-x-1"
               >
                 <Save className="w-3.5 h-3.5" />
                 <span>Save Changes</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Account Login Session Modal */}
+      {activeAccountModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="glass-card bg-[#0d1017] border border-white/15 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-white/10 pb-3">
+              <h3 className="text-sm font-bold text-white capitalize">{activeAccountModal.replace('_', ' ')} Session</h3>
+              <button 
+                onClick={() => setActiveAccountModal(null)}
+                className="p-1 rounded-lg hover:bg-white/10 text-slate-400 hover:text-white"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-300 leading-relaxed">
+              Launches an interactive Chromium browser session. Log in once; your cookies and authentication tokens will be securely preserved in <code className="bg-slate-900 px-1 py-0.5 rounded text-amber-300">sessions/</code> for automatic publishing.
+            </p>
+
+            <div className="flex justify-end space-x-2 pt-2">
+              <button 
+                onClick={() => setActiveAccountModal(null)}
+                className="px-3.5 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-slate-300 text-xs font-medium"
+              >
+                Close
+              </button>
+              <button 
+                onClick={() => handleConnectSession(activeAccountModal)}
+                disabled={isLoggingIn}
+                className="px-4 py-1.5 rounded-lg bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 text-xs font-bold flex items-center space-x-1"
+              >
+                <LogIn className="w-3.5 h-3.5" />
+                <span>{isLoggingIn ? 'Launching Chromium...' : 'Launch Login Browser'}</span>
               </button>
             </div>
           </div>

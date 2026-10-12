@@ -133,12 +133,17 @@ def cmd_reframe(args):
         else:
             print(f"[{p.get('phase')}] {p.get('percent')}%", end="\r", flush=True)
 
+    start_t = getattr(args, "start", None)
+    end_t = getattr(args, "end", None)
+
     if args.trajectory_only:
         traj = reframer.compute_crop_trajectory(
             args.input,
             aspect_ratio=ratio_tuple,
             deadzone=deadzone,
             smooth_factor=smooth_factor,
+            start_time=start_t,
+            end_time=end_t,
             progress_callback=on_progress
         )
         if args.json:
@@ -152,6 +157,8 @@ def cmd_reframe(args):
         args.output,
         out_width=out_w,
         out_height=out_h,
+        start_time=start_t,
+        end_time=end_t,
         progress_callback=on_progress
     )
     if args.json:
@@ -251,6 +258,24 @@ def cmd_login(args):
         else:
             print(f"Login failed: {e}")
 
+def cmd_highlights(args):
+    from engine.highlight_detector import HighlightScout
+    scout = HighlightScout(provider=args.provider, api_key=args.api_key, model=args.model)
+    transcript_text = ""
+    if args.input and os.path.exists(args.input):
+        with open(args.input, "r", encoding="utf-8", errors="replace") as f:
+            transcript_text = f.read()
+    elif args.text:
+        transcript_text = args.text
+    else:
+        transcript_text = "Sample speech transcript segment."
+
+    clips = scout.analyze_transcript(transcript_text)
+    if args.json:
+        emit_json("highlights_result", {"clips": clips})
+    else:
+        print(json.dumps(clips, indent=2))
+
 def cmd_session_status(args):
     publisher = SocialPublisher()
     status = publisher.check_session_status()
@@ -299,6 +324,8 @@ def main():
     p_rf.add_argument("--aspect", choices=["9:16", "1:1", "16:9"], default="9:16", help="Target aspect ratio")
     p_rf.add_argument("--deadzone", type=float, default=25.0, help="Deadzone leeway in pixels")
     p_rf.add_argument("--smooth", type=float, default=0.06, help="Camera pan smoothing factor")
+    p_rf.add_argument("--start", type=float, help="Start timestamp in seconds")
+    p_rf.add_argument("--end", type=float, help="End timestamp in seconds")
     p_rf.add_argument("--trajectory-only", action="store_true", help="Calculate crop coordinates only")
     p_rf.set_defaults(func=cmd_reframe)
 
@@ -342,6 +369,15 @@ def main():
     # Session Status
     p_ss = subparsers.add_parser("session-status", help="Check session login status", parents=[common_parser])
     p_ss.set_defaults(func=cmd_session_status)
+
+    # Highlights (BYOK AI Viral Clip Scout)
+    p_hl = subparsers.add_parser("highlights", help="Scout viral short clip moments from transcripts", parents=[common_parser])
+    p_hl.add_argument("--input", help="Transcript text or subtitle file")
+    p_hl.add_argument("--text", help="Raw transcript text")
+    p_hl.add_argument("--provider", default="gemini", choices=["gemini", "openai", "anthropic", "deepseek", "local"], help="AI provider")
+    p_hl.add_argument("--api-key", help="API key for selected provider")
+    p_hl.add_argument("--model", help="Custom model identifier")
+    p_hl.set_defaults(func=cmd_highlights)
 
     args = parser.parse_args()
     args.func(args)

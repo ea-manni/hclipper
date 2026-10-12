@@ -45,103 +45,25 @@ class QueueManager:
             self.save()
 
     def load(self) -> List[Dict[str, Any]]:
+        loaded_items = []
         if self.queue_path.exists():
             try:
                 with open(self.queue_path, "r", encoding="utf-8") as f:
-                    return json.load(f)
+                    data = json.load(f)
+                    if isinstance(data, list):
+                        for item in data:
+                            fpath = item.get("file_path", "")
+                            # Check if file exists relative to PROJECT_ROOT or absolute
+                            full_path = Path(fpath) if Path(fpath).is_absolute() else (PROJECT_ROOT / fpath)
+                            if full_path.exists():
+                                loaded_items.append(item)
             except Exception:
                 pass
 
-        # Starter default clips for first run
-        starter_items = [
-            {
-                "id": "Clip1_Discover_Your_Purpose_Master",
-                "title": "Discover Your True Calling & Purpose",
-                "filename": "Clip1_Discover_Your_Purpose_Master.mp4",
-                "file_path": "clips/Clip1_Discover_Your_Purpose_Master.mp4",
-                "duration": "68s",
-                "caption": "Discover your true purpose and unlock your full potential!\n\n#Shorts #Reels #TikTok #Purpose #Growth",
-                "status": {
-                    "youtube": "pending",
-                    "tiktok_ng": "pending",
-                    "tiktok_us": "pending",
-                    "instagram": "pending"
-                }
-            },
-            {
-                "id": "Clip2_Consistency_Beats_Talent_Master",
-                "title": "Consistency Beats Talent Every Time",
-                "filename": "Clip2_Consistency_Beats_Talent_Master.mp4",
-                "file_path": "clips/Clip2_Consistency_Beats_Talent_Master.mp4",
-                "duration": "117s",
-                "caption": "Consistency beats talent when talent doesn't work hard. Keep pushing daily!\n\n#Motivation #Shorts #TikTok #Discipline",
-                "status": {
-                    "youtube": "pending",
-                    "tiktok_ng": "pending",
-                    "tiktok_us": "pending",
-                    "instagram": "pending"
-                }
-            },
-            {
-                "id": "Clip3_Surround_With_Purpose_Master",
-                "title": "Surround Yourself With Purpose-Driven People",
-                "filename": "Clip3_Surround_With_Purpose_Master.mp4",
-                "file_path": "clips/Clip3_Surround_With_Purpose_Master.mp4",
-                "duration": "102s",
-                "caption": "The circle around you shapes your future. Choose your company with intention.\n\n#Wisdom #Leadership #Shorts #Reels",
-                "status": {
-                    "youtube": "pending",
-                    "tiktok_ng": "pending",
-                    "tiktok_us": "pending",
-                    "instagram": "pending"
-                }
-            },
-            {
-                "id": "Clip4_Turning_Failures_To_Stepping_Stones_Master",
-                "title": "Turning Failures Into Powerful Stepping Stones",
-                "filename": "Clip4_Turning_Failures_To_Stepping_Stones_Master.mp4",
-                "file_path": "clips/Clip4_Turning_Failures_To_Stepping_Stones_Master.mp4",
-                "duration": "57s",
-                "caption": "Every setback is a setup for a stronger comeback. Never give up!\n\n#GrowthMindset #Shorts #TikTok #Inspiration",
-                "status": {
-                    "youtube": "pending",
-                    "tiktok_ng": "pending",
-                    "tiktok_us": "pending",
-                    "instagram": "pending"
-                }
-            },
-            {
-                "id": "Clip5_Daily_Discipline_Master",
-                "title": "The Power of Daily Discipline",
-                "filename": "Clip5_Daily_Discipline_Master.mp4",
-                "file_path": "clips/Clip5_Daily_Discipline_Master.mp4",
-                "duration": "104s",
-                "caption": "Daily discipline creates long-term freedom. Small habits build massive results.\n\n#Focus #Discipline #Shorts #Reels",
-                "status": {
-                    "youtube": "pending",
-                    "tiktok_ng": "pending",
-                    "tiktok_us": "pending",
-                    "instagram": "pending"
-                }
-            },
-            {
-                "id": "Clip6_Building_In_Silence_Master",
-                "title": "Building in Silence Before the Breakthrough",
-                "filename": "Clip6_Building_In_Silence_Master.mp4",
-                "file_path": "clips/Clip6_Building_In_Silence_Master.mp4",
-                "duration": "64s",
-                "caption": "Build in silence and let your consistency make the noise. The breakthrough is coming.\n\n#Grind #Focus #Shorts #Reels",
-                "status": {
-                    "youtube": "pending",
-                    "tiktok_ng": "pending",
-                    "tiktok_us": "pending",
-                    "instagram": "pending"
-                }
-            }
-        ]
-        self.items = starter_items
-        self.save()
-        return starter_items
+        self.items = loaded_items
+        # Automatically scan clips directory for real rendered files
+        self.scan_clips_directory()
+        return self.items
 
     def save(self):
         with open(self.queue_path, "w", encoding="utf-8") as f:

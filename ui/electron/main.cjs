@@ -33,8 +33,12 @@ function createWindow() {
     }
   });
 
-  if (isDev) {
-    mainWindow.loadURL('http://localhost:5173');
+  if (isDev && process.env.VITE_DEV_SERVER_URL) {
+    mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL);
+  } else if (isDev) {
+    mainWindow.loadURL('http://localhost:5173').catch(() => {
+      mainWindow.loadFile(path.join(__dirname, '..', 'dist', 'index.html'));
+    });
   } else {
     mainWindow.loadFile(path.join(__dirname, '..', 'dist', 'index.html'));
   }
@@ -106,6 +110,69 @@ ipcMain.handle('hclipper:show-in-folder', async (event, filePath) => {
     return true;
   }
   return false;
+});
+
+// IPC Handler: Select Directory
+ipcMain.handle('hclipper:select-directory', async (event, options) => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: options?.title || 'Select Folder',
+    properties: ['openDirectory', 'createDirectory']
+  });
+  if (result.canceled || !result.filePaths.length) return null;
+  return result.filePaths[0];
+});
+
+// IPC Handler: Open Folder in OS File Explorer
+ipcMain.handle('hclipper:open-folder', async (event, folderPath) => {
+  if (!folderPath) return false;
+  const resolved = path.isAbsolute(folderPath) ? folderPath : path.join(PROJECT_ROOT, folderPath);
+  if (!fs.existsSync(resolved)) {
+    try {
+      fs.mkdirSync(resolved, { recursive: true });
+    } catch (e) {}
+  }
+  await shell.openPath(resolved);
+  return true;
+});
+
+// IPC Handler: Persistent Settings Management
+const getSettingsPath = () => path.join(app.getPath('userData'), 'settings.json');
+
+ipcMain.handle('hclipper:get-settings', async () => {
+  const defaultVideos = path.join(app.getPath('videos'), 'hclipper');
+  const defaults = {
+    downloadsDir: fs.existsSync(path.join(PROJECT_ROOT, 'downloads'))
+      ? path.join(PROJECT_ROOT, 'downloads')
+      : path.join(defaultVideos, 'downloads'),
+    clipsDir: fs.existsSync(path.join(PROJECT_ROOT, 'clips'))
+      ? path.join(PROJECT_ROOT, 'clips')
+      : path.join(defaultVideos, 'clips')
+  };
+  const settingsFile = getSettingsPath();
+  if (fs.existsSync(settingsFile)) {
+    try {
+      const data = JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
+      return { ...defaults, ...data };
+    } catch (e) {}
+  }
+  return defaults;
+});
+
+ipcMain.handle('hclipper:save-settings', async (event, settings) => {
+  const settingsFile = getSettingsPath();
+  try {
+    fs.mkdirSync(path.dirname(settingsFile), { recursive: true });
+    if (settings.downloadsDir) {
+      fs.mkdirSync(settings.downloadsDir, { recursive: true });
+    }
+    if (settings.clipsDir) {
+      fs.mkdirSync(settings.clipsDir, { recursive: true });
+    }
+    fs.writeFileSync(settingsFile, JSON.stringify(settings, null, 2), 'utf8');
+    return true;
+  } catch (e) {
+    return false;
+  }
 });
 
 // Helper: Auto-detect Python executable across system paths & virtualenvs
@@ -335,6 +402,31 @@ ipcMain.handle('hclipper:save-queue', async (event, items) => {
   const queuePath = path.join(PROJECT_ROOT, 'clips_queue.json');
   try {
     fs.writeFileSync(queuePath, JSON.stringify(items, null, 2), 'utf8');
+    return true;
+  } catch (e) {
+    return false;
+  }
+});
+
+// IPC Handler: Read Projects from projects.json
+ipcMain.handle('hclipper:read-projects', async () => {
+  const projectsPath = path.join(PROJECT_ROOT, 'projects.json');
+  if (fs.existsSync(projectsPath)) {
+    try {
+      const data = fs.readFileSync(projectsPath, 'utf8');
+      return JSON.parse(data);
+    } catch (e) {
+      return null;
+    }
+  }
+  return null;
+});
+
+// IPC Handler: Save Projects to projects.json
+ipcMain.handle('hclipper:save-projects', async (event, projects) => {
+  const projectsPath = path.join(PROJECT_ROOT, 'projects.json');
+  try {
+    fs.writeFileSync(projectsPath, JSON.stringify(projects, null, 2), 'utf8');
     return true;
   } catch (e) {
     return false;
