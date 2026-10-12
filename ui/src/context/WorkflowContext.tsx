@@ -41,6 +41,7 @@ export interface TimelineState {
 
 export interface SubtitlesState {
   headline: string;
+  hookBannerPreset?: 'frosted_gold' | 'cyber_neon' | 'clean_minimal' | 'viral_warning';
   stylePreset: 'tiktok_bold' | 'dynamic_pop' | 'clean_white';
   includeSocialPills: boolean;
   includeOutro: boolean;
@@ -63,6 +64,7 @@ export interface ClipCandidate {
   isRendered?: boolean;
   renderedPath?: string;
   customHeadline?: string;
+  hookBannerPreset?: 'frosted_gold' | 'cyber_neon' | 'clean_minimal' | 'viral_warning';
   subtitlePreset?: 'tiktok_bold' | 'dynamic_pop' | 'clean_white';
   durationAdvisory?: string;
   storyArc?: 'complete_story' | 'punchy_takeaway' | 'extended_narrative' | string;
@@ -689,6 +691,7 @@ export const WorkflowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       setSubtitlesState((prev) => ({
         ...prev,
         headline: c.customHeadline || c.hook,
+        hookBannerPreset: c.hookBannerPreset || prev.hookBannerPreset || 'frosted_gold',
         stylePreset: c.subtitlePreset || 'tiktok_bold'
       }));
       if (c.renderedPath) {

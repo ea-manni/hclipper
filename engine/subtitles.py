@@ -232,6 +232,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         self,
         headline_text: str,
         output_png: str,
+        banner_style: str = "frosted_gold",
         width: int = 1080,
         height: int = 1920,
         banner_top: int = 160,
@@ -240,19 +241,46 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     ) -> str:
         """
         Draws a modern frosted glass header banner with high-contrast
-        bold typography.
+        bold typography and user-selected visual theme.
         """
         img = Image.new("RGBA", (width, height), (0, 0, 0, 0))
 
-        # Frosted dark banner background
+        # Determine theme colors
+        style = (banner_style or "frosted_gold").lower()
+        if style == "cyber_neon":
+            bg_fill = (6, 11, 24, min(bg_opacity + 20, 255))
+            top_border = (6, 182, 212, 255)       # Cyan
+            bottom_border = (168, 85, 247, 220)    # Purple
+            text_fill = (103, 232, 249, 255)       # Electric cyan
+            shadow_fill = (0, 0, 0, 220)
+        elif style == "clean_minimal":
+            bg_fill = (20, 24, 33, 175)
+            top_border = (255, 255, 255, 120)     # Clean white
+            bottom_border = (255, 255, 255, 60)
+            text_fill = (255, 255, 255, 255)       # Pure white
+            shadow_fill = (0, 0, 0, 180)
+        elif style == "viral_warning":
+            bg_fill = (245, 190, 11, 245)          # Warning yellow
+            top_border = (251, 191, 36, 255)
+            bottom_border = (180, 83, 9, 255)
+            text_fill = (15, 23, 42, 255)          # Pure dark text
+            shadow_fill = (255, 255, 255, 60)
+        else:  # frosted_gold
+            bg_fill = (10, 12, 16, bg_opacity)
+            top_border = (212, 175, 55, 200)      # Gold
+            bottom_border = (212, 175, 55, 140)
+            text_fill = (245, 200, 66, 255)       # Gold
+            shadow_fill = (0, 0, 0, 200)
+
+        # Frosted banner background
         banner_box = [0, banner_top, width, banner_top + banner_height]
         banner_layer = Image.new("RGBA", (width, height), (0, 0, 0, 0))
         bd = ImageDraw.Draw(banner_layer)
-        bd.rectangle(banner_box, fill=(10, 12, 16, bg_opacity))
+        bd.rectangle(banner_box, fill=bg_fill)
 
-        # Gold accent top and bottom borders (1px)
-        bd.line([(0, banner_top), (width, banner_top)], fill=(212, 175, 55, 180), width=3)
-        bd.line([(0, banner_top + banner_height), (width, banner_top + banner_height)], fill=(212, 175, 55, 120), width=2)
+        # Accent top and bottom borders
+        bd.line([(0, banner_top), (width, banner_top)], fill=top_border, width=3)
+        bd.line([(0, banner_top + banner_height), (width, banner_top + banner_height)], fill=bottom_border, width=2)
         img = Image.alpha_composite(img, banner_layer)
 
         # Text rendering
@@ -284,10 +312,10 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             x = (width - text_w) // 2
             y = start_y + idx * line_height
 
-            # Subtle drop shadow
-            draw.text((x + 2, y + 2), line, font=font, fill=(0, 0, 0, 200))
-            # Gold primary text
-            draw.text((x, y), line, font=font, fill=(245, 200, 66, 255))
+            # Drop shadow
+            draw.text((x + 2, y + 2), line, font=font, fill=shadow_fill)
+            # Primary headline text
+            draw.text((x, y), line, font=font, fill=text_fill)
 
         Path(output_png).parent.mkdir(parents=True, exist_ok=True)
         img.save(output_png)

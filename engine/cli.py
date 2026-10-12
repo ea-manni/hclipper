@@ -191,7 +191,7 @@ def cmd_subtitles(args):
 
 def cmd_banner(args):
     sub = SubtitleEngine()
-    banner_path = sub.create_hook_banner(args.title, args.output)
+    banner_path = sub.create_hook_banner(args.title, args.output, banner_style=getattr(args, "style", "frosted_gold"))
     if args.json:
         emit_json("banner_result", {"banner_file": banner_path})
     else:
@@ -356,6 +356,7 @@ def main():
     p_bn = subparsers.add_parser("banner", help="Generate frosted hook banner PNG", parents=[common_parser])
     p_bn.add_argument("title", help="Hook headline text")
     p_bn.add_argument("output", help="Output PNG path")
+    p_bn.add_argument("--style", default="frosted_gold", choices=["frosted_gold", "cyber_neon", "clean_minimal", "viral_warning"], help="Banner visual style preset")
     p_bn.set_defaults(func=cmd_banner)
 
     # Audio Master
