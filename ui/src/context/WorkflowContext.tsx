@@ -70,6 +70,7 @@ export interface ClipCandidate {
   subtitlePreset?: 'tiktok_bold' | 'dynamic_pop' | 'clean_white';
   durationAdvisory?: string;
   storyArc?: 'complete_story' | 'punchy_takeaway' | 'extended_narrative' | string;
+  transcriptCues?: { start: number; end: number; text: string }[];
 }
 
 export interface Project {

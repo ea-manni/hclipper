@@ -179,13 +179,34 @@ export const SubtitlesView: React.FC<SubtitlesViewProps> = ({
     return chunks.length ? chunks : [{ start: 0, end: 5, before: 'DISCOVER YOUR ', highlight: 'PURPOSE', after: ' TODAY' }];
   }, [activeClip.customHeadline, activeClip.title, activeClip.hook]);
 
-  // Current active caption chunk based on video playback position
+  // Synchronized real spoken captions from the preacher
   const currentCaption = useMemo(() => {
+    // 1. Prioritize real spoken speech transcript cues from Whisper/VTT
+    if (activeClip.transcriptCues && activeClip.transcriptCues.length > 0) {
+      const match = activeClip.transcriptCues.find(
+        (c) => videoCurrentTime >= c.start && videoCurrentTime <= c.end
+      );
+      if (match) {
+        const words = match.text.split(' ').filter(Boolean);
+        if (words.length === 1) {
+          return { before: '', highlight: words[0].toUpperCase(), after: '' };
+        }
+        const midIdx = Math.floor(words.length / 2);
+        return {
+          before: words.slice(0, midIdx).join(' ').toUpperCase() + (midIdx > 0 ? ' ' : ''),
+          highlight: words[midIdx].toUpperCase(),
+          after: (midIdx < words.length - 1 ? ' ' : '') + words.slice(midIdx + 1).join(' ').toUpperCase()
+        };
+      }
+      return null;
+    }
+
+    // 2. Fallback to rhythmic title chunking
     if (!activeCaptionData.length) return null;
     const totalDuration = activeCaptionData.length * 2.5;
     const loopTime = totalDuration > 0 ? (videoCurrentTime % totalDuration) : 0;
     return activeCaptionData.find((c) => loopTime >= c.start && loopTime < c.end) || activeCaptionData[0];
-  }, [activeCaptionData, videoCurrentTime]);
+  }, [activeClip.transcriptCues, activeCaptionData, videoCurrentTime]);
 
   const isHookVisible = enableHookBanner && (
     hookBannerDuration === 'full_clip' ||
