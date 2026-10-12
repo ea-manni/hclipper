@@ -40,11 +40,14 @@ export const SubtitlesView: React.FC<SubtitlesViewProps> = ({
     includeSocialPills,
     tiktokHandle,
     youtubeHandle,
-    instagramHandle
+    instagramHandle,
+    enableHookBanner = true,
+    hookBannerDuration = 'first_5s'
   } = subtitlesState;
 
   const [isPlaying, setIsPlaying] = useState(true);
   const [isMuted, setIsMuted] = useState(true);
+  const [videoCurrentTime, setVideoCurrentTime] = useState(0);
   const videoRef = useRef<HTMLVideoElement>(null);
 
   const activeClip = clips[activeClipIndex] || {
@@ -60,22 +63,53 @@ export const SubtitlesView: React.FC<SubtitlesViewProps> = ({
     renderedPath: undefined
   };
 
+  const toFileUrl = (rawPath: string | null | undefined): string => {
+    if (!rawPath) return '';
+    if (rawPath.startsWith('http://') || rawPath.startsWith('https://') || rawPath.startsWith('file://')) {
+      return rawPath;
+    }
+    let norm = rawPath.replace(/\\/g, '/');
+    if (!norm.includes(':') && !norm.startsWith('/')) {
+      norm = `C:/Users/Ebunoluwa/Desktop/hclipper/${norm}`;
+    }
+    return norm.startsWith('/') ? `file://${norm}` : `file:///${norm}`;
+  };
+
+  const [resolvedVideoUrl, setResolvedVideoUrl] = useState<string>('');
+
   // Convert paths to file:/// URLs for Electron video playback
   const clipVideoUrl = useMemo(() => {
-    // 1. If explicit rendered path exists
     let p = activeClip.renderedPath;
-    // 2. If clip has id, check convention clips/ClipX_...
     if (!p && activeClip.id) {
       p = `clips/${activeClip.id}.mp4`;
     }
-    // 3. Fallback to source video
     if (!p && sourceVideo) {
       p = sourceVideo;
     }
-    if (!p) return '';
-    if (p.startsWith('http://') || p.startsWith('https://') || p.startsWith('file://')) return p;
-    const normalized = p.replace(/\\/g, '/');
-    return normalized.startsWith('/') ? `file://${normalized}` : `file:///${normalized}`;
+    return toFileUrl(p);
+  }, [activeClip.renderedPath, activeClip.id, sourceVideo]);
+
+  // Synchronously & asynchronously resolve absolute media URL via Electron
+  React.useEffect(() => {
+    let raw = activeClip.renderedPath;
+    if (!raw && activeClip.id) raw = `clips/${activeClip.id}.mp4`;
+    if (!raw && sourceVideo) raw = sourceVideo;
+
+    if (!raw) {
+      setResolvedVideoUrl('');
+      return;
+    }
+
+    if (window.hclipper?.resolveMediaUrl) {
+      window.hclipper.resolveMediaUrl(raw).then((url) => {
+        if (url) setResolvedVideoUrl(url);
+        else setResolvedVideoUrl(toFileUrl(raw));
+      }).catch(() => {
+        setResolvedVideoUrl(toFileUrl(raw));
+      });
+    } else {
+      setResolvedVideoUrl(toFileUrl(raw));
+    }
   }, [activeClip.renderedPath, activeClip.id, sourceVideo]);
 
   const togglePlay = () => {
@@ -111,6 +145,52 @@ export const SubtitlesView: React.FC<SubtitlesViewProps> = ({
     setSubtitlesState((prev) => ({ ...prev, hookBannerPreset: preset }));
     updateActiveClip({ hookBannerPreset: preset });
   };
+
+  // Dynamic synchronized captions based on active clip content
+  const activeCaptionData = useMemo(() => {
+    const rawWords = (activeClip.customHeadline || activeClip.title || activeClip.hook || "Life and destiny lessons").split(' ').filter(Boolean);
+    const chunks: { start: number; end: number; before: string; highlight: string; after: string }[] = [];
+    
+    for (let i = 0; i < rawWords.length; i += 3) {
+      const start = (i / 3) * 2.5;
+      const end = start + 2.5;
+      const triplet = rawWords.slice(i, i + 3);
+      if (triplet.length === 1) {
+        chunks.push({ start, end, before: '', highlight: triplet[0].toUpperCase(), after: '' });
+      } else if (triplet.length === 2) {
+        chunks.push({ start, end, before: triplet[0].toUpperCase() + ' ', highlight: triplet[1].toUpperCase(), after: '' });
+      } else {
+        chunks.push({ start, end, before: triplet[0].toUpperCase() + ' ', highlight: triplet[1].toUpperCase(), after: ' ' + triplet[2].toUpperCase() });
+      }
+    }
+
+    if (activeClip.hook) {
+      const hookWords = activeClip.hook.split(' ').filter(Boolean).slice(0, 6);
+      const start = chunks.length * 2.5;
+      chunks.push({
+        start,
+        end: start + 3.0,
+        before: hookWords.slice(0, 2).join(' ').toUpperCase() + ' ',
+        highlight: (hookWords[2] || 'FOCUS').toUpperCase(),
+        after: ' ' + hookWords.slice(3).join(' ').toUpperCase()
+      });
+    }
+
+    return chunks.length ? chunks : [{ start: 0, end: 5, before: 'DISCOVER YOUR ', highlight: 'PURPOSE', after: ' TODAY' }];
+  }, [activeClip.customHeadline, activeClip.title, activeClip.hook]);
+
+  // Current active caption chunk based on video playback position
+  const currentCaption = useMemo(() => {
+    if (!activeCaptionData.length) return null;
+    const totalDuration = activeCaptionData.length * 2.5;
+    const loopTime = totalDuration > 0 ? (videoCurrentTime % totalDuration) : 0;
+    return activeCaptionData.find((c) => loopTime >= c.start && loopTime < c.end) || activeCaptionData[0];
+  }, [activeCaptionData, videoCurrentTime]);
+
+  const isHookVisible = enableHookBanner && (
+    hookBannerDuration === 'full_clip' ||
+    (hookBannerDuration === 'first_3s' ? videoCurrentTime <= 3.2 : videoCurrentTime <= 5.2)
+  );
 
   const handlePresetChange = (preset: 'tiktok_bold' | 'dynamic_pop' | 'clean_white') => {
     setSubtitlesState((prev) => ({ ...prev, stylePreset: preset }));
@@ -220,59 +300,127 @@ export const SubtitlesView: React.FC<SubtitlesViewProps> = ({
                 <Type className="w-4 h-4 text-amber-400" />
                 Clip #{activeClipIndex + 1} Hook Banner Headline
               </span>
-              <span className="text-[10px] text-amber-300 bg-amber-400/10 px-2 py-0.5 rounded border border-amber-400/20 font-semibold">
-                {currentHookConfig.label}
-              </span>
-            </div>
-
-            <input 
-              type="text" 
-              value={headline}
-              onChange={(e) => handleHeadlineChange(e.target.value)}
-              placeholder="e.g. KNOW THE ATTACHMENT WHEN YOU START..."
-              className="w-full bg-slate-900 border border-white/15 rounded-lg px-4 py-2.5 text-xs text-amber-300 font-bold focus:outline-none focus:border-amber-400/60 shadow-inner"
-            />
-
-            <div className="flex items-center space-x-2 text-[11px] text-slate-400">
-              <span className="text-slate-500 font-medium">AI Suggested Hook:</span>
-              <button
-                onClick={() => handleHeadlineChange(activeClip.hook)}
-                className="text-amber-400 hover:underline italic font-medium truncate max-w-sm"
-              >
-                "{activeClip.hook}"
-              </button>
-            </div>
-
-            {/* Hook Banner Style Presets */}
-            <div className="pt-2 border-t border-white/5 space-y-2">
-              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
-                Hook Banner Visual Themes:
-              </span>
-              <div className="grid grid-cols-2 gap-2">
-                {hookPresets.map((preset) => {
-                  const isSelected = hookBannerPreset === preset.id;
-                  return (
-                    <button
-                      key={preset.id}
-                      onClick={() => handleHookPresetChange(preset.id)}
-                      className={`p-2.5 rounded-lg border text-left transition-all ${
-                        isSelected
-                          ? 'bg-amber-400/10 border-amber-400/60 text-white shadow-sm'
-                          : 'bg-slate-900/80 border-white/5 text-slate-400 hover:text-white hover:border-white/10'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className={`text-xs font-bold ${isSelected ? 'text-amber-300' : 'text-slate-200'}`}>
-                          {preset.label}
-                        </span>
-                        {isSelected && <CheckCircle2 className="w-3 h-3 text-amber-400" />}
-                      </div>
-                      <p className="text-[10px] text-slate-400 mt-0.5 leading-snug">{preset.desc}</p>
-                    </button>
-                  );
-                })}
+              <div className="flex items-center space-x-2.5">
+                <label className="flex items-center space-x-1.5 text-xs text-slate-300 cursor-pointer font-medium">
+                  <input
+                    type="checkbox"
+                    checked={enableHookBanner}
+                    onChange={(e) => setSubtitlesState((prev) => ({ ...prev, enableHookBanner: e.target.checked }))}
+                    className="accent-amber-400 w-3.5 h-3.5"
+                  />
+                  <span>Show Hook Banner</span>
+                </label>
+                {enableHookBanner && (
+                  <span className="text-[10px] text-amber-300 bg-amber-400/10 px-2 py-0.5 rounded border border-amber-400/20 font-semibold">
+                    {currentHookConfig.label}
+                  </span>
+                )}
               </div>
             </div>
+
+            {enableHookBanner ? (
+              <div className="space-y-3.5">
+                <input 
+                  type="text" 
+                  value={headline}
+                  onChange={(e) => handleHeadlineChange(e.target.value)}
+                  placeholder="e.g. KNOW THE ATTACHMENT WHEN YOU START..."
+                  className="w-full bg-slate-900 border border-white/15 rounded-lg px-4 py-2.5 text-xs text-amber-300 font-bold focus:outline-none focus:border-amber-400/60 shadow-inner"
+                />
+
+                <div className="flex items-center space-x-2 text-[11px] text-slate-400">
+                  <span className="text-slate-500 font-medium">AI Suggested Hook:</span>
+                  <button
+                    onClick={() => handleHeadlineChange(activeClip.hook)}
+                    className="text-amber-400 hover:underline italic font-medium truncate max-w-sm"
+                  >
+                    "{activeClip.hook}"
+                  </button>
+                </div>
+
+                {/* Banner Display Duration (Avoids blocking speaker's face) */}
+                <div className="pt-2 border-t border-white/5 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                      Banner On-Screen Duration:
+                    </span>
+                    <span className="text-[10px] text-amber-400/80 italic font-mono">
+                      Auto-fades to uncover speaker's face
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    <button
+                      onClick={() => setSubtitlesState((prev) => ({ ...prev, hookBannerDuration: 'first_3s' }))}
+                      className={`px-3 py-2 rounded-lg border text-center transition-all ${
+                        hookBannerDuration === 'first_3s'
+                          ? 'bg-amber-400/10 border-amber-400/60 text-amber-300 shadow-sm font-bold'
+                          : 'bg-slate-900/80 border-white/5 text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      <div className="text-xs font-bold">⏱️ First 3 Seconds</div>
+                      <div className="text-[9px] text-slate-500 mt-0.5">Viral Hook Window</div>
+                    </button>
+                    <button
+                      onClick={() => setSubtitlesState((prev) => ({ ...prev, hookBannerDuration: 'first_5s' }))}
+                      className={`px-3 py-2 rounded-lg border text-center transition-all ${
+                        hookBannerDuration === 'first_5s'
+                          ? 'bg-amber-400/10 border-amber-400/60 text-amber-300 shadow-sm font-bold'
+                          : 'bg-slate-900/80 border-white/5 text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      <div className="text-xs font-bold">⏱️ First 5 Seconds</div>
+                      <div className="text-[9px] text-slate-500 mt-0.5">Standard Intro</div>
+                    </button>
+                    <button
+                      onClick={() => setSubtitlesState((prev) => ({ ...prev, hookBannerDuration: 'full_clip' }))}
+                      className={`px-3 py-2 rounded-lg border text-center transition-all ${
+                        hookBannerDuration === 'full_clip'
+                          ? 'bg-amber-400/10 border-amber-400/60 text-amber-300 shadow-sm font-bold'
+                          : 'bg-slate-900/80 border-white/5 text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      <div className="text-xs font-bold">♾️ Entire Clip</div>
+                      <div className="text-[9px] text-slate-500 mt-0.5">Permanent Overlay</div>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Hook Banner Style Presets */}
+                <div className="pt-2 border-t border-white/5 space-y-2">
+                  <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
+                    Hook Banner Visual Themes:
+                  </span>
+                  <div className="grid grid-cols-2 gap-2">
+                    {hookPresets.map((preset) => {
+                      const isSelected = hookBannerPreset === preset.id;
+                      return (
+                        <button
+                          key={preset.id}
+                          onClick={() => handleHookPresetChange(preset.id)}
+                          className={`p-2.5 rounded-lg border text-left transition-all ${
+                            isSelected
+                              ? 'bg-amber-400/10 border-amber-400/60 text-white shadow-sm'
+                              : 'bg-slate-900/80 border-white/5 text-slate-400 hover:text-white hover:border-white/10'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className={`text-xs font-bold ${isSelected ? 'text-amber-300' : 'text-slate-200'}`}>
+                              {preset.label}
+                            </span>
+                            {isSelected && <CheckCircle2 className="w-3 h-3 text-amber-400" />}
+                          </div>
+                          <p className="text-[10px] text-slate-400 mt-0.5 leading-snug">{preset.desc}</p>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <p className="text-xs text-slate-500 italic py-2">
+                Hook banner is disabled for this clip. The full video frame remains 100% unobstructed.
+              </p>
+            )}
           </div>
 
           {/* Subtitle Style Presets */}
@@ -402,15 +550,21 @@ export const SubtitlesView: React.FC<SubtitlesViewProps> = ({
           {/* Vertical 9:16 Mockup Frame */}
           <div className="relative w-72 h-[505px] bg-slate-950 rounded-3xl border-4 border-slate-800 overflow-hidden shadow-2xl flex flex-col justify-between p-3.5 select-none ring-1 ring-white/10">
             {/* Background Video Player */}
-            {clipVideoUrl ? (
+            {(resolvedVideoUrl || clipVideoUrl) ? (
               <video
                 ref={videoRef}
-                src={clipVideoUrl}
+                src={resolvedVideoUrl || clipVideoUrl}
                 className="absolute inset-0 w-full h-full object-cover"
                 autoPlay
                 loop
                 muted={isMuted}
                 playsInline
+                onTimeUpdate={(e) => setVideoCurrentTime((e.target as HTMLVideoElement).currentTime)}
+                onError={() => {
+                  if (sourceVideo && (resolvedVideoUrl || clipVideoUrl) !== toFileUrl(sourceVideo)) {
+                    setResolvedVideoUrl(toFileUrl(sourceVideo));
+                  }
+                }}
               />
             ) : (
               <div className="absolute inset-0 bg-slate-950 flex items-center justify-center text-slate-600 text-xs font-medium">
@@ -421,36 +575,44 @@ export const SubtitlesView: React.FC<SubtitlesViewProps> = ({
             {/* Cinematic Readability Vignette */}
             <div className="absolute inset-0 bg-gradient-to-b from-black/80 via-transparent to-black/85 pointer-events-none z-10" />
 
-            {/* Top Hook Banner Overlay */}
-            <div className="relative z-20 w-full mt-1">
+            {/* Top Hook Banner Overlay with Auto-Fade */}
+            <div className={`relative z-20 w-full mt-1 transition-all duration-500 ${isHookVisible ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-2 pointer-events-none'}`}>
               <div className={`w-full rounded-xl p-2.5 text-center transition-all ${currentHookConfig.bannerClasses}`}>
                 <span className={`text-[11px] font-black uppercase tracking-wider font-display leading-tight block ${currentHookConfig.textClasses}`}>
-                  {headline || 'YOUR HOOK HEADLINE HERE'}
+                  {headline || activeClip.customHeadline || activeClip.hook || 'YOUR HOOK HEADLINE HERE'}
                 </span>
               </div>
             </div>
 
-            {/* Middle Animated Karaoke Subtitle Demo */}
-            <div className="relative z-20 text-center px-2 space-y-1 my-auto">
+            {/* Middle Dynamic Synchronized Subtitle Karaoke */}
+            <div className="relative z-20 text-center px-2 space-y-1 my-auto transition-all">
               {stylePreset === 'tiktok_bold' && (
                 <div className="text-base font-black tracking-tight leading-snug drop-shadow-[0_2px_8px_rgba(0,0,0,1)]">
-                  <span className="text-white">THIS IS YOUR </span>
-                  <span className="text-amber-400 bg-black/70 px-1 py-0.5 rounded border border-amber-400/40">DIVINE MOMENT</span>
-                  <span className="text-white"> TO RISE</span>
+                  <span className="text-white">{currentCaption?.before}</span>
+                  <span className="text-amber-400 bg-black/80 px-1.5 py-0.5 rounded border border-amber-400/50 shadow-lg inline-block animate-in zoom-in-95">
+                    {currentCaption?.highlight}
+                  </span>
+                  <span className="text-white">{currentCaption?.after}</span>
                 </div>
               )}
 
               {stylePreset === 'dynamic_pop' && (
                 <div className="text-base font-black tracking-tight leading-snug drop-shadow-[0_2px_8px_rgba(0,0,0,1)]">
-                  <span className="text-white">STOP </span>
-                  <span className="text-sky-300 bg-sky-950/90 px-1.5 py-0.5 rounded border border-sky-400/70 shadow-lg">COMPARING</span>
-                  <span className="text-white"> YOUR SEASON!</span>
+                  <span className="text-white">{currentCaption?.before}</span>
+                  <span className="text-sky-300 bg-sky-950/95 px-2 py-0.5 rounded border border-sky-400/80 shadow-[0_0_12px_rgba(56,189,248,0.4)] inline-block animate-pulse">
+                    {currentCaption?.highlight}
+                  </span>
+                  <span className="text-white">{currentCaption?.after}</span>
                 </div>
               )}
 
               {stylePreset === 'clean_white' && (
                 <div className="text-sm font-semibold tracking-wide text-white drop-shadow-[0_2px_6px_rgba(0,0,0,0.9)]">
-                  Consistency beats talent when talent doesn't work hard.
+                  <span>{currentCaption?.before}</span>
+                  <span className="text-amber-300 font-bold underline underline-offset-4 decoration-amber-400/70 mx-1">
+                    {currentCaption?.highlight}
+                  </span>
+                  <span>{currentCaption?.after}</span>
                 </div>
               )}
             </div>

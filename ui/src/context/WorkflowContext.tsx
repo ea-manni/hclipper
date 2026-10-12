@@ -51,6 +51,8 @@ export interface SubtitlesState {
   showYoutube: boolean;
   instagramHandle: string;
   showInstagram: boolean;
+  enableHookBanner?: boolean;
+  hookBannerDuration?: 'first_3s' | 'first_5s' | 'full_clip';
 }
 
 export interface ClipCandidate {

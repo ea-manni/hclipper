@@ -17,6 +17,7 @@ contextBridge.exposeInMainWorld('hclipper', {
   saveSettings: (settings) => ipcRenderer.invoke('hclipper:save-settings', settings),
   listDownloads: () => ipcRenderer.invoke('hclipper:list-downloads'),
   getSystemInfo: () => ipcRenderer.invoke('hclipper:get-system-info'),
+  resolveMediaUrl: (rawPath) => ipcRenderer.invoke('hclipper:resolve-media-url', rawPath),
   onEngineEvent: (callback) => {
     const handler = (event, data) => callback(data);
     ipcRenderer.on('hclipper:engine-event', handler);

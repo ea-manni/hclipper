@@ -28,6 +28,7 @@ export interface HclipperAPI {
     downloadsDir: string;
     sessionsDir: string;
   }>;
+  resolveMediaUrl: (rawPath: string) => Promise<string>;
   onEngineEvent: (callback: (data: any) => void) => () => void;
   onEngineLog: (callback: (data: { level: string; text: string; jobId?: string }) => void) => () => void;
 }

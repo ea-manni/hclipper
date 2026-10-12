@@ -29,7 +29,8 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.cjs'),
       nodeIntegration: false,
       contextIsolation: true,
-      sandbox: false
+      sandbox: false,
+      webSecurity: false
     }
   });
 
@@ -510,3 +511,40 @@ ipcMain.handle('hclipper:get-system-info', async () => {
     sessionsDir: path.join(PROJECT_ROOT, 'sessions')
   };
 });
+
+// IPC Handler: Resolve Local Video/Media Path to file:/// URL
+ipcMain.handle('hclipper:resolve-media-url', async (event, rawPath) => {
+  if (!rawPath) return '';
+  if (rawPath.startsWith('http://') || rawPath.startsWith('https://') || rawPath.startsWith('file://')) {
+    return rawPath;
+  }
+
+  const workspaceRoot = 'C:\\Users\\Ebunoluwa\\Desktop\\hclipper';
+  const defaultVideos = path.join(app.getPath('videos'), 'hclipper');
+  
+  const candidates = [
+    rawPath,
+    path.isAbsolute(rawPath) ? rawPath : path.join(PROJECT_ROOT, rawPath),
+    path.isAbsolute(rawPath) ? rawPath : path.join(workspaceRoot, rawPath),
+    path.isAbsolute(rawPath) ? rawPath : path.join(process.cwd(), rawPath),
+    path.join(PROJECT_ROOT, 'clips', path.basename(rawPath)),
+    path.join(workspaceRoot, 'clips', path.basename(rawPath)),
+    path.join(defaultVideos, 'clips', path.basename(rawPath)),
+    path.join(PROJECT_ROOT, 'downloads', path.basename(rawPath)),
+    path.join(workspaceRoot, 'downloads', path.basename(rawPath)),
+    path.join(defaultVideos, 'downloads', path.basename(rawPath))
+  ];
+
+  for (const c of candidates) {
+    if (fs.existsSync(c)) {
+      const normalized = c.replace(/\\/g, '/');
+      return normalized.startsWith('/') ? `file://${normalized}` : `file:///${normalized}`;
+    }
+  }
+
+  // Fallback
+  const fallback = path.isAbsolute(rawPath) ? rawPath : path.join(workspaceRoot, rawPath);
+  const normalized = fallback.replace(/\\/g, '/');
+  return normalized.startsWith('/') ? `file://${normalized}` : `file:///${normalized}`;
+});
+

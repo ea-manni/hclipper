@@ -226,9 +226,14 @@ export const PublisherView: React.FC = () => {
   // Open Real In-App Interactive Video Player Modal
   const openVideoInPlayer = (item: QueueItem) => {
     const rawPath = item.file_path;
-    const url = rawPath.startsWith('http') || rawPath.startsWith('file:')
-      ? rawPath
-      : `file:///${rawPath.replace(/\\/g, '/')}`;
+    let norm = rawPath.replace(/\\/g, '/');
+    let url = norm;
+    if (!norm.startsWith('http') && !norm.startsWith('file:')) {
+      if (!norm.includes(':') && !norm.startsWith('/')) {
+        norm = `C:/Users/Ebunoluwa/Desktop/hclipper/${norm}`;
+      }
+      url = norm.startsWith('/') ? `file://${norm}` : `file:///${norm}`;
+    }
 
     setPreviewVideo({
       url,
