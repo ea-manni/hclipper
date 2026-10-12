@@ -49,28 +49,72 @@ class MediaDownloader:
                 "local_path": str(local_path.resolve())
             }
 
+    def _get_base_ydl_opts(self) -> Dict[str, Any]:
+        """Configures JavaScript runtime and client fallbacks to bypass YouTube bot detection."""
+        opts: Dict[str, Any] = {
+            "extractor_args": {
+                "youtube": {
+                    "player_client": ["web", "mweb", "android", "ios"]
+                }
+            }
+        }
+        node_exe = shutil.which("node") or (r"C:\Program Files\nodejs\node.exe" if os.path.exists(r"C:\Program Files\nodejs\node.exe") else None)
+        if node_exe:
+            opts["js_runtimes"] = {"node": {}}
+        return opts
+
+    def extract_info(self, url: str) -> Dict[str, Any]:
+        """
+        Extract video metadata without downloading.
+        Returns a dictionary with title, duration, thumbnail, channel, and formats.
+        """
+        # If it is a local file path
+        local_path = Path(url)
+        if local_path.is_file():
+            return {
+                "id": local_path.stem,
+                "title": local_path.stem,
+                "duration": None,
+                "uploader": "Local File",
+                "thumbnail": None,
+                "is_local": True,
+                "local_path": str(local_path.resolve())
+            }
+
         if not yt_dlp:
             raise RuntimeError("yt-dlp is not installed in the Python environment.")
 
         ydl_opts = {
+            **self._get_base_ydl_opts(),
             "quiet": True,
             "no_warnings": True,
             "skip_download": True,
             "extract_flat": False,
         }
 
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=False)
-            return {
-                "id": info.get("id", ""),
-                "title": info.get("title", "Untitled Video"),
-                "duration": info.get("duration", 0),
-                "uploader": info.get("uploader", info.get("channel", "Unknown Channel")),
-                "thumbnail": info.get("thumbnail", ""),
-                "is_local": False,
-                "webpage_url": info.get("webpage_url", url),
-                "description": info.get("description", "")
-            }
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(url, download=False)
+        except Exception as e:
+            err_msg = str(e).lower()
+            if "bot" in err_msg or "sign in" in err_msg or "429" in err_msg:
+                # Fall back to mobile player client
+                ydl_opts["extractor_args"] = {"youtube": {"player_client": ["android", "ios"]}}
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    info = ydl.extract_info(url, download=False)
+            else:
+                raise e
+
+        return {
+            "id": info.get("id", ""),
+            "title": info.get("title", "Untitled Video"),
+            "duration": info.get("duration", 0),
+            "uploader": info.get("uploader", info.get("channel", "Unknown Channel")),
+            "thumbnail": info.get("thumbnail", ""),
+            "is_local": False,
+            "webpage_url": info.get("webpage_url", url),
+            "description": info.get("description", "")
+        }
 
     def download(
         self,
@@ -78,6 +122,8 @@ class MediaDownloader:
         output_name: Optional[str] = None,
         download_subs: bool = True,
         max_height: int = 1080,
+        cookies_from_browser: Optional[str] = None,
+        cookiefile: Optional[str] = None,
         progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None
     ) -> Dict[str, Any]:
         """
@@ -97,6 +143,31 @@ class MediaDownloader:
                 "subtitle_path": None,
                 "is_local": True
             }
+
+        # Check for already-downloaded local cache
+        vid_m = re.search(r'(?:v=|/|youtu\.be/)([a-zA-Z0-9_-]{11})', url)
+        if vid_m:
+            vid_id = vid_m.group(1)
+            cached_files = list(self.download_dir.glob(f"*{vid_id}*.mp4")) + list(self.download_dir.glob(f"*{vid_id}*.mkv"))
+            for cand in cached_files:
+                if cand.exists() and cand.stat().st_size > 1024 * 1024:
+                    base = str(cand).rsplit('.', 1)[0]
+                    sub_file = None
+                    for ext in [".en.vtt", ".vtt", ".en.srt", ".srt"]:
+                        if os.path.exists(f"{base}{ext}"):
+                            sub_file = f"{base}{ext}"
+                            break
+                    print(f"[ingest] Detected already-downloaded video in local storage: {cand.name}", flush=True)
+                    if progress_callback:
+                        progress_callback({"status": "completed", "percent": 100.0, "file_path": str(cand.resolve())})
+                    return {
+                        "title": cand.stem,
+                        "duration": None,
+                        "video_path": str(cand.resolve()),
+                        "subtitle_path": str(Path(sub_file).resolve()) if sub_file else None,
+                        "thumbnail": "",
+                        "channel": ""
+                    }
 
         if not yt_dlp:
             raise RuntimeError("yt-dlp is not installed in the Python environment.")
@@ -143,6 +214,7 @@ class MediaDownloader:
                     })
 
         ydl_opts: Dict[str, Any] = {
+            **self._get_base_ydl_opts(),
             "format": f"bestvideo[height<={max_height}][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<={max_height}]+bestaudio/best[height<={max_height}]/best",
             "outtmpl": out_template,
             "merge_output_format": "mp4",
@@ -150,6 +222,11 @@ class MediaDownloader:
             "quiet": False,
             "no_warnings": False,
         }
+
+        if cookies_from_browser:
+            ydl_opts["cookiesfrombrowser"] = (cookies_from_browser,)
+        if cookiefile:
+            ydl_opts["cookiefile"] = cookiefile
 
         if download_subs:
             ydl_opts["writeautomaticsub"] = True
@@ -164,7 +241,17 @@ class MediaDownloader:
                 info = ydl.extract_info(url, download=True)
         except Exception as e:
             err_msg = str(e).lower()
-            if download_subs and ("429" in err_msg or "subtitles" in err_msg or "too many requests" in err_msg):
+            if "bot" in err_msg or "sign in" in err_msg or "429" in err_msg or "too many requests" in err_msg:
+                print(f"[ingest] YouTube anti-bot/rate-limit detected ({e}). Retrying with mobile player API fallback...", flush=True)
+                ydl_opts["extractor_args"] = {"youtube": {"player_client": ["android", "ios"]}}
+                if download_subs and ("subtitles" in err_msg or "429" in err_msg):
+                    ydl_opts.pop("writeautomaticsub", None)
+                    ydl_opts.pop("writesubtitles", None)
+                    ydl_opts.pop("subtitleslangs", None)
+                    ydl_opts.pop("subtitlesformat", None)
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    info = ydl.extract_info(url, download=True)
+            elif download_subs and ("429" in err_msg or "subtitles" in err_msg or "too many requests" in err_msg):
                 print(f"[ingest] YouTube subtitle endpoint rate-limited (HTTP 429). Retrying video-only download stream...", flush=True)
                 ydl_opts.pop("writeautomaticsub", None)
                 ydl_opts.pop("writesubtitles", None)

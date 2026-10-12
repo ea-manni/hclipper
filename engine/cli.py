@@ -70,6 +70,8 @@ def cmd_download(args):
         result = downloader.download(
             args.url,
             download_subs=not args.no_subs,
+            cookies_from_browser=getattr(args, "cookies_from_browser", None),
+            cookiefile=getattr(args, "cookies", None),
             progress_callback=on_progress
         )
         if args.json:
@@ -307,6 +309,8 @@ def main():
     p_dl.add_argument("--out", help="Output directory")
     p_dl.add_argument("--info", action="store_true", help="Extract metadata only")
     p_dl.add_argument("--no-subs", action="store_true", help="Skip downloading auto-subs")
+    p_dl.add_argument("--cookies-from-browser", help="Browser to extract cookies from (chrome, edge, firefox, brave)")
+    p_dl.add_argument("--cookies", help="Path to netscape cookies file")
     p_dl.set_defaults(func=cmd_download)
 
     # Waveform
