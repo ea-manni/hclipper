@@ -31,15 +31,15 @@ class SubtitleEngine:
 
     @staticmethod
     def parse_vtt_file(vtt_path: str) -> List[Dict[str, Any]]:
-        """Parses a WebVTT (.vtt) file into timed dialogue cues."""
+        """Parses a WebVTT (.vtt) file into timed dialogue cues with rolling window deduplication."""
         if not os.path.exists(vtt_path):
             return []
 
-        with open(vtt_path, "r", encoding="utf-8") as f:
+        with open(vtt_path, "r", encoding="utf-8", errors="replace") as f:
             lines = f.readlines()
 
         def vtt_to_sec(ts: str) -> float:
-            parts = ts.split(":")
+            parts = ts.strip().replace(",", ".").split(":")
             if len(parts) == 3:
                 return int(parts[0]) * 3600 + int(parts[1]) * 60 + float(parts[2])
             elif len(parts) == 2:
@@ -47,27 +47,57 @@ class SubtitleEngine:
             return 0.0
 
         time_pattern = re.compile(
-            r'(\d{2}:\d{2}:\d{2}\.\d{3}|\d{2}:\d{2}\.\d{3})\s*-->\s*(\d{2}:\d{2}:\d{2}\.\d{3}|\d{2}:\d{2}\.\d{3})'
+            r'(\d{1,2}:\d{2}(?::\d{2})?(?:[.,]\d{3})?)\s*-->\s*(\d{1,2}:\d{2}(?::\d{2})?(?:[.,]\d{3})?)'
         )
 
         cues = []
-        cur_start = None
-        cur_end = None
+        i = 0
+        prev_text = ""
 
-        for line in lines:
-            m = time_pattern.search(line)
+        while i < len(lines):
+            m = time_pattern.search(lines[i])
             if m:
-                cur_start = vtt_to_sec(m.group(1))
-                cur_end = vtt_to_sec(m.group(2))
-            elif cur_start is not None:
-                clean = html.unescape(re.sub(r'<[^>]+>', '', line)).strip()
-                if clean and not clean.startswith('NOTE') and not clean.startswith('WEBVTT'):
-                    cues.append({
-                        "start": cur_start,
-                        "end": cur_end,
-                        "text": clean
-                    })
-                    cur_start = None
+                s_sec = vtt_to_sec(m.group(1))
+                e_sec = vtt_to_sec(m.group(2))
+                i += 1
+                cue_lines = []
+                while i < len(lines) and not time_pattern.search(lines[i]) and lines[i].strip():
+                    raw = html.unescape(re.sub(r'<[^>]+>', '', lines[i])).strip()
+                    if (raw and not raw.isdigit() and not raw.startswith('WEBVTT') 
+                            and not raw.startswith('NOTE') and not raw.startswith('Kind:') 
+                            and not raw.startswith('Language:')):
+                        cue_lines.append(raw)
+                    i += 1
+
+                # Skip micro flash cues (< 0.08s)
+                if e_sec - s_sec < 0.08:
+                    continue
+
+                clean_lines = [cl for cl in cue_lines if cl != prev_text]
+                text = ' '.join(clean_lines).strip()
+                if not text and cue_lines:
+                    text = cue_lines[-1]
+
+                if text:
+                    p_words = prev_text.split()
+                    c_words = text.split()
+                    overlap = 0
+                    for k in range(min(len(p_words), len(c_words)), 0, -1):
+                        if p_words[-k:] == c_words[:k]:
+                            overlap = k
+                            break
+                    if overlap > 0:
+                        text = ' '.join(c_words[overlap:])
+
+                    if text:
+                        cues.append({
+                            "start": s_sec,
+                            "end": e_sec,
+                            "text": text
+                        })
+                        prev_text = cue_lines[-1] if cue_lines else text
+                continue
+            i += 1
 
         return cues
 

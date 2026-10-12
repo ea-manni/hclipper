@@ -274,10 +274,13 @@ def cmd_highlights(args):
             transcript_text = f.read()
     elif args.text:
         transcript_text = args.text
-    else:
-        transcript_text = "Sample speech transcript segment."
 
-    clips = scout.analyze_transcript(transcript_text)
+    clips = scout.analyze_transcript(
+        transcript_text=transcript_text,
+        video_path=getattr(args, "video", None),
+        count=getattr(args, "count", 5),
+        duration=getattr(args, "duration", "standard")
+    )
     if args.json:
         emit_json("highlights_result", {"clips": clips})
     else:
@@ -381,6 +384,9 @@ def main():
     p_hl = subparsers.add_parser("highlights", help="Scout viral short clip moments from transcripts", parents=[common_parser])
     p_hl.add_argument("--input", help="Transcript text or subtitle file")
     p_hl.add_argument("--text", help="Raw transcript text")
+    p_hl.add_argument("--video", help="Path to source video file")
+    p_hl.add_argument("--count", type=int, default=5, help="Number of clips to generate (e.g. 3, 5, 8, 10)")
+    p_hl.add_argument("--duration", choices=["short", "standard", "long"], default="standard", help="Target clip duration range")
     p_hl.add_argument("--provider", default="gemini", choices=["gemini", "openai", "anthropic", "deepseek", "local"], help="AI provider")
     p_hl.add_argument("--api-key", help="API key for selected provider")
     p_hl.add_argument("--model", help="Custom model identifier")
