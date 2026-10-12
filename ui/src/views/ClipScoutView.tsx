@@ -479,7 +479,7 @@ export const ClipScoutView: React.FC<ClipScoutViewProps> = ({
                 className="text-[11px] text-amber-400 hover:text-amber-300 font-semibold flex items-center space-x-1 underline decoration-dotted"
               >
                 <HelpCircle className="w-3 h-3" />
-                <span>How to get Free API Key?</span>
+                <span>{provider === 'local' ? 'Offline Architecture Guide' : `${provider.toUpperCase()} Key Guide`}</span>
               </button>
             </div>
             <select
@@ -489,12 +489,135 @@ export const ClipScoutView: React.FC<ClipScoutViewProps> = ({
             >
               <option value="gemini">Google Gemini 2.5 Flash (100% Free - 15 RPM)</option>
               <option value="local">100% Offline Local Engine (No API Key Required)</option>
-              <option value="deepseek">DeepSeek V3 (High Virality Heuristic)</option>
+              <option value="deepseek">DeepSeek V3 / R1 (Platform BYOK)</option>
               <option value="openai">OpenAI GPT-4o-mini (BYOK)</option>
               <option value="anthropic">Anthropic Claude 3.5 Haiku (BYOK)</option>
             </select>
           </div>
         </div>
+
+        {/* Dynamic Inline Walkthrough Card */}
+        {provider === 'deepseek' && (
+          <div className="p-3.5 bg-blue-500/10 border border-blue-400/30 rounded-xl space-y-2.5 animate-in fade-in duration-150">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-blue-300 flex items-center space-x-1.5">
+                <Sparkles className="w-3.5 h-3.5 text-blue-400" />
+                <span>DeepSeek V3 / R1 API Key Setup Guide</span>
+              </span>
+              <button
+                type="button"
+                onClick={() => window.hclipper?.openPath?.('https://platform.deepseek.com/api_keys')}
+                className="text-[11px] font-bold text-sky-400 hover:text-sky-300 flex items-center space-x-1 underline"
+              >
+                <span>Open platform.deepseek.com/api_keys</span>
+                <ExternalLink className="w-3 h-3" />
+              </button>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-[11px] text-slate-300">
+              <div className="p-2.5 bg-slate-900/80 rounded-lg border border-white/5 space-y-0.5">
+                <strong className="text-white block">Step 1: Sign In</strong>
+                <p className="text-slate-400 text-[10px]">Log in to DeepSeek Open Platform with email or phone.</p>
+              </div>
+              <div className="p-2.5 bg-slate-900/80 rounded-lg border border-white/5 space-y-0.5">
+                <strong className="text-white block">Step 2: Generate Key</strong>
+                <p className="text-slate-400 text-[10px]">Click "API Keys" → "Create new API key" and copy token (<code className="text-amber-300">sk-...</code>).</p>
+              </div>
+              <div className="p-2.5 bg-slate-900/80 rounded-lg border border-white/5 space-y-0.5">
+                <strong className="text-white block">Step 3: Paste Below</strong>
+                <p className="text-slate-400 text-[10px]">Paste into field below. Stored 100% locally on your computer.</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {provider === 'gemini' && (
+          <div className="p-3.5 bg-amber-500/10 border border-amber-400/30 rounded-xl space-y-2.5 animate-in fade-in duration-150">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-amber-300 flex items-center space-x-1.5">
+                <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                <span>Google Gemini 100% Free Forever Tier Guide</span>
+              </span>
+              <button
+                type="button"
+                onClick={() => window.hclipper?.openPath?.('https://aistudio.google.com/app/apikey')}
+                className="text-[11px] font-bold text-sky-400 hover:text-sky-300 flex items-center space-x-1 underline"
+              >
+                <span>Open aistudio.google.com/app/apikey</span>
+                <ExternalLink className="w-3 h-3" />
+              </button>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-[11px] text-slate-300">
+              <div className="p-2.5 bg-slate-900/80 rounded-lg border border-white/5 space-y-0.5">
+                <strong className="text-white block">Step 1: Open AI Studio</strong>
+                <p className="text-slate-400 text-[10px]">Sign in with any standard Gmail account. No credit card required.</p>
+              </div>
+              <div className="p-2.5 bg-slate-900/80 rounded-lg border border-white/5 space-y-0.5">
+                <strong className="text-white block">Step 2: Create API Key</strong>
+                <p className="text-slate-400 text-[10px]">Click "Create API key in new project" and copy token (<code className="text-amber-300">AIzaSy...</code>).</p>
+              </div>
+              <div className="p-2.5 bg-slate-900/80 rounded-lg border border-white/5 space-y-0.5">
+                <strong className="text-white block">Step 3: Paste Below</strong>
+                <p className="text-slate-400 text-[10px]">Free tier provides 15 requests/min (1,500 requests/day).</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {provider === 'openai' && (
+          <div className="p-3.5 bg-emerald-500/10 border border-emerald-400/30 rounded-xl space-y-2.5 animate-in fade-in duration-150">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-emerald-300 flex items-center space-x-1.5">
+                <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+                <span>OpenAI Platform (GPT-4o-mini) Setup Guide</span>
+              </span>
+              <button
+                type="button"
+                onClick={() => window.hclipper?.openPath?.('https://platform.openai.com/api-keys')}
+                className="text-[11px] font-bold text-sky-400 hover:text-sky-300 flex items-center space-x-1 underline"
+              >
+                <span>Open platform.openai.com/api-keys</span>
+                <ExternalLink className="w-3 h-3" />
+              </button>
+            </div>
+            <p className="text-[11px] text-slate-300">
+              Generate an API key on the OpenAI developer console (<code className="text-amber-300">sk-proj-...</code>) and paste it below.
+            </p>
+          </div>
+        )}
+
+        {provider === 'anthropic' && (
+          <div className="p-3.5 bg-orange-500/10 border border-orange-400/30 rounded-xl space-y-2.5 animate-in fade-in duration-150">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-orange-300 flex items-center space-x-1.5">
+                <Sparkles className="w-3.5 h-3.5 text-orange-400" />
+                <span>Anthropic Console (Claude 3.5 Haiku) Setup Guide</span>
+              </span>
+              <button
+                type="button"
+                onClick={() => window.hclipper?.openPath?.('https://console.anthropic.com/settings/keys')}
+                className="text-[11px] font-bold text-sky-400 hover:text-sky-300 flex items-center space-x-1 underline"
+              >
+                <span>Open console.anthropic.com/settings/keys</span>
+                <ExternalLink className="w-3 h-3" />
+              </button>
+            </div>
+            <p className="text-[11px] text-slate-300">
+              Generate an API key on the Anthropic console (<code className="text-amber-300">sk-ant-...</code>) and paste it below.
+            </p>
+          </div>
+        )}
+
+        {provider === 'local' && (
+          <div className="p-3.5 bg-emerald-500/10 border border-emerald-400/30 rounded-xl space-y-1.5 animate-in fade-in duration-150">
+            <div className="flex items-center space-x-2 text-xs font-bold text-emerald-300">
+              <Cpu className="w-4 h-4 text-emerald-400" />
+              <span>100% Offline Local Engine Active (Zero API Key Required)</span>
+            </div>
+            <p className="text-[11px] text-slate-300 leading-relaxed">
+              Processes audio and video locally using on-device FFmpeg cadence audio energy detection and natural speech pause analysis. Zero internet connection required and 100% private.
+            </p>
+          </div>
+        )}
 
         {/* API Key Bar (if not local) */}
         {provider !== 'local' && (
@@ -514,7 +637,7 @@ export const ClipScoutView: React.FC<ClipScoutViewProps> = ({
               className="px-3.5 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10 text-xs font-semibold flex items-center space-x-1.5 whitespace-nowrap"
             >
               <ExternalLink className="w-3.5 h-3.5 text-amber-400" />
-              <span>Free Key Setup Guide</span>
+              <span>{`${provider.toUpperCase()} Modal Walkthrough`}</span>
             </button>
           </div>
         )}
@@ -741,6 +864,34 @@ export const ClipScoutView: React.FC<ClipScoutViewProps> = ({
                 >
                   <X className="w-5 h-5" />
                 </button>
+              </div>
+
+              {/* Provider Selector Tabs inside Modal */}
+              <div className="flex items-center space-x-1 p-1 bg-slate-900/90 rounded-xl border border-white/10 overflow-x-auto">
+                {[
+                  { id: 'deepseek', label: 'DeepSeek V3 / R1' },
+                  { id: 'gemini', label: 'Google Gemini' },
+                  { id: 'openai', label: 'OpenAI GPT-4o' },
+                  { id: 'anthropic', label: 'Claude 3.5' },
+                  { id: 'local', label: '100% Offline' }
+                ].map((tab) => (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => {
+                      setProvider(tab.id);
+                      const saved = localStorage.getItem(`hclipper_key_${tab.id}`);
+                      setApiKey(saved || '');
+                    }}
+                    className={`flex-1 py-1.5 px-2 rounded-lg text-[11px] font-bold transition-all text-center whitespace-nowrap ${
+                      provider === tab.id
+                        ? 'bg-amber-400 text-slate-950 shadow-md shadow-amber-500/20'
+                        : 'text-slate-400 hover:text-white hover:bg-white/5'
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
               </div>
 
               <div className="space-y-4 text-xs text-slate-300">

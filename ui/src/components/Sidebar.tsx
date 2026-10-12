@@ -31,8 +31,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     reframeState, 
     ingestState,
     clips,
-    activeProject,
-    setShowProjectModal
+    activeProject
   } = useWorkflow();
 
   const renderedCount = clips?.filter((c) => c.isRendered).length || 0;
@@ -104,7 +103,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       <div className="space-y-4 px-3">
         {/* Active Project Card */}
         <div 
-          onClick={() => setShowProjectModal(true)}
+          onClick={() => setActiveTab('projects')}
           className="p-2.5 rounded-xl bg-gradient-to-br from-white/[0.04] to-white/[0.01] border border-white/10 hover:border-amber-400/30 cursor-pointer transition-all group"
         >
           <div className="flex items-center justify-between">
@@ -197,10 +196,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
           {/* Manage All Projects Button */}
           <button
-            onClick={() => setShowProjectModal(true)}
-            className="w-full flex items-center space-x-2.5 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-white/5 text-xs transition-colors"
+            onClick={() => setActiveTab('projects')}
+            className={`w-full flex items-center space-x-2.5 px-3 py-2 rounded-lg text-xs transition-colors ${
+              activeTab === 'projects'
+                ? 'bg-amber-400/15 text-amber-300 font-bold border border-amber-400/20 shadow-sm shadow-amber-500/10'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-white/5 border border-transparent'
+            }`}
           >
-            <Layers className="w-4 h-4 text-slate-500" />
+            <Layers className={`w-4 h-4 ${activeTab === 'projects' ? 'text-amber-400' : 'text-slate-500'}`} />
             <span className="font-medium text-xs">Projects Manager</span>
           </button>
         </div>

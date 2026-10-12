@@ -98,6 +98,38 @@ This document tracks completed features, resolved architecture gaps, and ongoing
   - [x] **Two-Way Studio Jump**: Direct "Open in Studio" button from each clip in the holistic publisher back into that project's Step 4/5 for instant editing.
   - [x] **Auto-Queue Registration**: Newly reframed clips in Step 4 automatically register into the holistic queue with `projectId` and `projectName`.
 
+### 4.3 Dedicated Full-Page Projects Workspace (`ProjectsView.tsx`) ✅ (Completed)
+* **Status**: **Fully Implemented & Verified**
+* **Delivered Features**:
+  - [x] Eliminated cramped modal overlays that allowed background text (`Source Media Ingestion`) to bleed through.
+  - [x] Dedicated studio view (`ProjectsView.tsx` under tab `'projects'`) for holistic workspace management.
+  - [x] Visual project grid with active workspace indicators, creation dates, scouted clip tallies, and rendered short counts.
+  - [x] `[+ Quick Blank Project]` and expandable custom project form with local file browser and YouTube URL input.
+  - [x] 1-click workspace switching that atomically saves current project state before transitioning.
+  - [x] In-place project duplication and confirmed deletion protection.
+
+### 4.4 Titlebar Window Control Button Protection ✅ (Completed)
+* **Status**: **Fully Implemented & Verified**
+* **Delivered Features**:
+  - [x] Added `paddingRight: '165px'` to `<header>` to account for Windows native minimize, maximize, and close controls in frameless Electron window (`titleBarStyle: 'hidden'`).
+  - [x] Header badges (`Intel QSV`, `YuNet ONNX`, `Clips Folder`, `Settings`) are no longer obscured or overlapped by window controls.
+
+### 4.5 Resilient Multi-Directory Video Path Resolution & Reframe Engine ✅ (Completed)
+* **Status**: **Fully Implemented & Verified**
+* **Delivered Features**:
+  - [x] Implemented multi-directory fallback resolution (`_resolve_video_path` and `_resolve_output_path`) in `engine/reframe.py` scanning `PROJECT_ROOT`, `downloads/`, `clips/`, `Desktop/hclipper/`, `Videos/hclipper/`, and default user folders.
+  - [x] Fixed `ValueError: Cannot open video file: downloads/pastor_david_destiny.mp4` when rendering in packaged app or across working directories.
+  - [x] Added clean JSON error wrapping in `engine/cli.py` to prevent raw Python tracebacks.
+  - [x] Rendered clip auto-mirroring between packaged resources and workspace project paths.
+
+### 4.6 In-Modal Multi-Provider Tabs & DeepSeek Walkthrough ✅ (Completed)
+* **Status**: **Fully Implemented & Verified**
+* **Delivered Features**:
+  - [x] Embedded clickable provider tabs directly inside the API Key Guide modal: **DeepSeek V3 / R1**, **Google Gemini**, **OpenAI**, **Anthropic Claude**, and **100% Offline Local**.
+  - [x] Users can switch between providers inside the modal without leaving the guide.
+  - [x] Comprehensive step-by-step key acquisition walkthroughs and direct console links for DeepSeek (`platform.deepseek.com/api_keys`) and Google AI Studio.
+  - [x] LocalStorage persistence for each provider's API key.
+
 ---
 
 ## 5. Phase 4 Extended Roadmap (Future Sprints)

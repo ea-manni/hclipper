@@ -136,35 +136,42 @@ def cmd_reframe(args):
     start_t = getattr(args, "start", None)
     end_t = getattr(args, "end", None)
 
-    if args.trajectory_only:
-        traj = reframer.compute_crop_trajectory(
+    try:
+        if args.trajectory_only:
+            traj = reframer.compute_crop_trajectory(
+                args.input,
+                aspect_ratio=ratio_tuple,
+                deadzone=deadzone,
+                smooth_factor=smooth_factor,
+                start_time=start_t,
+                end_time=end_t,
+                progress_callback=on_progress
+            )
+            if args.json:
+                emit_json("trajectory", traj)
+            else:
+                print(f"\nTrajectory calculated: {traj['total_frames']} frames")
+            return
+
+        res = reframer.render_reframed_video(
             args.input,
-            aspect_ratio=ratio_tuple,
-            deadzone=deadzone,
-            smooth_factor=smooth_factor,
+            args.output,
+            out_width=out_w,
+            out_height=out_h,
             start_time=start_t,
             end_time=end_t,
             progress_callback=on_progress
         )
         if args.json:
-            emit_json("trajectory", traj)
+            emit_json("reframe_result", {"success": res, "output": args.output, "aspect": getattr(args, "aspect", "9:16")})
         else:
-            print(f"\nTrajectory calculated: {traj['total_frames']} frames")
-        return
-
-    res = reframer.render_reframed_video(
-        args.input,
-        args.output,
-        out_width=out_w,
-        out_height=out_h,
-        start_time=start_t,
-        end_time=end_t,
-        progress_callback=on_progress
-    )
-    if args.json:
-        emit_json("reframe_result", {"success": res, "output": args.output, "aspect": getattr(args, "aspect", "9:16")})
-    else:
-        print("\nAuto-reframe render completed:", args.output)
+            print("\nAuto-reframe render completed:", args.output)
+    except Exception as e:
+        if args.json:
+            emit_json("reframe_result", {"success": False, "error": str(e), "output": args.output})
+        else:
+            print(f"\nAuto-reframe failed: {e}", file=sys.stderr)
+        sys.exit(1)
 
 def cmd_subtitles(args):
     sub = SubtitleEngine()

@@ -28,7 +28,7 @@ export const Header: React.FC<HeaderProps> = () => {
     activeProject, 
     switchProject, 
     createProject,
-    openProjectModal,
+    setActiveTab,
     setShowSettingsModal
   } = useWorkflow();
 
@@ -52,7 +52,10 @@ export const Header: React.FC<HeaderProps> = () => {
   };
 
   return (
-    <header className="h-14 border-b border-white/5 bg-[#0d111a]/90 backdrop-blur-md px-5 flex items-center justify-between select-none relative z-30">
+    <header 
+      className="h-14 border-b border-white/5 bg-[#0d111a]/95 backdrop-blur-md pl-5 pr-44 flex items-center justify-between select-none relative z-30"
+      style={{ paddingRight: '165px' }}
+    >
       {/* Brand & Project Switcher */}
       <div className="flex items-center space-x-4">
         {/* Brand */}
@@ -139,7 +142,7 @@ export const Header: React.FC<HeaderProps> = () => {
                 <button
                   onClick={() => {
                     setShowProjectDropdown(false);
-                    openProjectModal('list');
+                    setActiveTab('projects');
                   }}
                   className="flex-1 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white text-[11px] font-semibold text-center transition-colors"
                 >

@@ -11,6 +11,7 @@ import { TimelineView } from './views/TimelineView';
 import { ReframeView } from './views/ReframeView';
 import { SubtitlesView } from './views/SubtitlesView';
 import { PublisherView } from './views/PublisherView';
+import { ProjectsView } from './views/ProjectsView';
 
 function StudioWorkspace() {
   const { 
@@ -88,6 +89,11 @@ function StudioWorkspace() {
           {/* Step 6: Social Publisher & Queue */}
           <div className={activeTab === 'publisher' ? 'block' : 'hidden'}>
             <PublisherView />
+          </div>
+
+          {/* Dedicated Studio Projects Hub (Full Page View) */}
+          <div className={activeTab === 'projects' ? 'block' : 'hidden'}>
+            <ProjectsView />
           </div>
         </main>
       </div>

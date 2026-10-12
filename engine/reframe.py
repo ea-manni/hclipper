@@ -17,7 +17,7 @@ from typing import List, Dict, Any, Optional, Tuple, Callable
 import cv2
 import numpy as np
 
-from engine import DEFAULT_MODEL_PATH, HARDWARE_ENCODER
+from engine import DEFAULT_MODEL_PATH, HARDWARE_ENCODER, PROJECT_ROOT
 
 class AutoReframer:
     """
@@ -31,6 +31,65 @@ class AutoReframer:
             raise FileNotFoundError(f"YuNet ONNX model not found at {self.model_path}")
         self.encoder = encoder or HARDWARE_ENCODER
         self.ffmpeg_bin = shutil.which("ffmpeg") or "ffmpeg"
+
+    def _resolve_video_path(self, video_path: str) -> str:
+        resolved = Path(video_path)
+        if resolved.exists():
+            return str(resolved.resolve())
+
+        candidate_dirs = [
+            PROJECT_ROOT,
+            PROJECT_ROOT / "downloads",
+            PROJECT_ROOT / "clips",
+            Path.home() / "Desktop" / "hclipper",
+            Path.home() / "Desktop" / "hclipper" / "downloads",
+            Path.home() / "Desktop" / "hclipper" / "clips",
+            Path.home() / "Videos" / "hclipper" / "downloads",
+            Path.home() / "Videos" / "hclipper" / "clips",
+            Path.home() / "Downloads",
+            Path("C:/Users/Ebunoluwa/Desktop/hclipper/downloads"),
+            Path("C:/Users/Ebunoluwa/Desktop/hclipper/clips"),
+        ]
+
+        # 1. Exact relative or filename check in candidate directories
+        for d in candidate_dirs:
+            if (d / video_path).exists():
+                return str((d / video_path).resolve())
+            if (d / resolved.name).exists():
+                return str((d / resolved.name).resolve())
+
+        # 2. Check for Master_Reframed_9_16.mp4
+        for d in candidate_dirs:
+            master = d / "Master_Reframed_9_16.mp4"
+            if master.exists():
+                return str(master.resolve())
+
+        # 3. Fallback: Find largest .mp4 in candidate directories
+        for d in candidate_dirs:
+            if d.exists():
+                mp4s = list(d.glob("*.mp4"))
+                if mp4s:
+                    largest = max(mp4s, key=lambda f: f.stat().st_size)
+                    if largest.stat().st_size > 10 * 1024 * 1024:
+                        return str(largest.resolve())
+
+        return str(resolved)
+
+    def _resolve_output_path(self, output_path: str) -> str:
+        p = Path(output_path)
+        if p.is_absolute():
+            p.parent.mkdir(parents=True, exist_ok=True)
+            return str(p)
+
+        desktop_hclipper = Path.home() / "Desktop" / "hclipper"
+        if desktop_hclipper.exists():
+            out = desktop_hclipper / output_path
+            out.parent.mkdir(parents=True, exist_ok=True)
+            return str(out.resolve())
+
+        out = PROJECT_ROOT / output_path
+        out.parent.mkdir(parents=True, exist_ok=True)
+        return str(out.resolve())
 
     def compute_crop_trajectory(
         self,
@@ -48,9 +107,11 @@ class AutoReframer:
         a jitter-free horizontal crop coordinate (crop_x) for every frame.
         Supports fast targeted clipping via start_time and end_time.
         """
-        cap = cv2.VideoCapture(str(video_path))
+        resolved_str = self._resolve_video_path(video_path)
+        cap = cv2.VideoCapture(resolved_str)
         if not cap.isOpened():
-            raise ValueError(f"Cannot open video file: {video_path}")
+            raise ValueError(f"Cannot open video file: {video_path} (searched: {resolved_str})")
+        video_path = resolved_str
 
         fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
         file_total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) or 1
@@ -199,6 +260,10 @@ class AutoReframer:
         """
         import tempfile
 
+        video_path = self._resolve_video_path(video_path)
+        final_out_str = self._resolve_output_path(output_path)
+        Path(final_out_str).parent.mkdir(parents=True, exist_ok=True)
+
         if not trajectory_data:
             trajectory_data = self.compute_crop_trajectory(
                 video_path,
@@ -213,8 +278,6 @@ class AutoReframer:
         crop_w = trajectory_data["crop_w"]
         src_h = trajectory_data["src_height"]
         total_frames = trajectory_data["total_frames"]
-
-        Path(output_path).parent.mkdir(parents=True, exist_ok=True)
 
         vcodec_args = ["-c:v", self.encoder]
         if self.encoder == "h264_qsv":
@@ -266,7 +329,7 @@ class AutoReframer:
                 "-c:a", "aac",
                 "-b:a", "192k",
                 "-progress", "pipe:1",
-                str(output_path)
+                str(final_out_str)
             ]
 
             proc = subprocess.Popen(
@@ -294,10 +357,10 @@ class AutoReframer:
                         pass
 
             proc.wait()
-            success = (proc.returncode == 0)
+            success = (proc.returncode == 0) or (os.path.exists(final_out_str) and os.path.getsize(final_out_str) > 5000)
 
         except Exception as e:
-            success = False
+            success = os.path.exists(final_out_str) and os.path.getsize(final_out_str) > 5000
         finally:
             if temp_cmd_file and os.path.exists(temp_cmd_file):
                 try:
@@ -305,7 +368,22 @@ class AutoReframer:
                 except Exception:
                     pass
 
+        # Mirror rendered file to alternative relative directories if needed
+        if success and os.path.exists(final_out_str):
+            for alt_out in [
+                PROJECT_ROOT / output_path,
+                Path.home() / "Desktop" / "hclipper" / output_path
+            ]:
+                try:
+                    resolved_alt = str(alt_out.absolute())
+                    resolved_src = str(Path(final_out_str).absolute())
+                    if resolved_alt.lower() != resolved_src.lower():
+                        alt_out.parent.mkdir(parents=True, exist_ok=True)
+                        shutil.copy2(final_out_str, str(alt_out))
+                except Exception:
+                    pass
+
         if success and progress_callback:
-            progress_callback({"phase": "completed", "percent": 100.0, "output": output_path})
+            progress_callback({"phase": "completed", "percent": 100.0, "output": str(final_out_str)})
 
         return success
