@@ -15,6 +15,7 @@ contextBridge.exposeInMainWorld('hclipper', {
   openFolder: (folderPath) => ipcRenderer.invoke('hclipper:open-folder', folderPath),
   getSettings: () => ipcRenderer.invoke('hclipper:get-settings'),
   saveSettings: (settings) => ipcRenderer.invoke('hclipper:save-settings', settings),
+  listDownloads: () => ipcRenderer.invoke('hclipper:list-downloads'),
   getSystemInfo: () => ipcRenderer.invoke('hclipper:get-system-info'),
   onEngineEvent: (callback) => {
     const handler = (event, data) => callback(data);

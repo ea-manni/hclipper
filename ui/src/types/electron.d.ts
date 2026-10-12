@@ -19,6 +19,7 @@ export interface HclipperAPI {
   openFolder: (folderPath: string) => Promise<boolean>;
   getSettings: () => Promise<{ downloadsDir: string; clipsDir: string; [key: string]: any }>;
   saveSettings: (settings: { downloadsDir?: string; clipsDir?: string; [key: string]: any }) => Promise<boolean>;
+  listDownloads: () => Promise<{ name: string; title: string; path: string; sizeBytes: number; sizeMB: string; mtime: number }[]>;
   getSystemInfo: () => Promise<{
     platform: string;
     projectRoot: string;

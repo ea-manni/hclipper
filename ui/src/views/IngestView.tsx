@@ -7,6 +7,8 @@ import {
   Film, 
   ArrowRight,
   FolderOpen,
+  Folder,
+  CheckCircle2,
   Terminal,
   AlertCircle,
   ChevronDown,
@@ -21,7 +23,7 @@ import { YoutubeIcon, FacebookIcon } from '../components/Icons';
 
 interface IngestViewProps {
   sourceVideo: string;
-  setSourceVideo: (path: string) => void;
+  setSourceVideo: (path: string, newTitle?: string, sourceUrl?: string) => void;
   onNext: () => void;
 }
 
@@ -47,7 +49,27 @@ export const IngestView: React.FC<IngestViewProps> = ({
   const [showConsole, setShowConsole] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [downloadedMedia, setDownloadedMedia] = useState<{
+    name: string;
+    title: string;
+    path: string;
+    sizeMB: string;
+    mtime: number;
+  }[]>([]);
   const consoleRef = useRef<HTMLDivElement>(null);
+
+  const refreshDownloads = async () => {
+    if (window.hclipper?.listDownloads) {
+      try {
+        const list = await window.hclipper.listDownloads();
+        setDownloadedMedia(list || []);
+      } catch (e) {}
+    }
+  };
+
+  useEffect(() => {
+    refreshDownloads();
+  }, []);
 
   // Auto-scroll console when new logs arrive
   useEffect(() => {
@@ -122,11 +144,12 @@ export const IngestView: React.FC<IngestViewProps> = ({
             setStatusMessage(`Downloading stream... ${pct}%${stats ? ` (${stats})` : ''}`);
           }
         } else if (evt.event === 'result') {
-          setSourceVideo(evt.video_path);
+          setSourceVideo(evt.video_path, evt.title, url.trim());
           setIsDownloading(false);
           setDownloadProgress(100);
           setStatusMessage('Download & audio extraction completed successfully!');
           addLog(`✓ Ingestion completed: ${evt.video_path}`, 'info');
+          refreshDownloads();
         } else if (evt.event === 'error') {
           setIsDownloading(false);
           setErrorMessage(evt.error || 'Failed to download stream.');
@@ -441,6 +464,68 @@ export const IngestView: React.FC<IngestViewProps> = ({
           <span>Select from Computer</span>
         </button>
       </div>
+
+      {/* Local Storage Media Library */}
+      {downloadedMedia.length > 0 && (
+        <div className="glass-card rounded-xl p-5 space-y-3.5 border-white/5 bg-slate-900/30">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-2 text-slate-300">
+              <Folder className="w-4 h-4 text-amber-400" />
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-200">
+                Downloaded Media in Studio Storage ({downloadedMedia.length})
+              </span>
+            </div>
+            <button
+              onClick={refreshDownloads}
+              className="text-[11px] text-slate-400 hover:text-white transition-colors"
+            >
+              Refresh Library
+            </button>
+          </div>
+
+          <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+            {downloadedMedia.map((media) => {
+              const isActive = sourceVideo && (sourceVideo === media.path || sourceVideo.endsWith(media.name));
+              return (
+                <div
+                  key={media.path}
+                  className={`p-3 rounded-lg border transition-all flex items-center justify-between ${
+                    isActive
+                      ? 'bg-amber-400/10 border-amber-400/30 shadow-sm'
+                      : 'bg-white/[0.02] border-white/5 hover:border-white/10'
+                  }`}
+                >
+                  <div className="flex items-center space-x-3 min-w-0 pr-3">
+                    <Film className={`w-4 h-4 shrink-0 ${isActive ? 'text-amber-400' : 'text-slate-400'}`} />
+                    <div className="min-w-0">
+                      <p className="text-xs font-medium text-slate-200 truncate">{media.title}</p>
+                      <p className="text-[10px] font-mono text-slate-500 mt-0.5">{media.sizeMB} MB • Ready on disk</p>
+                    </div>
+                  </div>
+
+                  {isActive ? (
+                    <div className="flex items-center space-x-1.5 px-3 py-1 rounded-md bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[11px] font-bold">
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span>Active</span>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => {
+                        setSourceVideo(media.path, media.title);
+                        setStatusMessage(`Loaded saved media: ${media.title}`);
+                        addLog(`Loaded local media: ${media.path}`, 'info');
+                      }}
+                      className="px-3 py-1.5 rounded-lg bg-amber-400/10 hover:bg-amber-400/20 border border-amber-400/20 text-amber-300 text-xs font-semibold transition-colors shrink-0"
+                    >
+                      Use Video
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Active Selected Source Card */}
       {sourceVideo && (

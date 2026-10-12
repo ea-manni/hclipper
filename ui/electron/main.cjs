@@ -387,9 +387,30 @@ ipcMain.handle('hclipper:cancel-job', async (event, jobId) => {
   return false;
 });
 
+// Persistent File Helpers
+function getPersistentProjectsPath() {
+  const userProjects = path.join(app.getPath('userData'), 'projects.json');
+  if (fs.existsSync(userProjects)) return userProjects;
+  const rootProjects = path.join(PROJECT_ROOT, 'projects.json');
+  if (fs.existsSync(rootProjects)) {
+    try {
+      fs.mkdirSync(app.getPath('userData'), { recursive: true });
+      fs.copyFileSync(rootProjects, userProjects);
+      return userProjects;
+    } catch (e) {
+      return rootProjects;
+    }
+  }
+  return userProjects;
+}
+
+function getPersistentQueuePath() {
+  return path.join(app.getPath('userData'), 'clips_queue.json');
+}
+
 // IPC Handler: Read Clips Queue directly from clips_queue.json
 ipcMain.handle('hclipper:read-queue', async () => {
-  const queuePath = path.join(PROJECT_ROOT, 'clips_queue.json');
+  const queuePath = getPersistentQueuePath();
   if (fs.existsSync(queuePath)) {
     try {
       const data = fs.readFileSync(queuePath, 'utf8');
@@ -403,8 +424,9 @@ ipcMain.handle('hclipper:read-queue', async () => {
 
 // IPC Handler: Save Clips Queue to clips_queue.json
 ipcMain.handle('hclipper:save-queue', async (event, items) => {
-  const queuePath = path.join(PROJECT_ROOT, 'clips_queue.json');
+  const queuePath = getPersistentQueuePath();
   try {
+    fs.mkdirSync(path.dirname(queuePath), { recursive: true });
     fs.writeFileSync(queuePath, JSON.stringify(items, null, 2), 'utf8');
     return true;
   } catch (e) {
@@ -414,7 +436,7 @@ ipcMain.handle('hclipper:save-queue', async (event, items) => {
 
 // IPC Handler: Read Projects from projects.json
 ipcMain.handle('hclipper:read-projects', async () => {
-  const projectsPath = path.join(PROJECT_ROOT, 'projects.json');
+  const projectsPath = getPersistentProjectsPath();
   if (fs.existsSync(projectsPath)) {
     try {
       const data = fs.readFileSync(projectsPath, 'utf8');
@@ -428,13 +450,53 @@ ipcMain.handle('hclipper:read-projects', async () => {
 
 // IPC Handler: Save Projects to projects.json
 ipcMain.handle('hclipper:save-projects', async (event, projects) => {
-  const projectsPath = path.join(PROJECT_ROOT, 'projects.json');
+  const projectsPath = getPersistentProjectsPath();
   try {
+    fs.mkdirSync(path.dirname(projectsPath), { recursive: true });
     fs.writeFileSync(projectsPath, JSON.stringify(projects, null, 2), 'utf8');
     return true;
   } catch (e) {
     return false;
   }
+});
+
+// IPC Handler: List local downloaded media files
+ipcMain.handle('hclipper:list-downloads', async () => {
+  const defaultVideos = path.join(app.getPath('videos'), 'hclipper', 'downloads');
+  const dirs = [
+    path.join(app.getPath('userData'), 'downloads'),
+    path.join(PROJECT_ROOT, 'downloads'),
+    path.join(PROJECT_ROOT, '..', 'downloads'),
+    defaultVideos
+  ];
+  const results = [];
+  const seenPaths = new Set();
+  for (const d of dirs) {
+    if (fs.existsSync(d)) {
+      try {
+        const files = fs.readdirSync(d);
+        for (const f of files) {
+          const ext = path.extname(f).toLowerCase();
+          if (['.mp4', '.mov', '.mkv', '.webm', '.avi'].includes(ext)) {
+            const fullP = path.join(d, f);
+            if (!seenPaths.has(fullP)) {
+              seenPaths.add(fullP);
+              const stats = fs.statSync(fullP);
+              results.push({
+                name: f,
+                title: path.basename(f, ext),
+                path: fullP,
+                sizeBytes: stats.size,
+                sizeMB: (stats.size / (1024 * 1024)).toFixed(1),
+                mtime: stats.mtimeMs
+              });
+            }
+          }
+        }
+      } catch (e) {}
+    }
+  }
+  return results.sort((a, b) => b.mtime - a.mtime);
 });
 
 // IPC Handler: Get Project Paths & Hardware Status

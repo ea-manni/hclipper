@@ -93,7 +93,7 @@ export interface WorkflowContextType {
   activeTab: string;
   setActiveTab: (tab: string) => void;
   sourceVideo: string;
-  setSourceVideo: (path: string) => void;
+  setSourceVideo: (path: string, newTitle?: string, sourceUrl?: string) => void;
   logs: string[];
   addLog: (text: string, level?: string) => void;
   clearLogs: () => void;
@@ -304,7 +304,9 @@ export const WorkflowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   // Active Project Data References
-  const [sourceVideo, setSourceVideo] = useState<string>(SEED_PROJECT.sourceVideo);
+  const [sourceVideo, setSourceVideoState] = useState<string>(() => {
+    return localStorage.getItem('hclipper_last_video') || SEED_PROJECT.sourceVideo;
+  });
   const [clips, setClips] = useState<ClipCandidate[]>(SEED_PROJECT.clips);
   const [activeClipIndex, setActiveClipIndex] = useState<number>(SEED_PROJECT.activeClipIndex);
   const [ingestState, setIngestState] = useState<IngestState>(SEED_PROJECT.ingestState);
@@ -323,6 +325,38 @@ export const WorkflowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const clearLogs = () => setLogs([]);
 
+  const saveProjectsToDisk = async (updatedProjects: Project[]) => {
+    try {
+      localStorage.setItem('hclipper_projects', JSON.stringify(updatedProjects));
+      if (window.hclipper?.saveProjects) {
+        await window.hclipper.saveProjects(updatedProjects);
+      }
+    } catch (e) {}
+  };
+
+  const handleSetSourceVideo = (path: string, newTitle?: string, sourceUrl?: string) => {
+    setSourceVideoState(path);
+    if (!path) return;
+    const cleanTitle = newTitle || path.split(/[/\\]/).pop()?.replace(/\.[^.]+$/, '') || 'Media Project';
+    localStorage.setItem('hclipper_last_video', path);
+    setProjects((prev) => {
+      const updated = prev.map((p) => {
+        if (p.id === activeProjectId) {
+          return {
+            ...p,
+            name: (p.id === 'proj_pastor_david' || p.name.startsWith('New Project')) && cleanTitle ? cleanTitle : p.name,
+            sourceVideo: path,
+            sourceUrl: sourceUrl || p.sourceUrl,
+            updatedAt: new Date().toISOString()
+          };
+        }
+        return p;
+      });
+      saveProjectsToDisk(updated);
+      return updated;
+    });
+  };
+
   // Load Settings and Projects on start
   useEffect(() => {
     if (window.hclipper?.getSettings) {
@@ -340,10 +374,12 @@ export const WorkflowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       window.hclipper.readProjects().then((loaded) => {
         if (loaded && Array.isArray(loaded) && loaded.length > 0) {
           setProjects(loaded);
-          const first = loaded[0];
-          setActiveProjectId(first.id);
-          applyProjectState(first);
-          addLog(`Loaded ${loaded.length} project(s) from projects.json. Active: "${first.name}"`, 'project');
+          const savedActiveId = localStorage.getItem('hclipper_active_project_id');
+          const target = loaded.find((p) => p.id === savedActiveId) || 
+                         [...loaded].sort((a, b) => new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime())[0];
+          setActiveProjectId(target.id);
+          applyProjectState(target);
+          addLog(`Loaded ${loaded.length} project(s) from persistent storage. Active: "${target.name}"`, 'project');
         } else {
           // Save seed project
           if (window.hclipper?.saveProjects) {
@@ -358,22 +394,15 @@ export const WorkflowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           const parsed = JSON.parse(stored);
           if (Array.isArray(parsed) && parsed.length > 0) {
             setProjects(parsed);
-            setActiveProjectId(parsed[0].id);
-            applyProjectState(parsed[0]);
+            const savedActiveId = localStorage.getItem('hclipper_active_project_id');
+            const target = parsed.find((p: any) => p.id === savedActiveId) || parsed[0];
+            setActiveProjectId(target.id);
+            applyProjectState(target);
           }
         } catch (e) {}
       }
     }
   }, []);
-
-  const saveProjectsToDisk = async (updatedProjects: Project[]) => {
-    try {
-      localStorage.setItem('hclipper_projects', JSON.stringify(updatedProjects));
-      if (window.hclipper?.saveProjects) {
-        await window.hclipper.saveProjects(updatedProjects);
-      }
-    } catch (e) {}
-  };
 
   const updateSettings = async (newSettings: Partial<AppSettings>) => {
     const merged = { ...settings, ...newSettings };
@@ -391,9 +420,14 @@ export const WorkflowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   const applyProjectState = (proj: Project) => {
-    setSourceVideo(proj.sourceVideo || '');
+    const videoToSet = proj.sourceVideo || localStorage.getItem('hclipper_last_video') || '';
+    setSourceVideoState(videoToSet);
     setClips(proj.clips || []);
     setActiveClipIndex(proj.activeClipIndex || 0);
+    localStorage.setItem('hclipper_active_project_id', proj.id);
+    if (videoToSet) {
+      localStorage.setItem('hclipper_last_video', videoToSet);
+    }
     setIngestState(proj.ingestState || {
       url: proj.sourceUrl || '',
       isDownloading: false,
@@ -884,7 +918,7 @@ export const WorkflowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         activeTab,
         setActiveTab,
         sourceVideo,
-        setSourceVideo,
+        setSourceVideo: handleSetSourceVideo,
         logs,
         addLog,
         clearLogs,
