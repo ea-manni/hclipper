@@ -32,16 +32,30 @@ class HighlightScout:
     candidates from long sermon, podcast, and interview transcripts.
     """
 
-    SYSTEM_PROMPT_TEMPLATE = """You are an expert viral video editor specializing in YouTube Shorts, TikTok, and Instagram Reels.
-Your task is to analyze the following timestamped transcript and identify the top {count} most engaging, emotionally resonant, high-impact short clip segments (each {duration_desc}).
+    SYSTEM_PROMPT_TEMPLATE = """You are an elite short-form video editor specializing in YouTube Shorts, TikTok, and Instagram Reels.
+Your task is to analyze the following timestamped transcript and identify the top {count} most engaging, emotionally resonant, high-impact clip segments (target preference: {duration_desc}).
+
+CRITICAL STORYTELLING & NARRATIVE COMPLETENESS RULES:
+1. NARRATIVE COMPLETENESS OVER RIGID DURATION:
+   Every clip MUST tell a self-contained story or make a complete rhetorical/practical point:
+   - Strong Opening Hook: Captures attention in the first 3 seconds.
+   - Core Message / Story Escalation: The body of the illustration, argument, or sermon anecdote.
+   - Punchline / Conclusion: The lesson, moral, or powerful takeaway.
+   NEVER cut a speaker off mid-sentence, mid-illustration, or right before they deliver their punchline just to fit an arbitrary time limit.
+2. DYNAMIC TIMELINE ADJUSTMENT:
+   The target duration is a general preference, NOT a strict guillotine. If an anecdote requires 85s, 95s, or 110s to complete its punchline without an abrupt cutoff, EXTEND the end boundary to include the resolution. If a point is delivered punchily in 35s, keep it tight without dragging.
+3. PRECISE TIMESTAMPS:
+   'start' and 'end' must align precisely with natural sentence beginnings and clean pauses.
 
 For each clip candidate:
 1. 'start': exact start timestamp in seconds (float)
 2. 'end': exact end timestamp in seconds (float)
-3. 'score': virality score between 80 and 99 based on hook strength, emotional peak, and self-contained story
+3. 'score': virality score between 80 and 99 based on hook strength, emotional peak, and narrative closure
 4. 'title': catchy 3-6 word descriptive title (do NOT repeat words or stutter)
 5. 'hook': powerful 1-sentence opening hook banner (properly capitalized)
 6. 'reason': brief rationale why this segment works as a standalone short
+7. 'duration_advisory': 1-sentence explanation of why this specific length was chosen (e.g., "Extended to 88s to capture the speaker's closing punchline without abrupt cutoff", or "Naturally concise 42s standalone takeaway")
+8. 'story_arc': "complete_story" (narrative with resolution) or "punchy_takeaway" (concise power punch)
 
 You MUST output ONLY a valid JSON array of {count} objects conforming to this schema, with no markdown code fences or conversational text.
 Example format:
@@ -52,7 +66,9 @@ Example format:
     "score": 96,
     "title": "Stop Comparing Your Journey",
     "hook": "You cannot measure your beginning by someone else's harvest.",
-    "reason": "Immediate emotional punch with standalone philosophical clarity."
+    "reason": "Immediate emotional punch with standalone philosophical clarity.",
+    "duration_advisory": "Clean 53s story arc landing on a definitive moral conclusion.",
+    "story_arc": "complete_story"
   }}
 ]
 """
@@ -105,11 +121,12 @@ Example format:
         cues = self._resolve_cues(transcript_text, video_path)
 
         dur_labels = {
-            "short": "between 20 and 45 seconds",
-            "standard": "between 45 and 75 seconds",
-            "long": "between 60 and 110 seconds"
+            "story": "dynamic story arc (prioritize complete narrative resolution, typically 45 to 110 seconds)",
+            "short": "between 20 and 45 seconds (or slightly extended if needed to complete the sentence or thought cleanly)",
+            "standard": "between 45 and 75 seconds (or extended up to 95 seconds if needed to finish the punchline without abrupt cutoff)",
+            "long": "between 60 and 120 seconds (full deep-dive narrative, sermon illustration, or story arc)"
         }
-        duration_desc = dur_labels.get(duration, "between 45 and 75 seconds")
+        duration_desc = dur_labels.get(duration, "dynamic story arc prioritizing narrative completeness (45 to 95 seconds)")
 
         if self.api_key and self.provider != "local" and cues:
             # Build dialogue text with timestamps
@@ -410,11 +427,12 @@ Example format:
         Segments dialogue or audio into requested count of standalone viral moments.
         """
         dur_ranges = {
+            "story": (40.0, 95.0),
             "short": (20.0, 45.0),
             "standard": (45.0, 75.0),
-            "long": (65.0, 105.0)
+            "long": (60.0, 115.0)
         }
-        min_dur, max_dur = dur_ranges.get(duration, (45.0, 75.0))
+        min_dur, max_dur = dur_ranges.get(duration, (40.0, 85.0))
 
         candidates = []
 
@@ -430,11 +448,12 @@ Example format:
                     w_end = cues[j]["end"]
                     dur = w_end - w_start
                     if dur >= min_dur:
-                        if dur >= max_dur or cues[j]["text"].rstrip().endswith((".", "!", "?")):
+                        is_terminal = cues[j]["text"].rstrip().endswith((".", "!", "?"))
+                        if is_terminal or dur >= max_dur + 20:
                             break
 
                 dur = window_cues[-1]["end"] - w_start
-                if min_dur <= dur <= max_dur + 15:
+                if min_dur <= dur <= max_dur + 30:
                     comb_text = " ".join(c["text"] for c in window_cues)
                     base_score = 82
                     keyword_hits = 0
@@ -460,7 +479,9 @@ Example format:
                         "score": calc_score,
                         "title": title,
                         "hook": hook,
-                        "reason": f"High rhetorical delivery with {keyword_hits} high-engagement concepts and strong conclusion."
+                        "reason": f"High rhetorical delivery with {keyword_hits} high-engagement concepts and strong conclusion.",
+                        "duration_advisory": f"Natural cadence closure cleanly landed at {round(dur, 1)}s.",
+                        "story_arc": "complete_story" if dur >= 50 else "punchy_takeaway"
                     })
                     cur_idx += max(10, len(window_cues) // 2)
                 else:

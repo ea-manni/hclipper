@@ -64,6 +64,8 @@ export interface ClipCandidate {
   renderedPath?: string;
   customHeadline?: string;
   subtitlePreset?: 'tiktok_bold' | 'dynamic_pop' | 'clean_white';
+  durationAdvisory?: string;
+  storyArc?: 'complete_story' | 'punchy_takeaway' | 'extended_narrative' | string;
 }
 
 export interface Project {

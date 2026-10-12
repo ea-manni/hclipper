@@ -182,7 +182,7 @@ export const ClipScoutView: React.FC<ClipScoutViewProps> = ({
   } = useWorkflow();
 
   const [clipCount, setClipCount] = useState<number>(5);
-  const [targetDuration, setTargetDuration] = useState<'short' | 'standard' | 'long'>('standard');
+  const [targetDuration, setTargetDuration] = useState<'story' | 'short' | 'standard' | 'long'>('story');
   const [provider, setProvider] = useState<string>('gemini');
   const [apiKey, setApiKey] = useState<string>('');
   const [showKeyModal, setShowKeyModal] = useState<boolean>(false);
@@ -235,6 +235,8 @@ export const ClipScoutView: React.FC<ClipScoutViewProps> = ({
             title: c.title || `Viral Highlight #${i + 1}`,
             hook: c.hook || c.title || `KEY LESSON #${i + 1}`,
             reason: c.reason || 'Strong emotional hook and self-contained message.',
+            durationAdvisory: c.duration_advisory || c.durationAdvisory || '',
+            storyArc: c.story_arc || c.storyArc || ((typeof c.end === 'number' && typeof c.start === 'number' && (c.end - c.start) >= 50) ? 'complete_story' : 'punchy_takeaway'),
             customHeadline: c.hook || c.title || `VIRAL CLIP #${i + 1}`,
             subtitlePreset: 'tiktok_bold',
             isRendered: false
@@ -338,21 +340,27 @@ export const ClipScoutView: React.FC<ClipScoutViewProps> = ({
 
           {/* Target Duration Selector */}
           <div className="col-span-4 space-y-2">
-            <label className="text-xs font-bold text-slate-300 uppercase tracking-wider">
-              Preferred Clip Duration
-            </label>
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold text-slate-300 uppercase tracking-wider">
+                Story Arc & Clip Duration
+              </label>
+              <span className="text-[10px] text-amber-400 font-semibold flex items-center space-x-1">
+                <span>✨ Adaptive Narrative Boundary</span>
+              </span>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
               {[
-                { id: 'short', label: '15–30s Micro' },
-                { id: 'standard', label: '30–60s Viral' },
-                { id: 'long', label: '60–90s Deep' }
+                { id: 'story', label: '📖 Auto Story Arc' },
+                { id: 'short', label: '15–35s Micro' },
+                { id: 'standard', label: '35–75s Balanced' },
+                { id: 'long', label: '60–120s Full Story' }
               ].map((opt) => (
                 <button
                   key={opt.id}
                   onClick={() => setTargetDuration(opt.id as any)}
-                  className={`flex-1 py-2 text-xs font-semibold rounded-lg border transition-all ${
+                  className={`py-2 px-1 text-center text-xs font-semibold rounded-lg border transition-all ${
                     targetDuration === opt.id
-                      ? 'bg-sky-500/20 text-sky-300 border-sky-400/40 shadow-sm'
+                      ? 'bg-amber-400/20 text-amber-300 border-amber-400/40 shadow-sm'
                       : 'bg-white/5 hover:bg-white/10 text-slate-400 border-white/10'
                   }`}
                 >
@@ -624,6 +632,17 @@ export const ClipScoutView: React.FC<ClipScoutViewProps> = ({
                     <p className="text-[11px] text-slate-400 max-w-2xl pt-0.5">
                       {clip.reason}
                     </p>
+
+                    {/* AI Narrative Advisory Banner */}
+                    {clip.durationAdvisory && (
+                      <div className="mt-2.5 p-2 rounded-lg bg-amber-400/10 border border-amber-400/20 text-[11px] text-amber-300 flex items-start space-x-2">
+                        <Sparkles className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
+                        <div>
+                          <span className="font-bold text-amber-200">AI Story Advisory: </span>
+                          <span className="text-slate-300">{clip.durationAdvisory}</span>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -633,11 +652,17 @@ export const ClipScoutView: React.FC<ClipScoutViewProps> = ({
                     <Flame className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
                     <span>{clip.score}% Virality</span>
                   </div>
-                  <div className="text-[11px] font-mono text-slate-400">
+                  <div className="text-[11px] font-mono text-slate-300 font-medium">
                     Duration: {(clip.end - clip.start).toFixed(1)}s
                   </div>
                   <div className="text-[10px] font-mono text-slate-500">
                     {Math.floor(clip.start / 60)}:{(clip.start % 60).toFixed(0).padStart(2, '0')} → {Math.floor(clip.end / 60)}:{(clip.end % 60).toFixed(0).padStart(2, '0')}
+                  </div>
+                  <div className="pt-0.5">
+                    <span className="inline-flex items-center space-x-1 text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                      <CheckCircle2 className="w-3 h-3" />
+                      <span>{clip.storyArc === 'punchy_takeaway' ? 'Punchy Arc' : 'Full Story Arc'}</span>
+                    </span>
                   </div>
                 </div>
               </div>
