@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Folder, 
   Plus, 
@@ -16,10 +16,11 @@ import { useWorkflow } from '../context/WorkflowContext';
 
 interface ProjectModalProps {
   isOpen: boolean;
+  initialTab?: 'list' | 'create';
   onClose: () => void;
 }
 
-export const ProjectModal: React.FC<ProjectModalProps> = ({ isOpen, onClose }) => {
+export const ProjectModal: React.FC<ProjectModalProps> = ({ isOpen, initialTab = 'list', onClose }) => {
   const { 
     projects, 
     activeProjectId, 
@@ -30,11 +31,18 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({ isOpen, onClose }) =
     setActiveTab
   } = useWorkflow();
 
-  const [activeTab, setModalTab] = useState<'list' | 'create'>('list');
+  const [activeTab, setModalTab] = useState<'list' | 'create'>(initialTab);
   const [newProjectName, setNewProjectName] = useState('');
   const [newSourceUrl, setNewSourceUrl] = useState('');
   const [newSourceVideo, setNewSourceVideo] = useState('');
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+
+  // Sync tab when opening
+  useEffect(() => {
+    if (isOpen) {
+      setModalTab(initialTab || 'list');
+    }
+  }, [isOpen, initialTab]);
 
   if (!isOpen) return null;
 
@@ -53,23 +61,17 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({ isOpen, onClose }) =
     }
   };
 
-  const handleCreateNew = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newProjectName.trim()) return;
+  const handleCreateNew = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const finalName = newProjectName.trim() || `New Project ${projects.length + 1}`;
 
-    const proj = createProject(newProjectName.trim(), newSourceVideo.trim(), newSourceUrl.trim());
+    createProject(finalName, newSourceVideo.trim(), newSourceUrl.trim());
     setNewProjectName('');
     setNewSourceUrl('');
     setNewSourceVideo('');
     setModalTab('list');
+    setActiveTab('ingest');
     onClose();
-
-    // If source video provided or url provided, open ingest
-    if (proj.sourceUrl) {
-      setActiveTab('ingest');
-    } else {
-      setActiveTab('scout');
-    }
   };
 
   const handleSelectAndClose = (id: string) => {
@@ -309,21 +311,32 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({ isOpen, onClose }) =
               </span>
             </div>
 
-            <div className="flex items-center justify-end space-x-2 pt-2 border-t border-white/10">
+            <div className="flex items-center justify-between pt-2 border-t border-white/10">
               <button
                 type="button"
-                onClick={() => setModalTab('list')}
-                className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 text-xs font-semibold"
+                onClick={() => handleCreateNew()}
+                className="px-3.5 py-2 rounded-xl bg-amber-400/10 hover:bg-amber-400/20 text-amber-300 border border-amber-400/30 text-xs font-semibold flex items-center space-x-1.5 transition-colors"
               >
-                Cancel
+                <Plus className="w-3.5 h-3.5" />
+                <span>Quick Blank Project</span>
               </button>
-              <button
-                type="submit"
-                className="px-5 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold text-xs shadow-lg shadow-amber-500/20 flex items-center space-x-1.5 transition-transform active:scale-95"
-              >
-                <Plus className="w-4 h-4" />
-                <span>Create & Launch Project</span>
-              </button>
+
+              <div className="flex items-center space-x-2">
+                <button
+                  type="button"
+                  onClick={() => setModalTab('list')}
+                  className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 text-xs font-semibold"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold text-xs shadow-lg shadow-amber-500/20 flex items-center space-x-1.5 transition-transform active:scale-95"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Create & Launch Project</span>
+                </button>
+              </div>
             </div>
           </form>
         )}

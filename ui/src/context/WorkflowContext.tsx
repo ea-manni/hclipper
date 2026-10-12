@@ -114,6 +114,10 @@ export interface WorkflowContextType {
   duplicateProject: (projectId: string) => void;
   showProjectModal: boolean;
   setShowProjectModal: (show: boolean) => void;
+  projectModalTab: 'list' | 'create';
+  openProjectModal: (tab?: 'list' | 'create') => void;
+  showSettingsModal: boolean;
+  setShowSettingsModal: (show: boolean) => void;
 
   // Multi-Clip System (Embedded in Active Project)
   clips: ClipCandidate[];
@@ -291,6 +295,13 @@ export const WorkflowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [projects, setProjects] = useState<Project[]>([SEED_PROJECT]);
   const [activeProjectId, setActiveProjectId] = useState<string>('proj_pastor_david');
   const [showProjectModal, setShowProjectModal] = useState<boolean>(false);
+  const [projectModalTab, setProjectModalTab] = useState<'list' | 'create'>('list');
+  const [showSettingsModal, setShowSettingsModal] = useState<boolean>(false);
+
+  const openProjectModal = (tab: 'list' | 'create' = 'list') => {
+    setProjectModalTab(tab);
+    setShowProjectModal(true);
+  };
 
   // Active Project Data References
   const [sourceVideo, setSourceVideo] = useState<string>(SEED_PROJECT.sourceVideo);
@@ -460,6 +471,20 @@ export const WorkflowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   const createProject = (name: string, newSourceVideo: string = '', newSourceUrl: string = ''): Project => {
+    // 1. Snapshot current active project before switching
+    const currentProjectSnapshot: Project = {
+      ...activeProject,
+      sourceVideo,
+      clips,
+      activeClipIndex,
+      ingestState,
+      timelineState,
+      reframeState,
+      subtitlesState,
+      updatedAt: new Date().toISOString()
+    };
+
+    // 2. Create clean new project
     const newProj: Project = {
       id: `proj_${Date.now()}`,
       name: name.trim() || `New Project ${projects.length + 1}`,
@@ -521,11 +546,19 @@ export const WorkflowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       }
     };
 
-    const updated = [...projects, newProj];
+    // 3. Atomically update project list
+    const updated = [
+      ...projects.map((p) => (p.id === activeProject.id ? currentProjectSnapshot : p)),
+      newProj
+    ];
     setProjects(updated);
     saveProjectsToDisk(updated);
-    switchProject(newProj.id);
-    addLog(`Created new project "${newProj.name}"`, 'project');
+
+    // 4. Immediately switch active workspace to the new project
+    setActiveProjectId(newProj.id);
+    applyProjectState(newProj);
+    setActiveTab('ingest');
+    addLog(`✓ Created & switched to clean project "${newProj.name}". Ready for source media ingestion.`, 'project');
     return newProj;
   };
 
@@ -868,6 +901,10 @@ export const WorkflowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         duplicateProject,
         showProjectModal,
         setShowProjectModal,
+        projectModalTab,
+        openProjectModal,
+        showSettingsModal,
+        setShowSettingsModal,
         clips,
         setClips,
         activeClipIndex,

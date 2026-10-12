@@ -12,10 +12,151 @@ import {
   Film, 
   Layers, 
   ArrowRight,
-  FolderOpen
+  FolderOpen,
+  Loader2,
+  Cpu
 } from 'lucide-react';
 import { useWorkflow } from '../context/WorkflowContext';
 import type { ClipCandidate } from '../context/WorkflowContext';
+
+const PROVIDER_GUIDES: Record<string, {
+  title: string;
+  badge: string;
+  badgeColor: string;
+  description: string;
+  steps: Array<{ step: number; title: string; desc: string; url?: string; urlLabel?: string }>;
+  keyPrefix?: string;
+  isOffline?: boolean;
+}> = {
+  gemini: {
+    title: "Google Gemini 2.5 Flash Setup",
+    badge: "100% Free Forever Tier",
+    badgeColor: "bg-amber-400/10 border-amber-400/20 text-amber-300",
+    description: "Google AI Studio provides every Google account 15 requests per minute (1,500 free requests per day) with Gemini 2.5 Flash. No billing account or credit card required.",
+    steps: [
+      {
+        step: 1,
+        title: "Open Google AI Studio",
+        desc: "Visit the official Google AI Studio website and sign in with any personal or workspace Google account.",
+        url: "https://aistudio.google.com/app/apikey",
+        urlLabel: "Open aistudio.google.com/app/apikey"
+      },
+      {
+        step: 2,
+        title: 'Click "Create API Key"',
+        desc: 'Click the blue "Create API key in new project" button. Google generates your personal secret token in seconds.'
+      },
+      {
+        step: 3,
+        title: "Copy & Paste into hclipper",
+        desc: "Copy your key string (begins with AIzaSy...) and paste it into the field below."
+      }
+    ],
+    keyPrefix: "AIzaSy..."
+  },
+  deepseek: {
+    title: "DeepSeek V3 / R1 Engine Setup",
+    badge: "High Virality • Ultra Low Cost",
+    badgeColor: "bg-blue-400/10 border-blue-400/20 text-blue-300",
+    description: "DeepSeek V3 / R1 provides state-of-the-art transcript and sermon narrative reasoning at pennies per million tokens.",
+    steps: [
+      {
+        step: 1,
+        title: "Open DeepSeek Open Platform",
+        desc: "Log in or register your account at the official DeepSeek Platform.",
+        url: "https://platform.deepseek.com/api_keys",
+        urlLabel: "Open platform.deepseek.com/api_keys"
+      },
+      {
+        step: 2,
+        title: 'Generate an API Key',
+        desc: 'Navigate to "API Keys", click "Create new API key", name it "hclipper Studio", and copy the token.'
+      },
+      {
+        step: 3,
+        title: "Paste & Save in hclipper",
+        desc: "Paste your sk-... key below. Keys are stored locally on your machine and never transmitted to third parties."
+      }
+    ],
+    keyPrefix: "sk-..."
+  },
+  openai: {
+    title: "OpenAI GPT-4o-mini Setup",
+    badge: "OpenAI Platform Key",
+    badgeColor: "bg-emerald-400/10 border-emerald-400/20 text-emerald-300",
+    description: "Connect OpenAI's official GPT-4o-mini engine for structured hook banner generation and timestamped clip segmentation.",
+    steps: [
+      {
+        step: 1,
+        title: "Open OpenAI API Platform",
+        desc: "Sign in to OpenAI Developer Dashboard.",
+        url: "https://platform.openai.com/api-keys",
+        urlLabel: "Open platform.openai.com/api-keys"
+      },
+      {
+        step: 2,
+        title: 'Create Secret Key',
+        desc: 'Click "+ Create new secret key", copy the generated string.'
+      },
+      {
+        step: 3,
+        title: "Paste into hclipper",
+        desc: "Paste your sk-proj-... token below to unlock GPT-4o highlight discovery."
+      }
+    ],
+    keyPrefix: "sk-proj-..."
+  },
+  anthropic: {
+    title: "Anthropic Claude 3.5 Haiku Setup",
+    badge: "Claude 3.5 Haiku",
+    badgeColor: "bg-orange-400/10 border-orange-400/20 text-orange-300",
+    description: "Claude 3.5 Haiku delivers lightning-fast transcript reasoning with deep sensitivity to spoken rhythm and rhetorical nuances.",
+    steps: [
+      {
+        step: 1,
+        title: "Open Anthropic Console",
+        desc: "Sign in to the Anthropic API Console.",
+        url: "https://console.anthropic.com/settings/keys",
+        urlLabel: "Open console.anthropic.com/settings/keys"
+      },
+      {
+        step: 2,
+        title: 'Create API Key',
+        desc: 'Click "Create Key", copy your secret token.'
+      },
+      {
+        step: 3,
+        title: "Paste into hclipper",
+        desc: "Paste your sk-ant-... key below."
+      }
+    ],
+    keyPrefix: "sk-ant-..."
+  },
+  local: {
+    title: "100% Offline Local Engine Architecture",
+    badge: "Zero Network • 100% Private",
+    badgeColor: "bg-emerald-400/10 border-emerald-400/20 text-emerald-300",
+    description: "Processes your videos completely on your device without sending a single byte of data to the cloud or external servers.",
+    isOffline: true,
+    steps: [
+      {
+        step: 1,
+        title: "On-Device Audio Cadence & Energy Heuristics",
+        desc: "Uses FFmpeg native audio analysis to detect vocal inflection, pauses, breathing cadence, and volume peaks directly on your local CPU."
+      },
+      {
+        step: 2,
+        title: "Natural Speech Segmentation",
+        desc: "Locates stand-alone 30–60 second narrative windows that start on strong opening declarations and conclude on complete thoughts."
+      },
+      {
+        step: 3,
+        title: "Zero API Keys, Zero Cost, Zero Internet Required",
+        desc: "Fully functional in airplane mode, air-gapped studio computers, or high-security production environments."
+      }
+    ]
+  }
+};
 
 interface ClipScoutViewProps {
   onNavigateToTimeline: () => void;
@@ -33,6 +174,7 @@ export const ClipScoutView: React.FC<ClipScoutViewProps> = ({
     setClips, 
     selectClip, 
     activeClipIndex, 
+    reframeState,
     startRenderClip, 
     startBatchRenderAll,
     openDirectory,
@@ -523,10 +665,31 @@ export const ClipScoutView: React.FC<ClipScoutViewProps> = ({
                       selectClip(index);
                       startRenderClip(index);
                     }}
-                    className="px-3.5 py-1.5 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold text-[11px] flex items-center space-x-1.5 shadow-sm transition-all"
+                    disabled={reframeState.isRendering && activeClipIndex === index}
+                    className={`px-3.5 py-1.5 rounded-lg font-bold text-[11px] flex items-center space-x-1.5 shadow-sm transition-all ${
+                      reframeState.isRendering && activeClipIndex === index
+                        ? 'bg-slate-800 text-slate-400 border border-white/10 cursor-not-allowed opacity-75'
+                        : clip.isRendered
+                        ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 hover:bg-emerald-500/30'
+                        : 'bg-amber-400 hover:bg-amber-300 text-slate-950 active:scale-95'
+                    }`}
                   >
-                    <Zap className="w-3 h-3" />
-                    <span>{clip.isRendered ? 'Re-render (GPU)' : 'Render 9:16 Short (GPU)'}</span>
+                    {reframeState.isRendering && activeClipIndex === index ? (
+                      <>
+                        <Loader2 className="w-3 h-3 animate-spin text-amber-400" />
+                        <span>Rendering ({reframeState.renderProgress}%)...</span>
+                      </>
+                    ) : clip.isRendered ? (
+                      <>
+                        <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                        <span>Rendered ✓ (Re-render)</span>
+                      </>
+                    ) : (
+                      <>
+                        <Zap className="w-3 h-3" />
+                        <span>Render 9:16 Short (GPU)</span>
+                      </>
+                    )}
                   </button>
                 </div>
               </div>
@@ -550,108 +713,109 @@ export const ClipScoutView: React.FC<ClipScoutViewProps> = ({
         </button>
       </div>
 
-      {/* Step-by-Step API Key Setup Modal */}
-      {showKeyModal && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="glass-card bg-[#0e121c] border border-white/15 rounded-2xl max-w-xl w-full p-6 space-y-5 shadow-2xl">
-            <div className="flex items-center justify-between border-b border-white/10 pb-4">
-              <div className="flex items-center space-x-2.5">
-                <div className="w-8 h-8 rounded-lg bg-amber-400/10 border border-amber-400/20 flex items-center justify-center">
-                  <Key className="w-4 h-4 text-amber-400" />
-                </div>
-                <div>
-                  <h3 className="text-base font-bold text-white">How to Get a 100% Free Gemini API Key</h3>
-                  <p className="text-[11px] text-slate-400">Step-by-step beginner guide — No credit card required</p>
-                </div>
-              </div>
-              <button 
-                onClick={() => setShowKeyModal(false)}
-                className="p-1 rounded-lg hover:bg-white/10 text-slate-400 hover:text-white"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="space-y-4 text-xs text-slate-300">
-              <div className="p-3.5 rounded-xl bg-amber-400/10 border border-amber-400/20 space-y-1">
-                <div className="font-bold text-amber-300 flex items-center space-x-1.5">
-                  <Sparkles className="w-3.5 h-3.5" />
-                  <span>100% Free Forever Tier</span>
-                </div>
-                <p className="text-[11px] text-slate-300 leading-relaxed">
-                  Google AI Studio gives every free Google account <strong>15 requests per minute (1,500 free requests daily)</strong> with Gemini 2.5 Flash. You will never be charged.
-                </p>
-              </div>
-
-              {/* 3 Step List */}
-              <div className="space-y-3">
-                <div className="flex items-start space-x-3 p-3 rounded-lg bg-white/5 border border-white/5">
-                  <span className="w-6 h-6 rounded-full bg-amber-400 text-slate-950 font-bold flex items-center justify-center text-xs shrink-0 mt-0.5">1</span>
-                  <div>
-                    <div className="font-semibold text-white">Open Google AI Studio</div>
-                    <p className="text-[11px] text-slate-400 mt-0.5">
-                      Visit the official Google AI Studio website and sign in with any standard Google/Gmail account.
-                    </p>
-                    <a
-                      href="https://aistudio.google.com/app/apikey"
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex items-center space-x-1 text-sky-400 hover:underline mt-1.5 font-semibold text-[11px]"
-                    >
-                      <span>Go to aistudio.google.com/app/apikey</span>
-                      <ExternalLink className="w-3 h-3" />
-                    </a>
+      {/* Dynamic Step-by-Step API Key Setup & Offline Architecture Modal */}
+      {showKeyModal && (() => {
+        const guide = PROVIDER_GUIDES[provider] || PROVIDER_GUIDES.gemini;
+        return (
+          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+            <div className="glass-card bg-[#0e121c] border border-white/15 rounded-2xl max-w-xl w-full p-6 space-y-5 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+              <div className="flex items-center justify-between border-b border-white/10 pb-4">
+                <div className="flex items-center space-x-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-amber-400/10 border border-amber-400/20 flex items-center justify-center">
+                    {guide.isOffline ? (
+                      <Cpu className="w-4 h-4 text-emerald-400" />
+                    ) : (
+                      <Key className="w-4 h-4 text-amber-400" />
+                    )}
                   </div>
-                </div>
-
-                <div className="flex items-start space-x-3 p-3 rounded-lg bg-white/5 border border-white/5">
-                  <span className="w-6 h-6 rounded-full bg-amber-400 text-slate-950 font-bold flex items-center justify-center text-xs shrink-0 mt-0.5">2</span>
                   <div>
-                    <div className="font-semibold text-white">Click "Create API Key"</div>
-                    <p className="text-[11px] text-slate-400 mt-0.5">
-                      Click the blue <strong>"Create API key in new project"</strong> button. Google generates your personal secret key in 2 seconds.
+                    <h3 className="text-base font-bold text-white">{guide.title}</h3>
+                    <p className="text-[11px] text-slate-400">
+                      {guide.isOffline ? 'Complete on-device privacy — No internet or tokens needed' : 'Step-by-step setup guide for Bring-Your-Own-Key'}
                     </p>
                   </div>
                 </div>
+                <button 
+                  onClick={() => setShowKeyModal(false)}
+                  className="p-1 rounded-lg hover:bg-white/10 text-slate-400 hover:text-white transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
 
-                <div className="flex items-start space-x-3 p-3 rounded-lg bg-white/5 border border-white/5">
-                  <span className="w-6 h-6 rounded-full bg-amber-400 text-slate-950 font-bold flex items-center justify-center text-xs shrink-0 mt-0.5">3</span>
-                  <div>
-                    <div className="font-semibold text-white">Copy & Paste into hclipper</div>
-                    <p className="text-[11px] text-slate-400 mt-0.5">
-                      Copy the key string (it starts with <code className="bg-slate-900 px-1 py-0.5 rounded text-amber-300">AIza...</code>) and paste it into the field below.
+              <div className="space-y-4 text-xs text-slate-300">
+                <div className={`p-3.5 rounded-xl border space-y-1 ${guide.badgeColor}`}>
+                  <div className="font-bold flex items-center space-x-1.5">
+                    <Sparkles className="w-3.5 h-3.5" />
+                    <span>{guide.badge}</span>
+                  </div>
+                  <p className="text-[11px] text-slate-300 leading-relaxed">
+                    {guide.description}
+                  </p>
+                </div>
+
+                {/* Steps List */}
+                <div className="space-y-3">
+                  {guide.steps.map((st) => (
+                    <div key={st.step} className="flex items-start space-x-3 p-3 rounded-lg bg-white/5 border border-white/5">
+                      <span className="w-6 h-6 rounded-full bg-amber-400 text-slate-950 font-bold flex items-center justify-center text-xs shrink-0 mt-0.5">
+                        {st.step}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <div className="font-semibold text-white">{st.title}</div>
+                        <p className="text-[11px] text-slate-400 mt-0.5 leading-relaxed">
+                          {st.desc}
+                        </p>
+                        {st.url && (
+                          <button
+                            type="button"
+                            onClick={() => window.hclipper?.openPath?.(st.url!)}
+                            className="inline-flex items-center space-x-1 text-sky-400 hover:underline mt-1.5 font-semibold text-[11px]"
+                          >
+                            <span>{st.urlLabel || st.url}</span>
+                            <ExternalLink className="w-3 h-3" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Key Input inside modal if not offline */}
+                {!guide.isOffline ? (
+                  <div className="space-y-1.5 pt-2">
+                    <label className="text-[11px] font-bold text-slate-400 uppercase">
+                      Paste Your {provider.toUpperCase()} Key:
+                    </label>
+                    <div className="flex items-center space-x-2">
+                      <input
+                        type="password"
+                        value={apiKey}
+                        onChange={(e) => handleSaveApiKey(e.target.value)}
+                        placeholder={`Paste token here (e.g. ${guide.keyPrefix || 'key...'})`}
+                        className="flex-1 bg-slate-900 border border-white/15 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-400 font-mono"
+                      />
+                      <button
+                        onClick={() => setShowKeyModal(false)}
+                        className="px-4 py-2 bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold rounded-lg text-xs transition-colors"
+                      >
+                        Save & Close
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-center space-y-1">
+                    <div className="text-xs font-bold text-emerald-300">Ready for Instant Offline Execution</div>
+                    <p className="text-[11px] text-slate-400">
+                      All video files stay 100% on this PC. No subscription, API bill, or rate limit ever applies.
                     </p>
                   </div>
-                </div>
-              </div>
-
-              {/* Quick Input inside modal */}
-              <div className="space-y-1.5 pt-2">
-                <label className="text-[11px] font-bold text-slate-400 uppercase">Paste Your Key Now:</label>
-                <div className="flex items-center space-x-2">
-                  <input
-                    type="text"
-                    value={apiKey}
-                    onChange={(e) => handleSaveApiKey(e.target.value)}
-                    placeholder="AIzaSy..."
-                    className="flex-1 bg-slate-900 border border-white/15 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-400 font-mono"
-                  />
-                  <button
-                    onClick={() => setShowKeyModal(false)}
-                    className="px-4 py-2 bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold rounded-lg text-xs"
-                  >
-                    Save & Close
-                  </button>
-                </div>
-              </div>
-
-              <div className="text-[11px] text-slate-500 pt-1 text-center">
-                Want zero API keys? Select <strong>"100% Offline Local Engine"</strong> in the dropdown anytime!
+                )}
               </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 };

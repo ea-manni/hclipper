@@ -3,6 +3,8 @@ import { WorkflowProvider, useWorkflow } from './context/WorkflowContext';
 import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
 import { ConsoleDrawer } from './components/ConsoleDrawer';
+import { ProjectModal } from './components/ProjectModal';
+import { SettingsModal } from './components/SettingsModal';
 import { IngestView } from './views/IngestView';
 import { ClipScoutView } from './views/ClipScoutView';
 import { TimelineView } from './views/TimelineView';
@@ -11,11 +13,23 @@ import { SubtitlesView } from './views/SubtitlesView';
 import { PublisherView } from './views/PublisherView';
 
 function StudioWorkspace() {
-  const { activeTab, setActiveTab, sourceVideo, setSourceVideo, logs, clearLogs } = useWorkflow();
+  const { 
+    activeTab, 
+    setActiveTab, 
+    sourceVideo, 
+    setSourceVideo, 
+    logs, 
+    clearLogs,
+    showProjectModal,
+    setShowProjectModal,
+    projectModalTab,
+    showSettingsModal,
+    setShowSettingsModal
+  } = useWorkflow();
   const [showLogs, setShowLogs] = useState(false);
 
   return (
-    <div className="h-screen w-screen flex flex-col bg-[#090b10] text-slate-100 overflow-hidden select-none">
+    <div className="h-screen w-screen flex flex-col bg-[#090b10] text-slate-100 overflow-hidden select-none relative">
       {/* Titlebar & Header */}
       <Header />
 
@@ -84,6 +98,18 @@ function StudioWorkspace() {
         onClose={() => setShowLogs(false)}
         logs={logs}
         onClear={clearLogs}
+      />
+
+      {/* Full-Screen Centered Modals (Mounted at workspace root level outside of backdrop-filtered headers) */}
+      <ProjectModal 
+        isOpen={showProjectModal}
+        initialTab={projectModalTab}
+        onClose={() => setShowProjectModal(false)}
+      />
+
+      <SettingsModal 
+        isOpen={showSettingsModal}
+        onClose={() => setShowSettingsModal(false)}
       />
     </div>
   );

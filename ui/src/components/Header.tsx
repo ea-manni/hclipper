@@ -9,12 +9,9 @@ import {
   Folder,
   Plus,
   ChevronDown,
-  X, 
-  Check, 
-  HardDrive
+  Check
 } from 'lucide-react';
 import { useWorkflow } from '../context/WorkflowContext';
-import { ProjectModal } from './ProjectModal';
 
 interface HeaderProps {
   activeTab?: string;
@@ -25,22 +22,17 @@ export const Header: React.FC<HeaderProps> = () => {
     reframeState, 
     ingestState, 
     settings, 
-    updateSettings, 
     openDirectory, 
-    addLog,
-    projects,
-    activeProjectId,
-    activeProject,
-    switchProject,
-    showProjectModal,
-    setShowProjectModal
+    projects, 
+    activeProjectId, 
+    activeProject, 
+    switchProject, 
+    createProject,
+    openProjectModal,
+    setShowSettingsModal
   } = useWorkflow();
 
-  const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showProjectDropdown, setShowProjectDropdown] = useState(false);
-  const [downloadsDir, setDownloadsDir] = useState(settings.downloadsDir);
-  const [clipsDir, setClipsDir] = useState(settings.clipsDir);
-  const [saveSuccess, setSaveSuccess] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Close dropdown on outside click
@@ -54,40 +46,13 @@ export const Header: React.FC<HeaderProps> = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const handlePickDownloadsDir = async () => {
-    if (window.hclipper?.selectDirectory) {
-      const selected = await window.hclipper.selectDirectory({
-        title: 'Choose Destination Folder for Video Downloads'
-      });
-      if (selected) {
-        setDownloadsDir(selected);
-      }
-    }
-  };
-
-  const handlePickClipsDir = async () => {
-    if (window.hclipper?.selectDirectory) {
-      const selected = await window.hclipper.selectDirectory({
-        title: 'Choose Destination Folder for Rendered Master Clips'
-      });
-      if (selected) {
-        setClipsDir(selected);
-      }
-    }
-  };
-
-  const handleSaveSettings = async () => {
-    await updateSettings({ downloadsDir, clipsDir });
-    setSaveSuccess(true);
-    addLog(`Updated storage paths: Downloads -> ${downloadsDir}, Clips -> ${clipsDir}`, 'success');
-    setTimeout(() => {
-      setSaveSuccess(false);
-      setShowSettingsModal(false);
-    }, 1200);
+  const handleQuickNewProject = () => {
+    setShowProjectDropdown(false);
+    createProject(`New Project ${projects.length + 1}`);
   };
 
   return (
-    <header className="h-14 border-b border-white/5 bg-[#0d111a]/80 backdrop-blur-md px-5 flex items-center justify-between select-none relative z-30">
+    <header className="h-14 border-b border-white/5 bg-[#0d111a]/90 backdrop-blur-md px-5 flex items-center justify-between select-none relative z-30">
       {/* Brand & Project Switcher */}
       <div className="flex items-center space-x-4">
         {/* Brand */}
@@ -136,8 +101,8 @@ export const Header: React.FC<HeaderProps> = () => {
 
           {/* Project Switcher Menu */}
           {showProjectDropdown && (
-            <div className="absolute top-full left-0 mt-2 w-80 bg-[#0e121c] border border-white/15 rounded-xl shadow-2xl z-50 p-2 space-y-1 backdrop-blur-xl">
-              <div className="px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center justify-between">
+            <div className="absolute top-full left-0 mt-2 w-80 bg-[#0e121c] border border-white/20 rounded-xl shadow-2xl z-50 p-2 space-y-1.5 backdrop-blur-xl">
+              <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center justify-between">
                 <span>Switch Project</span>
                 <span className="text-amber-400 font-mono">{projects.length} Total</span>
               </div>
@@ -174,21 +139,19 @@ export const Header: React.FC<HeaderProps> = () => {
                 <button
                   onClick={() => {
                     setShowProjectDropdown(false);
-                    setShowProjectModal(true);
+                    openProjectModal('list');
                   }}
-                  className="flex-1 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white text-[11px] font-semibold text-center"
+                  className="flex-1 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white text-[11px] font-semibold text-center transition-colors"
                 >
                   Manage All Projects...
                 </button>
                 <button
-                  onClick={() => {
-                    setShowProjectDropdown(false);
-                    setShowProjectModal(true);
-                  }}
-                  className="px-2.5 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-[11px] flex items-center space-x-1 shadow-sm"
+                  onClick={handleQuickNewProject}
+                  className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-[11px] flex items-center space-x-1 shadow-md shadow-amber-500/20 transition-all active:scale-95"
+                  title="Immediately create and switch to a clean new project workspace"
                 >
                   <Plus className="w-3 h-3" />
-                  <span>New</span>
+                  <span>+ New</span>
                 </button>
               </div>
             </div>
@@ -230,11 +193,7 @@ export const Header: React.FC<HeaderProps> = () => {
         </button>
 
         <button
-          onClick={() => {
-            setDownloadsDir(settings.downloadsDir);
-            setClipsDir(settings.clipsDir);
-            setShowSettingsModal(true);
-          }}
+          onClick={() => setShowSettingsModal(true)}
           className="p-1.5 rounded-md bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 transition-colors"
           title="Storage & Application Preferences"
         >
@@ -253,124 +212,6 @@ export const Header: React.FC<HeaderProps> = () => {
           <span className="font-medium text-[11px]">YuNet ONNX</span>
         </div>
       </div>
-
-      {/* Settings / Storage Preferences Modal */}
-      {showSettingsModal && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="glass-card bg-[#0e121c] border border-white/15 rounded-2xl max-w-lg w-full p-6 space-y-5 shadow-2xl">
-            <div className="flex items-center justify-between border-b border-white/10 pb-4">
-              <div className="flex items-center space-x-2.5">
-                <div className="w-8 h-8 rounded-lg bg-amber-400/10 border border-amber-400/20 flex items-center justify-center">
-                  <HardDrive className="w-4 h-4 text-amber-400" />
-                </div>
-                <div>
-                  <h3 className="text-base font-bold text-white">Storage & Output Folders</h3>
-                  <p className="text-[11px] text-slate-400">Configure where downloads and rendered clips are saved</p>
-                </div>
-              </div>
-              <button 
-                onClick={() => setShowSettingsModal(false)}
-                className="p-1 rounded-lg hover:bg-white/10 text-slate-400 hover:text-white"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="space-y-4 text-xs">
-              {/* Downloads Folder */}
-              <div className="space-y-1.5">
-                <label className="font-bold text-slate-300 uppercase tracking-wider text-[11px] flex items-center justify-between">
-                  <span>Stream Downloads Directory</span>
-                  <button
-                    onClick={() => openDirectory(downloadsDir)}
-                    className="text-amber-400 hover:underline text-[10px] lowercase"
-                  >
-                    reveal in explorer
-                  </button>
-                </label>
-                <div className="flex items-center space-x-2">
-                  <input
-                    type="text"
-                    value={downloadsDir}
-                    onChange={(e) => setDownloadsDir(e.target.value)}
-                    className="flex-1 bg-slate-900 border border-white/15 rounded-lg px-3 py-2 text-xs text-white font-mono"
-                  />
-                  <button
-                    onClick={handlePickDownloadsDir}
-                    className="px-3 py-2 bg-white/10 hover:bg-white/15 text-white font-semibold rounded-lg text-xs"
-                  >
-                    Browse...
-                  </button>
-                </div>
-                <p className="text-[10px] text-slate-500">
-                  Default: <code className="text-slate-400">%USERPROFILE%\Videos\hclipper\downloads</code>
-                </p>
-              </div>
-
-              {/* Clips Folder */}
-              <div className="space-y-1.5">
-                <label className="font-bold text-slate-300 uppercase tracking-wider text-[11px] flex items-center justify-between">
-                  <span>Rendered Master Shorts Directory</span>
-                  <button
-                    onClick={() => openDirectory(clipsDir)}
-                    className="text-amber-400 hover:underline text-[10px] lowercase"
-                  >
-                    reveal in explorer
-                  </button>
-                </label>
-                <div className="flex items-center space-x-2">
-                  <input
-                    type="text"
-                    value={clipsDir}
-                    onChange={(e) => setClipsDir(e.target.value)}
-                    className="flex-1 bg-slate-900 border border-white/15 rounded-lg px-3 py-2 text-xs text-white font-mono"
-                  />
-                  <button
-                    onClick={handlePickClipsDir}
-                    className="px-3 py-2 bg-white/10 hover:bg-white/15 text-white font-semibold rounded-lg text-xs"
-                  >
-                    Browse...
-                  </button>
-                </div>
-                <p className="text-[10px] text-slate-500">
-                  Default: <code className="text-slate-400">%USERPROFILE%\Videos\hclipper\clips</code>
-                </p>
-              </div>
-            </div>
-
-            {/* Footer */}
-            <div className="flex items-center justify-between pt-3 border-t border-white/10">
-              {saveSuccess ? (
-                <span className="text-xs font-bold text-emerald-400 flex items-center space-x-1">
-                  <Check className="w-3.5 h-3.5" />
-                  <span>Preferences saved successfully!</span>
-                </span>
-              ) : <div />}
-
-              <div className="flex items-center space-x-2">
-                <button
-                  onClick={() => setShowSettingsModal(false)}
-                  className="px-3.5 py-1.5 bg-white/5 hover:bg-white/10 text-slate-300 rounded-lg text-xs"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleSaveSettings}
-                  className="px-4 py-1.5 bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold rounded-lg text-xs shadow-md shadow-amber-500/20"
-                >
-                  Save Settings
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Project Management Modal */}
-      <ProjectModal 
-        isOpen={showProjectModal} 
-        onClose={() => setShowProjectModal(false)} 
-      />
     </header>
   );
 };

@@ -346,7 +346,7 @@ export const ReframeView: React.FC<ReframeViewProps> = ({
                 <div className="flex items-center space-x-2">
                   <button
                     onClick={handleOpenRendered}
-                    className="px-4 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs rounded-lg transition-all flex items-center space-x-1.5 shadow-md shadow-emerald-500/20"
+                    className="px-4 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs rounded-lg transition-all flex items-center space-x-1.5 shadow-md shadow-emerald-500/20 active:scale-95"
                   >
                     <CheckCircle2 className="w-3.5 h-3.5" />
                     <span>Open in Player</span>
@@ -360,21 +360,29 @@ export const ReframeView: React.FC<ReframeViewProps> = ({
                   </button>
                   <button
                     onClick={handleRenderActiveClip}
-                    className="p-2.5 text-slate-400 hover:text-amber-400 transition-colors"
+                    disabled={isRendering || !sourceVideo}
+                    className="px-3.5 py-2.5 bg-white/5 hover:bg-white/10 text-amber-400 border border-amber-400/20 rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     title="Re-render with current settings"
                   >
                     <RefreshCw className="w-3.5 h-3.5" />
+                    <span>Re-render</span>
                   </button>
                 </div>
               ) : (
                 <button
                   onClick={handleRenderActiveClip}
                   disabled={isRendering || !sourceVideo}
-                  className="px-5 py-2.5 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 disabled:opacity-50 text-slate-950 font-bold text-xs rounded-lg transition-all shadow-md shadow-amber-500/10 flex items-center space-x-2"
+                  className={`px-5 py-2.5 rounded-lg text-xs font-bold transition-all flex items-center space-x-2 shadow-md ${
+                    isRendering
+                      ? 'bg-slate-800 text-slate-400 border border-white/10 cursor-not-allowed opacity-75'
+                      : !sourceVideo
+                      ? 'bg-slate-800/80 text-slate-500 border border-white/5 cursor-not-allowed'
+                      : 'bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 shadow-amber-500/20 active:scale-95'
+                  }`}
                 >
                   {isRendering ? (
                     <>
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-400" />
                       <span>Rendering ({renderProgress}%)...</span>
                     </>
                   ) : (
@@ -495,10 +503,31 @@ export const ReframeView: React.FC<ReframeViewProps> = ({
             </p>
             <button
               onClick={handleBatchRenderAll}
-              disabled={isBatchRendering || isRendering}
-              className="w-full py-2 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 font-bold text-xs rounded-lg transition-all shadow-md shadow-amber-500/10 flex items-center justify-center space-x-1.5 disabled:opacity-50"
+              disabled={isBatchRendering || isRendering || !sourceVideo}
+              className={`w-full py-2.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center space-x-2 shadow-md ${
+                isBatchRendering || isRendering
+                  ? 'bg-slate-800 text-slate-400 border border-white/10 cursor-not-allowed opacity-75'
+                  : !sourceVideo
+                  ? 'bg-slate-800/80 text-slate-500 border border-white/5 cursor-not-allowed'
+                  : 'bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 shadow-amber-500/20 active:scale-95'
+              }`}
             >
-              <span>{isBatchRendering ? 'Rendering Batch...' : `⚡ Batch Render All ${clips.length} Clips`}</span>
+              {isBatchRendering ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-400" />
+                  <span>Batch Rendering ({clips.filter(c => c.isRendered).length}/{clips.length} Finished)...</span>
+                </>
+              ) : isRendering ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-400" />
+                  <span>Rendering Single Clip in Progress...</span>
+                </>
+              ) : (
+                <>
+                  <Zap className="w-3.5 h-3.5" />
+                  <span>⚡ Batch Render All {clips.length} Clips (QSV)</span>
+                </>
+              )}
             </button>
           </div>
         </div>
