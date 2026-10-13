@@ -19,6 +19,9 @@ import {
   AlertCircle
 } from 'lucide-react';
 import { useWorkflow } from '../context/WorkflowContext';
+import { Button } from '../components/ui/button';
+import { Card } from '../components/ui/card';
+import { Slider } from '../components/ui/slider';
 
 interface ReframeViewProps {
   onNext: () => void;
@@ -464,9 +467,10 @@ export const ReframeView: React.FC<ReframeViewProps> = ({
               Output Aspect Ratio
             </span>
             <div className="grid grid-cols-3 gap-2">
-              <button
+              <Card
+                interactive
                 onClick={() => setReframeState((prev) => ({ ...prev, aspectRatio: '9:16' }))}
-                className={`p-3 rounded-lg border text-center transition-all ${
+                className={`p-3 text-center ${
                   aspectRatio === '9:16'
                     ? 'bg-amber-400/10 border-amber-400/50 text-white'
                     : 'bg-slate-900 border-white/5 text-slate-400 hover:text-white'
@@ -475,11 +479,12 @@ export const ReframeView: React.FC<ReframeViewProps> = ({
                 <Smartphone className="w-5 h-5 mx-auto mb-1 text-amber-400" />
                 <div className="text-xs font-bold">9:16</div>
                 <div className="text-[9px] text-slate-500">TikTok/Reels</div>
-              </button>
+              </Card>
 
-              <button
+              <Card
+                interactive
                 onClick={() => setReframeState((prev) => ({ ...prev, aspectRatio: '1:1' }))}
-                className={`p-3 rounded-lg border text-center transition-all ${
+                className={`p-3 text-center ${
                   aspectRatio === '1:1'
                     ? 'bg-amber-400/10 border-amber-400/50 text-white'
                     : 'bg-slate-900 border-white/5 text-slate-400 hover:text-white'
@@ -488,11 +493,12 @@ export const ReframeView: React.FC<ReframeViewProps> = ({
                 <Square className="w-5 h-5 mx-auto mb-1 text-sky-400" />
                 <div className="text-xs font-bold">1:1</div>
                 <div className="text-[9px] text-slate-500">Instagram</div>
-              </button>
+              </Card>
 
-              <button
+              <Card
+                interactive
                 onClick={() => setReframeState((prev) => ({ ...prev, aspectRatio: '16:9' }))}
-                className={`p-3 rounded-lg border text-center transition-all ${
+                className={`p-3 text-center ${
                   aspectRatio === '16:9'
                     ? 'bg-amber-400/10 border-amber-400/50 text-white'
                     : 'bg-slate-900 border-white/5 text-slate-400 hover:text-white'
@@ -501,7 +507,7 @@ export const ReframeView: React.FC<ReframeViewProps> = ({
                 <Monitor className="w-5 h-5 mx-auto mb-1 text-emerald-400" />
                 <div className="text-xs font-bold">16:9</div>
                 <div className="text-[9px] text-slate-500">Landscape</div>
-              </button>
+              </Card>
             </div>
           </div>
 
@@ -516,13 +522,12 @@ export const ReframeView: React.FC<ReframeViewProps> = ({
                 <span>Deadzone Leeway</span>
                 <span className="font-mono text-white font-bold">{deadzone}px</span>
               </div>
-              <input 
-                type="range" 
-                min="0" 
-                max="80" 
-                value={deadzone}
-                onChange={(e) => setReframeState((prev) => ({ ...prev, deadzone: parseInt(e.target.value) }))}
-                className="w-full accent-amber-400 bg-slate-800 rounded-lg cursor-pointer h-1.5"
+              <Slider
+                min={0}
+                max={80}
+                step={1}
+                value={[deadzone]}
+                onValueChange={(val) => setReframeState((prev) => ({ ...prev, deadzone: val[0] }))}
               />
               <p className="text-[10px] text-slate-500">
                 Prevents jittery camera pan when speaker makes slight head movements.
@@ -534,14 +539,12 @@ export const ReframeView: React.FC<ReframeViewProps> = ({
                 <span>Camera Pan Smooth Factor</span>
                 <span className="font-mono text-white font-bold">{smoothFactor}</span>
               </div>
-              <input 
-                type="range" 
-                min="0.01" 
-                max="0.2" 
-                step="0.01"
-                value={smoothFactor}
-                onChange={(e) => setReframeState((prev) => ({ ...prev, smoothFactor: parseFloat(e.target.value) }))}
-                className="w-full accent-amber-400 bg-slate-800 rounded-lg cursor-pointer h-1.5"
+              <Slider
+                min={0.01}
+                max={0.2}
+                step={0.01}
+                value={[smoothFactor]}
+                onValueChange={(val) => setReframeState((prev) => ({ ...prev, smoothFactor: val[0] }))}
               />
               <p className="text-[10px] text-slate-500">
                 Controls how fluidly the crop follows rapid stage pacing.
@@ -560,25 +563,19 @@ export const ReframeView: React.FC<ReframeViewProps> = ({
             <p className="text-[11px] text-slate-400">
               Renders all discovered viral moments into 9:16 vertical shorts sequentially using Intel QSV hardware acceleration.
             </p>
-            <button
+            <Button
               onClick={handleBatchRenderAll}
               disabled={isBatchRendering || isRendering || !sourceVideo}
-              className={`w-full py-2.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center space-x-2 shadow-md ${
-                isBatchRendering || isRendering
-                  ? 'bg-slate-800 text-slate-400 border border-white/10 cursor-not-allowed opacity-75'
-                  : !sourceVideo
-                  ? 'bg-slate-800/80 text-slate-500 border border-white/5 cursor-not-allowed'
-                  : 'bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 shadow-amber-500/20 active:scale-95'
-              }`}
+              className="w-full justify-center py-2.5"
             >
               {isBatchRendering ? (
                 <>
-                  <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-400" />
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
                   <span>Batch Rendering ({clips.filter(c => c.isRendered).length}/{clips.length} Finished)...</span>
                 </>
               ) : isRendering ? (
                 <>
-                  <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-400" />
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
                   <span>Rendering Single Clip in Progress...</span>
                 </>
               ) : (
@@ -587,7 +584,7 @@ export const ReframeView: React.FC<ReframeViewProps> = ({
                   <span>⚡ Batch Render All {clips.length} Clips (QSV)</span>
                 </>
               )}
-            </button>
+            </Button>
           </div>
         </div>
       </div>
