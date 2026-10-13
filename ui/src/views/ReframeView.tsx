@@ -58,8 +58,10 @@ export const ReframeView: React.FC<ReframeViewProps> = ({
   const [cropXPercent, setCropXPercent] = useState(34);
   const [isBatchRendering, setIsBatchRendering] = useState(false);
   const [showRerenderConfirm, setShowRerenderConfirm] = useState(false);
+  const [previewMode, setPreviewMode] = useState<'stage' | 'cropped'>('stage');
 
   const videoRef = useRef<HTMLVideoElement>(null);
+  const croppedVideoRef = useRef<HTMLVideoElement>(null);
 
   const activeClip = clips[activeClipIndex] || {
     id: 'Clip1',
@@ -123,24 +125,42 @@ export const ReframeView: React.FC<ReframeViewProps> = ({
   const activeLeft = aspectRatio === '16:9' ? 0 : Math.min(Math.max(cropXPercent, 0), 100 - config.widthPct);
   const activeCenter = aspectRatio === '16:9' ? 50 : activeLeft + (config.widthPct / 2);
 
-  // Synchronize playback frame with crop position
+  // Play/pause real video element and keep playback within active clip range
   useEffect(() => {
-    let animId: number;
-    if (isPlaying && trajectoryData.length > 0) {
-      const step = () => {
-        setCurrentFrameIndex((prev) => {
-          const next = (prev + 1) % trajectoryData.length;
-          const frameCoord = trajectoryData[next];
-          const pct = (frameCoord / 1280) * 100;
-          setCropXPercent(pct);
-          return next;
-        });
-        animId = requestAnimationFrame(step);
-      };
-      animId = requestAnimationFrame(step);
+    const v = previewMode === 'cropped' ? croppedVideoRef.current : videoRef.current;
+    if (!v) return;
+
+    if (isPlaying) {
+      if (v.currentTime < activeClip.start || v.currentTime >= activeClip.end) {
+        v.currentTime = activeClip.start;
+      }
+      v.play().catch(() => {});
+    } else {
+      v.pause();
     }
-    return () => cancelAnimationFrame(animId);
-  }, [isPlaying, trajectoryData]);
+  }, [isPlaying, previewMode, activeClip.start, activeClip.end]);
+
+  const handleTimeUpdate = (e: React.SyntheticEvent<HTMLVideoElement>) => {
+    const v = e.currentTarget;
+    if (v.currentTime >= activeClip.end) {
+      v.currentTime = activeClip.start;
+      return;
+    }
+
+    const elapsed = Math.max(0, v.currentTime - activeClip.start);
+    const dur = Math.max(1, activeClip.end - activeClip.start);
+
+    if (trajectoryData && trajectoryData.length > 0) {
+      const idx = Math.min(
+        trajectoryData.length - 1,
+        Math.floor((elapsed / dur) * trajectoryData.length)
+      );
+      setCurrentFrameIndex(idx);
+      const frameCoord = trajectoryData[idx];
+      const pct = (frameCoord / 1280) * 100;
+      setCropXPercent(pct);
+    }
+  };
 
   const handleOpenRendered = () => {
     if (window.hclipper && renderedOutput) {
@@ -232,82 +252,112 @@ export const ReframeView: React.FC<ReframeViewProps> = ({
           <div className="flex items-center justify-between text-xs">
             <span className="font-semibold text-slate-200 flex items-center gap-1.5">
               <Eye className="w-4 h-4 text-amber-400" />
-              Clip #{activeClipIndex + 1} Face Tracking & 9:16 Crop Window
+              Clip #{activeClipIndex + 1} Face Tracking & {aspectRatio} Framing
             </span>
             <div className="flex items-center space-x-2">
+              <div className="flex bg-slate-900 border border-white/10 rounded-lg p-0.5 text-[10px]">
+                <button
+                  onClick={() => setPreviewMode('stage')}
+                  className={`px-2 py-0.5 rounded font-medium transition-all ${
+                    previewMode === 'stage' ? 'bg-amber-400 text-slate-950 font-bold' : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  Stage View
+                </button>
+                <button
+                  onClick={() => setPreviewMode('cropped')}
+                  className={`px-2 py-0.5 rounded font-medium transition-all ${
+                    previewMode === 'cropped' ? 'bg-amber-400 text-slate-950 font-bold' : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  Reframed ({aspectRatio})
+                </button>
+              </div>
               <span className="text-[11px] text-emerald-400 font-mono bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded">
-                Intel QSV Hardware Accel
+                Intel QSV Fast
               </span>
             </div>
           </div>
 
-          {/* 16:9 Container Canvas */}
-          <div className="relative aspect-video bg-slate-950 rounded-lg border border-white/10 overflow-hidden flex items-center justify-center">
-            {/* Simulated Stage Background */}
-            <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-900 to-slate-800 opacity-70" />
+          {/* Video Container Canvas */}
+          {previewMode === 'stage' ? (
+            <div className="relative aspect-video bg-slate-950 rounded-lg border border-white/10 overflow-hidden flex items-center justify-center">
+              {formattedSourceVideo ? (
+                <video
+                  ref={videoRef}
+                  src={formattedSourceVideo}
+                  onTimeUpdate={handleTimeUpdate}
+                  className="w-full h-full object-cover"
+                  playsInline
+                  muted
+                />
+              ) : (
+                <div className="text-slate-600 text-xs">No media loaded</div>
+              )}
 
-            {/* Video preview if available */}
-            {formattedSourceVideo ? (
-              <video
-                ref={videoRef}
-                src={formattedSourceVideo}
-                className="w-full h-full object-cover opacity-60"
-                playsInline
-                muted
-              />
-            ) : (
-              <div className="text-slate-600 text-xs">No media loaded</div>
-            )}
-            
-            {/* Speaker Silhouette Graphic - Dead-Centered Reticle on Face & Torso */}
-            <div 
-              className="absolute bottom-4 flex flex-col items-center transition-all duration-75 select-none" 
-              style={{ 
-                left: `${activeCenter}%`,
-                transform: 'translateX(-50%)'
-              }}
-            >
-              {/* Head with Concentric Crosshair & Reticle */}
-              <div className="w-16 h-16 rounded-full bg-slate-700/90 border-2 border-amber-400/90 shadow-xl relative flex items-center justify-center">
-                <div className="absolute w-full h-[1px] bg-amber-400/50" />
-                <div className="absolute h-full w-[1px] bg-amber-400/50" />
-                <div className="w-6 h-6 rounded-full border border-amber-300/80" />
-                <span className="absolute -top-5 bg-amber-400 text-slate-950 font-bold text-[8px] px-1 rounded uppercase tracking-wider">
-                  YuNet Face Lock
-                </span>
-              </div>
-              <div className="w-5 h-2 bg-slate-700/80 -mt-0.5" />
-              <div className="w-32 h-24 bg-slate-800/90 rounded-t-[32px] border border-white/10 shadow-inner flex justify-center pt-2">
-                <Target className="w-4 h-4 text-slate-600/60" />
+              {/* Dynamic Aspect Ratio Crop Window Highlight */}
+              <div 
+                className="absolute top-0 bottom-0 bg-transparent border-2 border-amber-400 shadow-2xl transition-all duration-75 flex flex-col justify-between p-2 pointer-events-none"
+                style={{
+                  width: `${config.widthPct}%`,
+                  left: `${activeLeft}%`,
+                  boxShadow: aspectRatio === '16:9' ? 'none' : '0 0 0 9999px rgba(0, 0, 0, 0.65)'
+                }}
+              >
+                <div className="flex justify-between items-center text-[9px] font-bold text-amber-300 bg-black/85 px-2 py-0.5 rounded shadow">
+                  <span>{config.badgeTitle}</span>
+                  <span className="font-mono">{config.resolution}</span>
+                </div>
+
+                {/* Subtle Target Reticle in Center of Crop */}
+                <div className="self-center flex items-center gap-1 bg-black/75 px-2 py-0.5 rounded-full border border-amber-400/30 text-[8px] text-amber-300 font-bold">
+                  <Target className="w-2.5 h-2.5 text-amber-400" />
+                  <span>YuNet Face Lock</span>
+                </div>
+
+                <div className="text-center text-[9px] text-amber-300 bg-black/85 px-1.5 py-0.5 rounded self-center shadow">
+                  Deadzone Pan: Frame {currentFrameIndex}
+                </div>
               </div>
             </div>
-
-            {/* Dynamic Aspect Ratio Crop Window Highlight */}
-            <div 
-              className="absolute top-0 bottom-0 bg-transparent border-2 border-amber-400 shadow-2xl transition-all duration-75 flex flex-col justify-between p-2 pointer-events-none"
-              style={{
-                width: `${config.widthPct}%`,
-                left: `${activeLeft}%`,
-                boxShadow: aspectRatio === '16:9' ? 'none' : '0 0 0 9999px rgba(0, 0, 0, 0.65)'
-              }}
-            >
-              <div className="flex justify-between items-center text-[9px] font-bold text-amber-300 bg-black/80 px-2 py-0.5 rounded shadow">
-                <span>{config.badgeTitle}</span>
-                <span className="font-mono">{config.resolution}</span>
-              </div>
-              <div className="text-center text-[9px] text-amber-300 bg-black/80 px-1.5 py-0.5 rounded self-center shadow">
-                Deadzone Pan Camera: Frame {currentFrameIndex}
+          ) : (
+            /* Cropped Reframed Preview (9:16 or 1:1) */
+            <div className="relative aspect-video bg-slate-950 rounded-lg border border-white/10 overflow-hidden flex items-center justify-center p-2">
+              <div 
+                className="h-full bg-slate-900 rounded-xl overflow-hidden shadow-2xl border-2 border-amber-400/80 relative"
+                style={{
+                  aspectRatio: aspectRatio === '9:16' ? '9/16' : aspectRatio === '1:1' ? '1/1' : '16/9'
+                }}
+              >
+                {formattedSourceVideo ? (
+                  <video
+                    ref={croppedVideoRef}
+                    src={formattedSourceVideo}
+                    onTimeUpdate={handleTimeUpdate}
+                    className="w-full h-full object-cover"
+                    style={{
+                      objectPosition: `${activeCenter}% center`
+                    }}
+                    playsInline
+                    muted
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-slate-600 text-xs">No media</div>
+                )}
+                <div className="absolute top-2 left-2 bg-black/80 px-2 py-0.5 rounded text-[8px] font-bold text-amber-300 border border-amber-400/30">
+                  {config.badgeTitle}
+                </div>
               </div>
             </div>
-          </div>
+          )}
 
           <div className="flex items-center justify-between pt-1">
             <div className="flex items-center space-x-2">
               <button
                 onClick={() => setIsPlaying(!isPlaying)}
-                disabled={trajectoryData.length === 0}
-                className="w-8 h-8 rounded-lg bg-amber-400 hover:bg-amber-300 disabled:opacity-40 text-slate-950 font-bold flex items-center justify-center transition-all"
-                title={isPlaying ? 'Pause Tracking Preview' : 'Play Tracking Preview'}
+                disabled={!formattedSourceVideo}
+                className="w-8 h-8 rounded-lg bg-amber-400 hover:bg-amber-300 disabled:opacity-40 text-slate-950 font-bold flex items-center justify-center transition-all shadow"
+                title={isPlaying ? 'Pause Clip Preview' : 'Play Clip Preview'}
               >
                 {isPlaying ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5 ml-0.5" />}
               </button>

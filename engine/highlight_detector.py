@@ -150,12 +150,34 @@ Example format:
                     clips = []
 
                 if clips and len(clips) > 0:
-                    return clips[:count]
+                    selected = clips[:count]
+                    self._attach_transcript_cues(selected, cues)
+                    return selected
             except Exception as e:
                 sys.stderr.write(f"[HighlightScout] Provider '{self.provider}' failed: {e}. Executing on-device heuristic.\n")
                 sys.stderr.flush()
 
-        return self._heuristic_fallback(cues, count=count, duration=duration, video_path=video_path)
+        fallback_selected = self._heuristic_fallback(cues, count=count, duration=duration, video_path=video_path)
+        self._attach_transcript_cues(fallback_selected, cues)
+        return fallback_selected
+
+    def _attach_transcript_cues(self, clips: List[Dict[str, Any]], cues: List[Dict[str, Any]]):
+        """Attaches clip-relative transcript cues for synchronized subtitle playback."""
+        for clip in clips:
+            c_start = clip.get("start", 0.0)
+            c_end = clip.get("end", c_start + 30.0)
+            matched = [
+                {
+                    "start": round(max(0.0, c["start"] - c_start), 2),
+                    "end": round(max(0.1, c["end"] - c_start), 2),
+                    "text": c["text"].strip()
+                }
+                for c in cues
+                if c.get("end", 0.0) >= c_start and c.get("start", 0.0) <= c_end
+            ]
+            clip["transcript_cues"] = matched
+            if not clip.get("customHeadline"):
+                clip["customHeadline"] = clip.get("title", "SERMON HIGHLIGHT").upper()
 
     def _resolve_cues(self, transcript_text: str, video_path: Optional[str]) -> List[Dict[str, Any]]:
         """
@@ -519,13 +541,20 @@ Example format:
 
         # If cues are unavailable, generate dynamic windows across estimated video length
         video_dur = 1200.0
-        base_title = "Video Insight"
+        base_title = "Sermon Insight"
         if video_path:
             p = Path(video_path)
-            clean_name = re.sub(r'\[[a-zA-Z0-9_-]+\]', '', p.stem)
-            clean_name = re.sub(r'[|｜_]+', ' ', clean_name).strip()
+            raw = p.stem
+            # Strip YouTube IDs like [4_Uetxw16pE]
+            raw = re.sub(r'\[[a-zA-Z0-9_-]+\]', '', raw)
+            # Strip dates like JAN. 21, 2025
+            raw = re.sub(r'(?:JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)[a-z]*\.?\s+\d{1,2},?\s+\d{4}', '', raw, flags=re.IGNORECASE)
+            # Take only the sermon title before any delimiter (| or — or -)
+            parts = re.split(r'[|｜—–]', raw)
+            clean_name = parts[0].strip() if parts else raw.strip()
+            clean_name = re.sub(r'\s+', ' ', clean_name).strip(' -_|,')
             if clean_name:
-                base_title = clean_name[:35]
+                base_title = clean_name[:45]
 
         target_dur = (min_dur + max_dur) / 2.0
         step = max(target_dur + 30.0, video_dur / max(count, 1))
@@ -539,8 +568,8 @@ Example format:
                 "start": start,
                 "end": end,
                 "score": score,
-                "title": f"{base_title} Part {i + 1}",
-                "hook": f"KEY LESSON {i + 1}: {base_title.upper()}",
+                "title": f"{base_title} (Part {i + 1})",
+                "hook": f"KEY LESSON #{i + 1}: {base_title.upper()}",
                 "reason": f"High engagement cadence window for short-form audience."
             })
 

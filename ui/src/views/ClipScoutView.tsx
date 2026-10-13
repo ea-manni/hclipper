@@ -240,8 +240,9 @@ export const ClipScoutView: React.FC<ClipScoutViewProps> = ({
             reason: c.reason || 'Strong emotional hook and self-contained message.',
             durationAdvisory: c.duration_advisory || c.durationAdvisory || '',
             storyArc: c.story_arc || c.storyArc || ((typeof c.end === 'number' && typeof c.start === 'number' && (c.end - c.start) >= 50) ? 'complete_story' : 'punchy_takeaway'),
-            customHeadline: c.hook || c.title || `VIRAL CLIP #${i + 1}`,
+            customHeadline: (c.customHeadline || c.title || `VIRAL CLIP #${i + 1}`).toUpperCase(),
             subtitlePreset: 'tiktok_bold',
+            transcriptCues: c.transcript_cues || c.transcriptCues || [],
             isRendered: false
           }));
           setClips(formatted);
@@ -256,7 +257,16 @@ export const ClipScoutView: React.FC<ClipScoutViewProps> = ({
     // Dynamic browser preview fallback (used when running outside Electron)
     setTimeout(() => {
       setIsScouting(false);
-      const baseName = sourceVideo ? sourceVideo.split(/[/\\]/).pop()?.replace(/\.[^.]+$/, '') || 'Media' : 'Video Highlight';
+      let rawName = sourceVideo ? sourceVideo.split(/[/\\]/).pop()?.replace(/\.[^.]+$/, '') || 'Media' : 'Video Highlight';
+      // Strip YouTube IDs like [4_Uetxw16pE]
+      rawName = rawName.replace(/\[[a-zA-Z0-9_-]+\]/g, '');
+      // Strip dates like JAN. 21, 2025
+      rawName = rawName.replace(/(?:JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)[a-z]*\.?\s+\d{1,2},?\s+\d{4}/gi, '');
+      rawName = rawName.replace(/\b\d{4}\b/g, '');
+      // Keep only title before delimiter (| or — or -)
+      const parts = rawName.split(/[|｜—–]/);
+      const baseName = (parts[0] || rawName).trim().replace(/\s+/g, ' ') || 'Sermon Highlight';
+
       const durSec = targetDuration === 'short' ? 35 : targetDuration === 'long' ? 75 : 55;
       const step = durSec + 30;
       const generated: ClipCandidate[] = Array.from({ length: clipCount }, (_, i) => ({
@@ -264,10 +274,10 @@ export const ClipScoutView: React.FC<ClipScoutViewProps> = ({
         start: 15.0 + i * step,
         end: 15.0 + i * step + durSec,
         score: Math.max(80, 97 - i * 2),
-        title: `${baseName} Insight #${i + 1}`,
+        title: `${baseName} (Insight #${i + 1})`,
         hook: `KEY LESSON #${i + 1}: ${baseName.toUpperCase()}`,
         reason: 'Standout narrative window detected by speech cadence heuristics.',
-        customHeadline: `${baseName.toUpperCase()} #${i + 1}`,
+        customHeadline: baseName.toUpperCase(),
         subtitlePreset: 'tiktok_bold',
         isRendered: false
       }));

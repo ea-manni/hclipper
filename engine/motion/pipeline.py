@@ -113,77 +113,21 @@ class DynamicMotionPipeline:
         duration_out = subprocess.check_output(probe_cmd, text=True).strip()
         duration = float(duration_out) if duration_out else 30.0
 
-        # Generate or use provided cues
+        # Generate or use provided cues dynamically
         if custom_cues:
             cues = custom_cues
-        elif template_name == "human_motion.html":
-            # Bespoke human-engaging motion events matching Pastor David Ogbueli's sermon
-            cues = [
-                {
-                    "id": "cue_hook_scribble",
-                    "type": "handwritten_hook",
-                    "start": 0.0,
-                    "sfx_time": 0.3,
-                    "duration": 3.8,
-                    "sfx": "pencil_scribble",
-                    "title": "WHAT YOU PURSUE...",
-                    "subtitle": "...God Will Fulfill"
-                },
-                {
-                    "id": "cue_speaker_lower_third",
-                    "type": "editorial_speaker",
-                    "start": 4.2,
-                    "sfx_time": 4.2,
-                    "duration": 4.0,
-                    "sfx": "paper_slide",
-                    "speaker": speaker,
-                    "topic": topic
-                },
-                {
-                    "id": "cue_strikeout_misconception",
-                    "type": "strikeout",
-                    "start": 10.5,
-                    "sfx_time": 11.8,
-                    "duration": 4.7,
-                    "sfx": "red_scratch",
-                    "quote": "Rolls-Royce & 50 Houses"
-                },
-                {
-                    "id": "cue_highlighter_emphasis",
-                    "type": "highlighter_sweep",
-                    "start": 19.5,
-                    "sfx_time": 20.8,
-                    "duration": 6.0,
-                    "sfx": "marker_squeak",
-                    "keyword": "IS AN ART & A SKILL"
-                },
-                {
-                    "id": "cue_sub_thud_emphasis",
-                    "type": "sound_accent",
-                    "start": 22.2,
-                    "sfx_time": 22.2,
-                    "duration": 1.0,
-                    "sfx": "sub_thud"
-                },
-                {
-                    "id": "cue_scripture_wisdom",
-                    "type": "scripture_wisdom",
-                    "start": 25.8,
-                    "sfx_time": 26.0,
-                    "duration": 4.0,
-                    "sfx": "warm_chime",
-                    "verse": "Ask what I shall give thee — 1 Kings 3:5"
-                }
-            ]
         else:
             cues = self.detector.detect_cues(transcript_cues or [], clip_duration=duration)
             for c in cues:
-                if c.get("type") == "kinetic_hook":
+                if c.get("type") in ("kinetic_hook", "handwritten_hook"):
+                    words = (clip_headline or "SERMON INSIGHT").upper().split()
                     c["headline"] = clip_headline.upper()
-                    c["highlightWord"] = clip_headline.upper().split()[0] if clip_headline else "PURPOSE"
-                elif c.get("type") == "lower_third":
-                    c["speaker"] = speaker
-                    c["topic"] = topic
+                    c["highlightWord"] = words[0] if words else "PURPOSE"
+                    c["title"] = " ".join(words[:4]) if len(words) >= 4 else (clip_headline.upper())
+                    c["subtitle"] = " ".join(words[4:]) if len(words) > 4 else (topic or "")
+                elif c.get("type") in ("lower_third", "editorial_speaker"):
+                    c["speaker"] = speaker or "Preacher"
+                    c["topic"] = topic or "Sermon Highlight"
 
         print(f"[DynamicMotionPipeline] Scheduled {len(cues)} bespoke motion events for {duration:.1f}s clip:")
         for idx, c in enumerate(cues):

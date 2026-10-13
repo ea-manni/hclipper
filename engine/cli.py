@@ -298,19 +298,26 @@ def cmd_session_status(args):
 
 def cmd_motion(args):
     from engine.motion.pipeline import DynamicMotionPipeline
-    pipeline = DynamicMotionPipeline()
-    out = pipeline.process_clip(
-        video_path=args.input,
-        output_path=args.output,
-        clip_headline=getattr(args, "headline", None) or "",
-        speaker=getattr(args, "speaker", None) or "",
-        topic=getattr(args, "topic", None) or "",
-        template_name=getattr(args, "template", None) or "human_motion.html"
-    )
-    if args.json:
-        emit_json("result", {"output": out})
-    else:
-        print(f"Motion design clip rendered: {out}")
+    try:
+        pipeline = DynamicMotionPipeline()
+        out = pipeline.process_clip(
+            video_path=args.input,
+            output_path=args.output,
+            clip_headline=getattr(args, "headline", None) or "",
+            speaker=getattr(args, "speaker", None) or "",
+            topic=getattr(args, "topic", None) or "",
+            template_name=getattr(args, "template", None) or "kinetic_hook.html"
+        )
+        if args.json:
+            emit_json("motion_result", {"success": True, "output": out})
+        else:
+            print(f"Motion design clip rendered: {out}")
+    except Exception as e:
+        if args.json:
+            emit_json("motion_result", {"success": False, "error": str(e), "output": args.output})
+        else:
+            print(f"Motion design rendering failed: {e}", file=sys.stderr)
+        sys.exit(1)
 
 def main():
     common_parser = argparse.ArgumentParser(add_help=False)
@@ -411,6 +418,7 @@ def main():
     p_hl.add_argument("--provider", default="gemini", choices=["gemini", "openai", "anthropic", "deepseek", "local"], help="AI provider")
     p_hl.add_argument("--api-key", help="API key for selected provider")
     p_hl.add_argument("--model", help="Custom model identifier")
+    p_hl.set_defaults(func=cmd_highlights)
     # Motion Design (Dynamic Multi-Cue Animation & SFX)
     p_mo = subparsers.add_parser("motion", help="Render bespoke dynamic motion design overlay and SFX", parents=[common_parser])
     p_mo.add_argument("input", help="Source video")
@@ -418,7 +426,7 @@ def main():
     p_mo.add_argument("--headline", help="Hook headline text")
     p_mo.add_argument("--speaker", help="Speaker name")
     p_mo.add_argument("--topic", help="Topic or sermon title")
-    p_mo.add_argument("--template", default="human_motion.html", help="Motion template name")
+    p_mo.add_argument("--template", default="kinetic_hook.html", help="Motion template name")
     p_mo.set_defaults(func=cmd_motion)
 
     args = parser.parse_args()
