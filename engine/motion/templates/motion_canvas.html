@@ -1,0 +1,660 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>hclipper Universal Dynamic Motion Canvas</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      user-select: none;
+    }
+    body {
+      background: transparent;
+      width: 1080px;
+      height: 1920px;
+      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+    }
+    #stage {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 1080px;
+      height: 1920px;
+      pointer-events: none;
+    }
+
+    /* Container for dynamically injected cue elements */
+    .cue-container {
+      position: absolute;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      pointer-events: none;
+      transform-origin: center center;
+      will-change: transform, opacity;
+    }
+
+    /* Positions across the 9:16 vertical canvas */
+    .pos-top-center { top: 150px; left: 54px; width: 972px; }
+    .pos-upper-center { top: 380px; left: 100px; width: 880px; }
+    .pos-floating-right { top: 460px; right: 54px; width: 440px; transform-origin: right center; }
+    .pos-floating-left { top: 460px; left: 54px; width: 440px; transform-origin: left center; }
+    .pos-bottom-left { bottom: 440px; left: 60px; }
+    .pos-bottom-center { bottom: 380px; left: 140px; width: 800px; }
+
+    /* =========================================
+       ASSET STYLES
+       ========================================= */
+
+    /* 1. WhatsApp Chat Bubble */
+    .chat-bubble-whatsapp {
+      background: #1F2C34;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 20px;
+      padding: 16px 20px;
+      box-shadow: 0 16px 36px rgba(0, 0, 0, 0.65), 0 0 20px rgba(37, 211, 102, 0.2);
+      color: #fff;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      width: 100%;
+    }
+    .chat-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .chat-avatar {
+      width: 38px;
+      height: 38px;
+      border-radius: 50%;
+      background: #25D366;
+      color: #0B141A;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 900;
+      font-size: 18px;
+    }
+    .chat-sender {
+      font-size: 19px;
+      font-weight: 700;
+      color: #25D366;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .chat-body {
+      font-size: 24px;
+      font-weight: 600;
+      line-height: 1.25;
+      color: #E9EDEF;
+    }
+    .chat-footer {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 6px;
+      font-size: 15px;
+      color: #8696A0;
+    }
+    .chat-ticks { color: #53BDEB; font-weight: bold; }
+
+    /* 2. Currency Badge (₦ Naira, $ Dollar) */
+    .currency-badge {
+      background: rgba(8, 28, 18, 0.92);
+      backdrop-filter: blur(20px);
+      border: 2px solid #10B981;
+      border-radius: 24px;
+      padding: 14px 24px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.7), 0 0 35px rgba(16, 185, 129, 0.35);
+      color: #fff;
+    }
+    .currency-coin {
+      width: 58px;
+      height: 58px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #34D399, #059669);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 32px;
+      font-weight: 900;
+      color: #064E3B;
+      box-shadow: 0 0 16px rgba(52, 211, 153, 0.6);
+    }
+    .currency-info { display: flex; flex-direction: column; }
+    .currency-amount {
+      font-size: 38px;
+      font-weight: 900;
+      color: #6EE7B7;
+      letter-spacing: -0.02em;
+    }
+    .currency-label {
+      font-size: 15px;
+      font-weight: 800;
+      color: #A7F3D0;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    /* 3. Brand Stickers (Bolt or inDrive) */
+    .brand-stickers-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 20px;
+      background: rgba(15, 20, 30, 0.88);
+      backdrop-filter: blur(20px);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 999px;
+      padding: 12px 32px;
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6);
+    }
+    .brand-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 30px;
+      font-weight: 900;
+    }
+    .bolt-badge { color: #34D399; }
+    .bolt-text { font-family: sans-serif; font-weight: 900; }
+    .indrive-badge { color: #EAB308; }
+    .indrive-icon {
+      background: #EAB308;
+      color: #000;
+      border-radius: 8px;
+      padding: 2px 8px;
+      font-size: 20px;
+      font-weight: 900;
+    }
+    .brand-vs {
+      font-size: 20px;
+      font-weight: 700;
+      color: rgba(255, 255, 255, 0.6);
+      text-transform: uppercase;
+    }
+
+    /* 4. Conceptual Math (dy/dx) */
+    .math-overlay {
+      background: rgba(12, 16, 26, 0.90);
+      backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 20px;
+      padding: 16px 24px;
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.7);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+    }
+    .math-chalk {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-family: "Times New Roman", Times, serif;
+      font-style: italic;
+      font-size: 36px;
+      color: #FFFFFF;
+    }
+    .math-fraction {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      border-bottom: 2px solid #fff;
+      line-height: 1;
+      padding-bottom: 2px;
+    }
+    .math-subtext {
+      font-family: sans-serif;
+      font-style: normal;
+      font-size: 16px;
+      font-weight: 700;
+      color: #94A3B8;
+      letter-spacing: 0.05em;
+    }
+
+    /* 5. Scripture Plaque */
+    .scripture-plaque {
+      background: rgba(18, 14, 8, 0.92);
+      backdrop-filter: blur(20px);
+      border: 2px solid #F59E0B;
+      border-radius: 24px;
+      padding: 22px 32px;
+      box-shadow: 0 16px 50px rgba(0, 0, 0, 0.7), 0 0 35px rgba(245, 158, 11, 0.3);
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      width: 100%;
+    }
+    .scripture-badge {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 18px;
+      font-weight: 800;
+      color: #FCD34D;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .scripture-quote {
+      font-size: 28px;
+      font-weight: 700;
+      font-style: italic;
+      color: #FFFBEB;
+      line-height: 1.25;
+    }
+
+    /* 6. Warning Stamp */
+    .warning-stamp {
+      background: #EF4444;
+      border: 3px solid #FCA5A5;
+      border-radius: 999px;
+      padding: 12px 32px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      color: #FFFFFF;
+      font-size: 24px;
+      font-weight: 900;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      box-shadow: 0 16px 40px rgba(239, 68, 68, 0.5);
+    }
+
+    /* 7. Kinetic Hook Banner & Lower Third */
+    .hook-card {
+      width: 100%;
+      background: rgba(10, 13, 20, 0.90);
+      backdrop-filter: blur(24px);
+      border-radius: 28px;
+      padding: 28px 36px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6), 0 0 40px rgba(0, 245, 255, 0.15);
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .pill-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 16px;
+      border-radius: 999px;
+      background: rgba(0, 245, 255, 0.12);
+      border: 1px solid rgba(0, 245, 255, 0.35);
+      color: #00F5FF;
+      font-size: 20px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+    .headline-text {
+      font-size: 46px;
+      font-weight: 900;
+      color: #FFFFFF;
+      line-height: 1.15;
+      letter-spacing: -0.02em;
+    }
+    .headline-text span.highlight {
+      color: #00F5FF;
+      text-shadow: 0 0 20px rgba(0, 245, 255, 0.6);
+    }
+
+    /* Lower Third Pill */
+    .lower-third-pill {
+      background: rgba(12, 16, 26, 0.92);
+      backdrop-filter: blur(20px);
+      border-radius: 999px;
+      padding: 10px 24px 10px 14px;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6), 0 0 30px rgba(250, 204, 21, 0.15);
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    .lt-avatar {
+      width: 60px;
+      height: 60px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #FACC15, #CA8A04);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 26px;
+      font-weight: 900;
+      color: #0F172A;
+    }
+    .lt-name { font-size: 26px; font-weight: 800; color: #FFF; }
+    .lt-topic { font-size: 16px; font-weight: 700; color: #FACC15; text-transform: uppercase; }
+
+    /* Outro CTA */
+    .outro-cta-card {
+      background: rgba(10, 14, 24, 0.94);
+      backdrop-filter: blur(20px);
+      border: 2px solid #00F5FF;
+      border-radius: 999px;
+      padding: 16px 36px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      color: #FFFFFF;
+      font-size: 26px;
+      font-weight: 900;
+      letter-spacing: 0.05em;
+      box-shadow: 0 16px 50px rgba(0, 0, 0, 0.8), 0 0 35px rgba(0, 245, 255, 0.35);
+    }
+
+    /* Dev Preview Scrubber (Removed during headless render) */
+    #dev-scrubber {
+      position: fixed;
+      bottom: 24px;
+      left: 54px;
+      width: 972px;
+      background: rgba(15, 23, 42, 0.95);
+      padding: 16px 24px;
+      border-radius: 16px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      color: #fff;
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      font-family: monospace;
+      font-size: 18px;
+      z-index: 9999;
+    }
+    #dev-scrubber input[type="range"] { flex: 1; height: 8px; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <div id="stage">
+    <!-- Active cues rendered here dynamically -->
+  </div>
+
+  <div id="dev-scrubber">
+    <span id="timeLabel">0.00s</span>
+    <input type="range" id="timeSlider" min="0" max="30.0" step="0.02" value="0">
+    <button id="playBtn" style="padding: 6px 16px; background: #00F5FF; color: #000; border: none; border-radius: 8px; font-weight: bold; cursor: pointer;">PLAY</button>
+  </div>
+
+  <script src="../motion.js"></script>
+  <script>
+    const { Spring, Springs, track, lerp, clamp } = window.MotionEngine;
+
+    // Default timeline cue manifest (can be overridden by window.CONFIG)
+    window.CONFIG = {
+      duration: 30.0,
+      speaker: "Pastor Bankie",
+      topic: "The Believer's Calling",
+      cues: [
+        {
+          id: "hook_0",
+          type: "kinetic_hook",
+          start: 0.0,
+          duration: 3.5,
+          position: "pos-top-center",
+          headline: "WHY PURPOSE PRECEDES PROVISION IN LIFE",
+          highlightWord: "PURPOSE"
+        },
+        {
+          id: "lt_1",
+          type: "lower_third",
+          start: 4.0,
+          duration: 3.8,
+          position: "pos-bottom-left",
+          speaker: "Pastor Bankie",
+          topic: "Divine Foundation"
+        },
+        {
+          id: "chat_2",
+          type: "chat_bubble",
+          start: 11.5,
+          duration: 3.6,
+          position: "pos-floating-right",
+          sender: "Ella",
+          text: "I'll give you 5k for every kg gained",
+          platform: "whatsapp"
+        },
+        {
+          id: "money_3",
+          type: "currency_badge",
+          start: 16.8,
+          duration: 3.2,
+          position: "pos-floating-left",
+          currency: "₦",
+          amount: "30,000",
+          label: "PROVISION & GAIN"
+        },
+        {
+          id: "brand_4",
+          type: "brand_stickers",
+          start: 21.0,
+          duration: 3.2,
+          position: "pos-upper-center",
+          brands: ["Bolt", "inDrive"]
+        },
+        {
+          id: "math_5",
+          type: "conceptual_math",
+          start: 25.0,
+          duration: 3.2,
+          position: "pos-floating-right",
+          formula: "dy / dx = ?",
+          subtext: "Math is not mathing"
+        },
+        {
+          id: "outro_6",
+          type: "outro_cta",
+          start: 26.5,
+          duration: 3.5,
+          position: "pos-bottom-center",
+          handle: "FOLLOW @PASTORBANKIE"
+        }
+      ]
+    };
+
+    window.TOTAL_DURATION = window.CONFIG.duration;
+
+    const stage = document.getElementById("stage");
+
+    function renderCueHtml(c) {
+      if (c.type === "kinetic_hook") {
+        return `
+        <div class="cue-container ${c.position}" id="el_${c.id}">
+          <div class="hook-card">
+            <div><span class="pill-badge">KEY INSIGHT</span></div>
+            <div class="headline-text">${c.headline.replace(c.highlightWord, `<span class="highlight">${c.highlightWord}</span>`)}</div>
+          </div>
+        </div>
+        `;
+      } else if (c.type === "lower_third") {
+        return `
+        <div class="cue-container ${c.position}" id="el_${c.id}">
+          <div class="lower-third-pill">
+            <div class="lt-avatar">PB</div>
+            <div>
+              <div class="lt-name">${c.speaker || "Pastor Bankie"}</div>
+              <div class="lt-topic">${c.topic || "Topic"}</div>
+            </div>
+          </div>
+        </div>
+        `;
+      } else if (c.type === "chat_bubble") {
+        return `
+        <div class="cue-container ${c.position}" id="el_${c.id}">
+          <div class="chat-bubble-whatsapp">
+            <div class="chat-header">
+              <div class="chat-avatar">${(c.sender || "A")[0]}</div>
+              <div class="chat-sender">${c.sender || "Ella"} <span class="chat-heart">💚</span></div>
+            </div>
+            <div class="chat-body">${c.text}</div>
+            <div class="chat-footer">
+              <span class="chat-timestamp">12:48</span>
+              <span class="chat-ticks">✓✓</span>
+            </div>
+          </div>
+        </div>
+        `;
+      } else if (c.type === "currency_badge") {
+        return `
+        <div class="cue-container ${c.position}" id="el_${c.id}">
+          <div class="currency-badge">
+            <div class="currency-coin">${c.currency || "₦"}</div>
+            <div class="currency-info">
+              <div class="currency-amount">${c.currency || "₦"}${c.amount}</div>
+              <div class="currency-label">${c.label || "CASH PRIZE"}</div>
+            </div>
+          </div>
+        </div>
+        `;
+      } else if (c.type === "brand_stickers") {
+        return `
+        <div class="cue-container ${c.position}" id="el_${c.id}">
+          <div class="brand-stickers-row">
+            <div class="brand-item bolt-badge"><span class="bolt-text">Bolt</span></div>
+            <span class="brand-vs">or</span>
+            <div class="brand-item indrive-badge">
+              <span class="indrive-icon">iD</span>
+              <span class="indrive-text">inDrive</span>
+            </div>
+          </div>
+        </div>
+        `;
+      } else if (c.type === "conceptual_math") {
+        return `
+        <div class="cue-container ${c.position}" id="el_${c.id}">
+          <div class="math-overlay">
+            <div class="math-chalk">
+              <div class="math-fraction">
+                <span>dy</span>
+                <span>dx</span>
+              </div>
+              <span>=</span>
+              <span>?</span>
+            </div>
+            <div class="math-subtext">${c.subtext || "Math is not mathing"}</div>
+          </div>
+        </div>
+        `;
+      } else if (c.type === "scripture_plaque") {
+        return `
+        <div class="cue-container ${c.position}" id="el_${c.id}">
+          <div class="scripture-plaque">
+            <div class="scripture-badge">📖 ${c.reference}</div>
+            <div class="scripture-quote">"${c.text}"</div>
+          </div>
+        </div>
+        `;
+      } else if (c.type === "warning_stamp") {
+        return `
+        <div class="cue-container ${c.position}" id="el_${c.id}">
+          <div class="warning-stamp">⚠️ ${c.headline}</div>
+        </div>
+        `;
+      } else if (c.type === "outro_cta") {
+        return `
+        <div class="cue-container ${c.position}" id="el_${c.id}">
+          <div class="outro-cta-card">⚡ ${c.handle || "SUBSCRIBE FOR MORE"}</div>
+        </div>
+        `;
+      }
+      return "";
+    }
+
+    window.initStage = function() {
+      if (!window.CONFIG.cues) return;
+      stage.innerHTML = window.CONFIG.cues.map(renderCueHtml).join("\n");
+    };
+
+    // Initial DOM build
+    window.initStage();
+
+    /**
+     * Deterministic window.seek(t) Evaluator
+     */
+    window.seek = function(t) {
+      window.CONFIG.cues.forEach((c) => {
+        const el = document.getElementById("el_" + c.id);
+        if (!el) return;
+
+        const startTime = c.start;
+        const endTime = c.start + c.duration;
+
+        if (t < startTime || t > endTime) {
+          el.style.opacity = "0";
+          el.style.transform = "scale(0.6) translateY(20px)";
+          return;
+        }
+
+        const dt = t - startTime;
+        const remaining = endTime - t;
+
+        // Entry spring evaluation
+        const spring = c.type === "chat_bubble" || c.type === "currency_badge" ? Springs.bouncy : Springs.snappy;
+        const enterProgress = spring.evaluate(dt);
+        const scale = lerp(0.4, 1.0, enterProgress);
+        const translateY = lerp(40, 0, enterProgress);
+
+        // Exit fade & shrink
+        let alpha = clamp(dt / 0.12, 0, 1);
+        if (remaining < 0.35) {
+          alpha = clamp(remaining / 0.35, 0, 1);
+        }
+
+        el.style.opacity = alpha;
+        el.style.transform = `translateY(${translateY}px) scale(${scale})`;
+      });
+    };
+
+    window.seek(0);
+
+    // Interactive Preview Slider
+    const slider = document.getElementById("timeSlider");
+    const label = document.getElementById("timeLabel");
+    slider.max = window.TOTAL_DURATION;
+
+    slider.addEventListener("input", (e) => {
+      const t = parseFloat(e.target.value);
+      label.textContent = t.toFixed(2) + "s";
+      window.seek(t);
+    });
+
+    let isPlaying = false;
+    document.getElementById("playBtn").addEventListener("click", () => {
+      if (isPlaying) {
+        isPlaying = false;
+        document.getElementById("playBtn").textContent = "PLAY";
+      } else {
+        isPlaying = true;
+        document.getElementById("playBtn").textContent = "PAUSE";
+        const startT = parseFloat(slider.value);
+        const startStamp = performance.now();
+
+        function step(now) {
+          if (!isPlaying) return;
+          const elapsed = (now - startStamp) / 1000 + startT;
+          if (elapsed > window.TOTAL_DURATION) {
+            slider.value = 0;
+            window.seek(0);
+            isPlaying = false;
+            document.getElementById("playBtn").textContent = "PLAY";
+            return;
+          }
+          slider.value = elapsed;
+          label.textContent = elapsed.toFixed(2) + "s";
+          window.seek(elapsed);
+          requestAnimationFrame(step);
+        }
+        requestAnimationFrame(step);
+      }
+    });
+  </script>
+</body>
+</html>

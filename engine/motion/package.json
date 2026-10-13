@@ -1,0 +1,13 @@
+{
+  "name": "hclipper-motion-engine",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Deterministic code-to-motion renderer for hclipper & Eyita",
+  "main": "render.mjs",
+  "scripts": {
+    "render": "node render.mjs"
+  },
+  "dependencies": {
+    "playwright": "^1.49.0"
+  }
+}

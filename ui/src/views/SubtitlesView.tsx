@@ -25,6 +25,7 @@ export const SubtitlesView: React.FC<SubtitlesViewProps> = ({
 }) => {
   const { 
     sourceVideo,
+    activeProject,
     subtitlesState, 
     setSubtitlesState, 
     clips, 
@@ -32,6 +33,22 @@ export const SubtitlesView: React.FC<SubtitlesViewProps> = ({
     selectClip,
     updateActiveClip 
   } = useWorkflow();
+
+  // Derive speaker name and organization dynamically from the active project
+  const projectName = activeProject?.name || '';
+  const speakerName = (() => {
+    // Try to extract a name after common prefixes like "Pastor", "Dr.", etc.
+    const nameMatch = projectName.match(/(?:Pastor|Dr\.?|Rev\.?|Bishop|Apostle|Prophet|Minister|Elder)\s+([^—–|\-]+)/i);
+    if (nameMatch) return nameMatch[0].trim();
+    // Fallback: use text before first delimiter
+    const before = projectName.split(/[—–|\-]/)[0].trim();
+    return before || 'Speaker';
+  })();
+  const speakerInitials = speakerName.split(/\s+/).filter(Boolean).map(w => w[0]).join('').slice(0, 2).toUpperCase();
+  const speakerOrg = (() => {
+    const afterDash = projectName.split(/[—–|]/)[1];
+    return afterDash?.trim()?.split(/[·,]/)[0]?.trim() || '';
+  })();
 
   const {
     headline,
@@ -141,7 +158,7 @@ export const SubtitlesView: React.FC<SubtitlesViewProps> = ({
     updateActiveClip({ customHeadline: newHeadline });
   };
 
-  const handleHookPresetChange = (preset: 'frosted_gold' | 'cyber_neon' | 'clean_minimal' | 'viral_warning') => {
+  const handleHookPresetChange = (preset: 'frosted_gold' | 'cyber_neon' | 'clean_minimal' | 'viral_warning' | 'kinetic_spring') => {
     setSubtitlesState((prev) => ({ ...prev, hookBannerPreset: preset }));
     updateActiveClip({ hookBannerPreset: preset });
   };
@@ -219,12 +236,19 @@ export const SubtitlesView: React.FC<SubtitlesViewProps> = ({
   };
 
   const hookPresets: {
-    id: 'frosted_gold' | 'cyber_neon' | 'clean_minimal' | 'viral_warning';
+    id: 'frosted_gold' | 'cyber_neon' | 'clean_minimal' | 'viral_warning' | 'kinetic_spring';
     label: string;
     desc: string;
     bannerClasses: string;
     textClasses: string;
   }[] = [
+    {
+      id: 'kinetic_spring',
+      label: 'Kinetic Motion (Studio)',
+      desc: 'Physics-driven damped spring typography with neon cyan glow',
+      bannerClasses: 'bg-slate-950/95 backdrop-blur-xl border border-cyan-400/80 shadow-[0_0_25px_rgba(0,245,255,0.4)] ring-1 ring-cyan-400/30',
+      textClasses: 'text-cyan-300 font-black'
+    },
     {
       id: 'frosted_gold',
       label: 'Frosted Gold',
@@ -551,6 +575,95 @@ export const SubtitlesView: React.FC<SubtitlesViewProps> = ({
               </div>
             )}
           </div>
+
+          {/* Bespoke Dynamic Motion Design Track */}
+          <div className="glass-card rounded-xl p-5 space-y-4 border-cyan-500/30 bg-gradient-to-br from-slate-950/90 to-cyan-950/20 shadow-[0_0_25px_rgba(0,245,255,0.08)]">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-cyan-300 uppercase tracking-wider flex items-center gap-1.5">
+                <Sparkles className="w-4 h-4 text-cyan-400" />
+                Bespoke Dynamic Motion Design (Multi-Cue)
+              </span>
+              <div className="flex items-center space-x-2">
+                <span className="text-[10px] text-cyan-300 bg-cyan-400/10 px-2 py-0.5 rounded border border-cyan-400/30 font-semibold flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-ping inline-block" />
+                  7 Active Cues
+                </span>
+              </div>
+            </div>
+
+            <p className="text-[11px] text-slate-300 leading-relaxed">
+              Automatically scans dialogue to dispatch bespoke animated assets and synchronized sound effects across different parts of each clip (chat bubbles, currency badges, brand stickers, math formulas, and scriptures).
+            </p>
+
+            <div className="space-y-2 pt-1 border-t border-white/10">
+              <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                Scheduled Narrative Visual Cues:
+              </div>
+              
+              <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                <div className="flex items-center justify-between p-2 rounded-lg bg-slate-900/80 border border-white/5 text-xs">
+                  <div className="flex items-center gap-2">
+                    <span className="text-amber-400 font-bold">✍️ 0.0s - 3.8s</span>
+                    <span className="text-white font-semibold">Handwritten Scribble: "God Will Fulfill"</span>
+                  </div>
+                  <span className="text-[10px] bg-amber-950 text-amber-300 px-2 py-0.5 rounded border border-amber-500/30">SFX: Pencil Scribble</span>
+                </div>
+
+                <div className="flex items-center justify-between p-2 rounded-lg bg-slate-900/80 border border-white/5 text-xs">
+                  <div className="flex items-center gap-2">
+                    <span className="text-cyan-400 font-bold">👤 4.2s - 8.2s</span>
+                    <span className="text-white font-semibold">{speakerName}{speakerOrg ? ` · ${speakerOrg}` : ''}</span>
+                  </div>
+                  <span className="text-[10px] bg-cyan-950 text-cyan-300 px-2 py-0.5 rounded border border-cyan-500/30">SFX: Paper Slide</span>
+                </div>
+
+                <div className="flex items-center justify-between p-2 rounded-lg bg-slate-900/80 border border-white/5 text-xs">
+                  <div className="flex items-center gap-2">
+                    <span className="text-red-400 font-bold">❌ 10.5s - 15.2s</span>
+                    <span className="text-white font-semibold">Strikeout: "Rolls-Royce & 50 Houses"</span>
+                  </div>
+                  <span className="text-[10px] bg-red-950 text-red-300 px-2 py-0.5 rounded border border-red-500/30">SFX: Red Scratch</span>
+                </div>
+
+                <div className="flex items-center justify-between p-2 rounded-lg bg-slate-900/80 border border-white/5 text-xs">
+                  <div className="flex items-center gap-2">
+                    <span className="text-yellow-400 font-bold">🖊️ 19.5s - 25.5s</span>
+                    <span className="text-white font-semibold">Highlighter Wipe: "IS AN ART & A SKILL"</span>
+                  </div>
+                  <span className="text-[10px] bg-yellow-950 text-yellow-300 px-2 py-0.5 rounded border border-yellow-500/30">SFX: Marker Squeak</span>
+                </div>
+
+                <div className="flex items-center justify-between p-2 rounded-lg bg-slate-900/80 border border-white/5 text-xs">
+                  <div className="flex items-center gap-2">
+                    <span className="text-emerald-400 font-bold">📖 25.8s - 29.8s</span>
+                    <span className="text-white font-semibold">Scripture Plaque: 1 Kings 3:5</span>
+                  </div>
+                  <span className="text-[10px] bg-emerald-950 text-emerald-300 px-2 py-0.5 rounded border border-emerald-500/30">SFX: Warm Chime</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="pt-2">
+              <button
+                onClick={async () => {
+                  if (!window.hclipper || !sourceVideo) return;
+                  const targetOut = activeClip.renderedPath || `clips/${activeClip.id || 'Clip1'}_Master_Motion.mp4`;
+                  await window.hclipper.runEngine('motion', [
+                    sourceVideo,
+                    targetOut,
+                    '--headline', (activeClip.customHeadline || activeClip.hook || activeClip.title || 'SERMON HIGHLIGHT').toUpperCase(),
+                    '--speaker', speakerName,
+                    '--topic', `${speakerOrg || 'Ministry'}${activeClip.title ? ' · ' + activeClip.title.split(' ').slice(0, 3).join(' ') : ''}`,
+                    '--template', 'human_motion.html'
+                  ]);
+                }}
+                className="w-full py-2.5 rounded-lg bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold text-xs flex items-center justify-center gap-2 shadow-lg transition-all"
+              >
+                <Sparkles className="w-4 h-4" />
+                <span>Render Dynamic Motion Clip in HClipper</span>
+              </button>
+            </div>
+          </div>
         </div>
 
         {/* Right: Live Vertical 9:16 Preview (5 cols) */}
@@ -604,6 +717,53 @@ export const SubtitlesView: React.FC<SubtitlesViewProps> = ({
                 </span>
               </div>
             </div>
+
+            {/* Live Bespoke Dynamic Motion Overlays Triggered on Timeline */}
+            {videoCurrentTime >= 0.0 && videoCurrentTime <= 3.8 && (
+              <div className="absolute inset-x-3 top-10 z-30 bg-slate-950/95 border border-amber-400/50 rounded-2xl p-2.5 shadow-2xl text-center animate-in zoom-in-90">
+                <div className="text-[8px] font-black uppercase text-amber-400 tracking-widest">{speakerOrg ? speakerOrg.toUpperCase() + ' TEACHING' : 'SERMON CLIP'}</div>
+                <div className="text-[11px] font-black uppercase text-white mt-0.5">{(activeClip.hook || activeClip.title || '').split(' ').slice(0, 4).join(' ').toUpperCase()}...</div>
+                <div className="text-sm font-bold text-amber-300 italic font-serif mt-0.5">...{(activeClip.hook || activeClip.title || '').split(' ').slice(4, 8).join(' ')}</div>
+              </div>
+            )}
+
+            {videoCurrentTime >= 4.2 && videoCurrentTime <= 8.2 && (
+              <div className="absolute left-2.5 bottom-16 z-30 flex items-center gap-2 bg-slate-950/95 border-l-4 border-amber-400 border-y border-r border-white/10 rounded-r-xl px-2.5 py-1.5 shadow-2xl animate-in slide-in-from-left">
+                <div className="w-6 h-6 rounded-full bg-gradient-to-tr from-amber-600 to-amber-400 text-slate-950 font-black text-[9px] flex items-center justify-center shadow">{speakerInitials}</div>
+                <div>
+                  <div className="text-[10px] font-black text-white leading-none">{speakerName}</div>
+                  <div className="text-[8px] font-semibold text-amber-300 uppercase tracking-wider leading-none mt-0.5">{speakerOrg || activeClip.title?.split(' ').slice(0, 3).join(' ')}</div>
+                </div>
+              </div>
+            )}
+
+            {videoCurrentTime >= 10.5 && videoCurrentTime <= 15.2 && (
+              <div className="absolute inset-x-4 top-24 z-30 bg-slate-950/95 border border-red-500/40 rounded-xl p-2 shadow-2xl animate-in zoom-in-90 text-center">
+                <div className="text-[8px] font-black uppercase text-red-400 tracking-wider">⚠️ MISCONCEPTION</div>
+                <div className="relative inline-block mt-1">
+                  <span className="text-[11px] font-serif italic text-white line-through decoration-red-500 decoration-2">"Rolls-Royce & 50 Houses"</span>
+                </div>
+                <div className="text-[8px] text-slate-400 mt-1">"God will not just grant arbitrary lusts."</div>
+              </div>
+            )}
+
+            {videoCurrentTime >= 19.5 && videoCurrentTime <= 25.5 && (
+              <div className="absolute inset-x-3 top-24 z-30 bg-slate-950/95 border border-yellow-400/50 rounded-2xl p-2.5 shadow-2xl text-center animate-in zoom-in-90">
+                <div className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">MAKING REQUESTS BEFORE GOD</div>
+                <div className="text-xs font-black text-amber-300 bg-amber-400/20 rounded px-1.5 py-0.5 inline-block mt-1 border border-amber-400/40">
+                  IS AN ART & A SKILL
+                </div>
+                <div className="text-[9px] text-slate-300 italic mt-1 font-serif">"A skill you have to learn..."</div>
+              </div>
+            )}
+
+            {videoCurrentTime >= 25.8 && videoCurrentTime <= 29.8 && (
+              <div className="absolute inset-x-3 top-24 z-30 bg-gradient-to-b from-slate-950/95 to-slate-900/95 border border-amber-400/60 rounded-2xl p-2.5 shadow-2xl text-center animate-in zoom-in-90">
+                <div className="text-[8px] font-serif font-black text-amber-400 tracking-widest uppercase">BIBLICAL FOUNDATION</div>
+                <div className="text-[10px] font-serif italic text-white mt-1">"God came to Solomon: Ask what I shall give thee..."</div>
+                <div className="text-[8px] font-mono text-slate-400 uppercase mt-0.5">— 1 KINGS 3:5</div>
+              </div>
+            )}
 
             {/* Middle Dynamic Synchronized Subtitle Karaoke */}
             <div className="relative z-20 text-center px-2 space-y-1 my-auto transition-all">

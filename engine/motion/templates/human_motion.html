@@ -1,0 +1,646 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>hclipper Human-Centric Motion Canvas</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@600;700&family=Cinzel:wght@600;800&family=Inter:wght@400;600;800;900&family=Playfair+Display:ital,wght@0,600;0,800;1,600&display=swap" rel="stylesheet">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      user-select: none;
+    }
+    body {
+      background: transparent;
+      width: 1080px;
+      height: 1920px;
+      overflow: hidden;
+      font-family: 'Inter', -apple-system, sans-serif;
+    }
+    #stage {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 1080px;
+      height: 1920px;
+      pointer-events: none;
+    }
+
+    /* Motion Event Container */
+    .motion-event {
+      position: absolute;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      pointer-events: none;
+      transform-origin: center center;
+      will-change: transform, opacity;
+      opacity: 0;
+    }
+
+    /* =========================================
+       1. HOOK & HANDWRITTEN CURSIVE CALLOUT
+       ========================================= */
+    #hook-event {
+      top: 170px;
+      left: 54px;
+      width: 972px;
+    }
+    .hook-glass-card {
+      background: rgba(10, 14, 23, 0.92);
+      border: 1.5px solid rgba(212, 175, 55, 0.4);
+      border-radius: 28px;
+      padding: 34px 44px;
+      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.8), 0 0 30px rgba(212, 175, 55, 0.15);
+      backdrop-filter: blur(20px);
+      text-align: center;
+      width: 100%;
+      position: relative;
+    }
+    .hook-eyebrow {
+      font-size: 22px;
+      font-weight: 800;
+      letter-spacing: 0.22em;
+      color: #D4AF37;
+      text-transform: uppercase;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+    }
+    .hook-eyebrow::before, .hook-eyebrow::after {
+      content: "";
+      display: inline-block;
+      width: 40px;
+      height: 2px;
+      background: #D4AF37;
+    }
+    .hook-main-title {
+      font-size: 50px;
+      font-weight: 900;
+      letter-spacing: -0.01em;
+      line-height: 1.15;
+      color: #FFFFFF;
+      text-transform: uppercase;
+    }
+    .hook-handwriting-wrap {
+      margin-top: 14px;
+      position: relative;
+      display: inline-block;
+    }
+    .hook-handwriting {
+      font-family: 'Caveat', cursive, sans-serif;
+      font-size: 64px;
+      font-weight: 700;
+      color: #FCD34D;
+      text-shadow: 0 4px 18px rgba(251, 191, 36, 0.4);
+      display: block;
+      transform: rotate(-1.5deg);
+    }
+    .svg-scribble-underline {
+      position: absolute;
+      bottom: -18px;
+      left: -10px;
+      width: 105%;
+      height: 36px;
+      overflow: visible;
+    }
+    .svg-scribble-path {
+      fill: none;
+      stroke: #F59E0B;
+      stroke-width: 6;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      filter: drop-shadow(0 2px 8px rgba(245, 158, 11, 0.6));
+    }
+
+    /* =========================================
+       2. EDITORIAL SPEAKER LOWER THIRD
+       ========================================= */
+    #speaker-event {
+      bottom: 420px;
+      left: 70px;
+      width: 640px;
+    }
+    .speaker-card {
+      background: linear-gradient(135deg, rgba(13, 17, 27, 0.96) 0%, rgba(20, 27, 45, 0.92) 100%);
+      border-left: 6px solid #D4AF37;
+      border-top: 1px solid rgba(255, 255, 255, 0.12);
+      border-right: 1px solid rgba(255, 255, 255, 0.08);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 0 20px 20px 0;
+      padding: 22px 28px;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.75);
+      backdrop-filter: blur(16px);
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      width: 100%;
+    }
+    .speaker-avatar-wrap {
+      width: 68px;
+      height: 68px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #D4AF37, #996515);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 0 16px rgba(212, 175, 55, 0.4);
+      flex-shrink: 0;
+    }
+    .speaker-icon {
+      width: 36px;
+      height: 36px;
+      fill: #0C0E14;
+    }
+    .speaker-info {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .speaker-label {
+      font-size: 16px;
+      font-weight: 800;
+      letter-spacing: 0.18em;
+      color: #D4AF37;
+      text-transform: uppercase;
+    }
+    .speaker-name {
+      font-size: 30px;
+      font-weight: 800;
+      color: #FFFFFF;
+      letter-spacing: -0.01em;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .speaker-badge-svg {
+      width: 22px;
+      height: 22px;
+      fill: #38BDF8;
+    }
+    .speaker-topic {
+      font-size: 18px;
+      color: #94A3B8;
+      font-weight: 500;
+    }
+
+    /* =========================================
+       3. MISCONCEPTION STRIKEOUT CARD
+       ========================================= */
+    #misconception-event {
+      top: 380px;
+      left: 100px;
+      width: 880px;
+    }
+    .misconception-card {
+      background: rgba(18, 14, 18, 0.94);
+      border: 1.5px solid rgba(239, 68, 68, 0.35);
+      border-radius: 24px;
+      padding: 30px 40px;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.8), 0 0 30px rgba(239, 68, 68, 0.15);
+      backdrop-filter: blur(16px);
+      text-align: center;
+      width: 100%;
+    }
+    .misconception-eyebrow {
+      font-size: 20px;
+      font-weight: 800;
+      letter-spacing: 0.18em;
+      color: #EF4444;
+      text-transform: uppercase;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    .misconception-quote-wrap {
+      position: relative;
+      display: inline-block;
+      margin: 8px 0;
+    }
+    .misconception-quote {
+      font-family: 'Playfair Display', serif;
+      font-size: 42px;
+      font-style: italic;
+      color: #F8FAFC;
+      line-height: 1.25;
+      padding: 4px 14px;
+    }
+    .svg-strikeout {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+    }
+    .svg-strike-line {
+      stroke: #EF4444;
+      stroke-width: 6;
+      stroke-linecap: round;
+      fill: none;
+      filter: drop-shadow(0 0 10px rgba(239, 68, 68, 0.8));
+    }
+    .misconception-sub {
+      font-size: 22px;
+      font-weight: 600;
+      color: #94A3B8;
+      margin-top: 14px;
+    }
+
+    /* =========================================
+       4. HIGHLIGHTER INK SWEEP ON KEYWORD
+       ========================================= */
+    #highlighter-event {
+      top: 400px;
+      left: 80px;
+      width: 920px;
+    }
+    .highlighter-card {
+      background: rgba(12, 16, 26, 0.94);
+      border: 1.5px solid rgba(251, 191, 36, 0.3);
+      border-radius: 28px;
+      padding: 38px 46px;
+      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.85);
+      backdrop-filter: blur(20px);
+      text-align: center;
+      width: 100%;
+    }
+    .highlighter-lead {
+      font-size: 28px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      color: #94A3B8;
+      text-transform: uppercase;
+      margin-bottom: 16px;
+    }
+    .highlighter-word-wrap {
+      position: relative;
+      display: inline-block;
+      padding: 6px 18px;
+      margin: 6px 0;
+    }
+    .highlighter-fill {
+      position: absolute;
+      top: 4px;
+      bottom: 4px;
+      left: 0;
+      width: 100%;
+      background: rgba(251, 191, 36, 0.38);
+      border-radius: 12px;
+      transform: rotate(-0.8deg);
+      box-shadow: 0 0 25px rgba(251, 191, 36, 0.4);
+      z-index: 0;
+      clip-path: inset(0 100% 0 0);
+      will-change: clip-path;
+    }
+    .highlighter-keyword {
+      position: relative;
+      z-index: 1;
+      font-family: 'Inter', sans-serif;
+      font-size: 58px;
+      font-weight: 900;
+      letter-spacing: -0.02em;
+      color: #FFFFFF;
+      text-transform: uppercase;
+    }
+    .svg-highlight-circle {
+      position: absolute;
+      top: -14px;
+      left: -20px;
+      width: calc(100% + 40px);
+      height: calc(100% + 28px);
+      pointer-events: none;
+      z-index: 2;
+    }
+    .svg-circle-path {
+      fill: none;
+      stroke: #FBBF24;
+      stroke-width: 5;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      filter: drop-shadow(0 2px 10px rgba(251, 191, 36, 0.5));
+    }
+    .highlighter-footnote {
+      font-family: 'Caveat', cursive;
+      font-size: 38px;
+      font-weight: 700;
+      color: #E2E8F0;
+      margin-top: 14px;
+    }
+
+    /* =========================================
+       5. SCRIPTURE / WISDOM PLAQUE
+       ========================================= */
+    #scripture-event {
+      top: 420px;
+      left: 90px;
+      width: 900px;
+    }
+    .scripture-plaque {
+      background: linear-gradient(135deg, rgba(16, 20, 32, 0.96) 0%, rgba(26, 32, 52, 0.94) 100%);
+      border: 2px solid rgba(212, 175, 55, 0.5);
+      border-radius: 26px;
+      padding: 40px 48px;
+      box-shadow: 0 30px 70px rgba(0, 0, 0, 0.9), 0 0 40px rgba(212, 175, 55, 0.2);
+      backdrop-filter: blur(20px);
+      text-align: center;
+      width: 100%;
+      position: relative;
+    }
+    .scripture-corner {
+      position: absolute;
+      width: 24px;
+      height: 24px;
+      border: 2px solid #D4AF37;
+    }
+    .corner-tl { top: 12px; left: 12px; border-right: none; border-bottom: none; }
+    .corner-tr { top: 12px; right: 12px; border-left: none; border-bottom: none; }
+    .corner-bl { bottom: 12px; left: 12px; border-right: none; border-top: none; }
+    .corner-br { bottom: 12px; right: 12px; border-left: none; border-top: none; }
+
+    .scripture-title {
+      font-family: 'Cinzel', serif;
+      font-size: 24px;
+      font-weight: 800;
+      letter-spacing: 0.25em;
+      color: #D4AF37;
+      text-transform: uppercase;
+      margin-bottom: 16px;
+    }
+    .scripture-verse {
+      font-family: 'Playfair Display', serif;
+      font-size: 38px;
+      font-style: italic;
+      color: #FFFFFF;
+      line-height: 1.35;
+      margin-bottom: 16px;
+    }
+    .scripture-ref {
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: 0.15em;
+      color: #94A3B8;
+      text-transform: uppercase;
+    }
+  </style>
+</head>
+<body>
+  <div id="stage">
+
+    <!-- 1. Kinetic Hook & Handwritten Reveal (0.0s - 3.8s) -->
+    <div id="hook-event" class="motion-event">
+      <div class="hook-glass-card">
+        <div class="hook-eyebrow">DOMINION CITY TEACHING</div>
+        <div class="hook-main-title">WHAT YOU PURSUE...</div>
+        <div class="hook-handwriting-wrap">
+          <span class="hook-handwriting">...God Will Fulfill</span>
+          <svg class="svg-scribble-underline" viewBox="0 0 500 40">
+            <path id="hook-underline-path" class="svg-scribble-path" d="M 10 25 Q 120 10 240 28 Q 360 40 480 20 Q 300 35 150 28" />
+          </svg>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2. Editorial Speaker Lower Third (4.2s - 8.2s) -->
+    <div id="speaker-event" class="motion-event">
+      <div class="speaker-card">
+        <div class="speaker-avatar-wrap">
+          <svg class="speaker-icon" viewBox="0 0 24 24">
+            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9v-2h2v2zm0-4H9V7h2v5zm4 4h-2v-2h2v2zm0-4h-2V7h2v5z"/>
+          </svg>
+        </div>
+        <div class="speaker-info">
+          <div class="speaker-label">FEATURED SPEAKER</div>
+          <div class="speaker-name">
+            PASTOR DAVID OGBUELI
+            <svg class="speaker-badge-svg" viewBox="0 0 24 24">
+              <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/>
+            </svg>
+          </div>
+          <div class="speaker-topic">Dominion City · The Mystery of Purpose</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 3. Misconception Strikeout (10.5s - 15.2s) -->
+    <div id="misconception-event" class="motion-event">
+      <div class="misconception-card">
+        <div class="misconception-eyebrow">
+          <span>⚠️</span> COMMON MISCONCEPTION
+        </div>
+        <div class="misconception-quote-wrap">
+          <div class="misconception-quote">"Rolls-Royce & 50 Houses"</div>
+          <svg class="svg-strikeout" viewBox="0 0 600 80">
+            <path id="strikeout-path-1" class="svg-strike-line" d="M 15 65 L 585 18" />
+            <path id="strikeout-path-2" class="svg-strike-line" d="M 25 15 L 575 68" />
+          </svg>
+        </div>
+        <div class="misconception-sub">"God will not just grant arbitrary lusts."</div>
+      </div>
+    </div>
+
+    <!-- 4. Spoken Emphasis & Highlighter Ink Sweep (19.5s - 25.5s) -->
+    <div id="highlighter-event" class="motion-event">
+      <div class="highlighter-card">
+        <div class="highlighter-lead">MAKING REQUESTS BEFORE GOD</div>
+        <div class="highlighter-word-wrap">
+          <div id="highlighter-fill" class="highlighter-fill"></div>
+          <div class="highlighter-keyword">IS AN ART & A SKILL</div>
+          <svg class="svg-highlight-circle" viewBox="0 0 750 140">
+            <path id="highlight-circle-path" class="svg-circle-path" d="M 30 70 C 40 20, 350 10, 710 35 C 740 60, 720 120, 360 125 C 80 130, 20 100, 35 60 C 50 30, 200 20, 420 22" />
+          </svg>
+        </div>
+        <div class="highlighter-footnote">"A skill you have to learn..."</div>
+      </div>
+    </div>
+
+    <!-- 5. Scripture Insight Wisdom Plaque (25.8s - 29.8s) -->
+    <div id="scripture-event" class="motion-event">
+      <div class="scripture-plaque">
+        <div class="scripture-corner corner-tl"></div>
+        <div class="scripture-corner corner-tr"></div>
+        <div class="scripture-corner corner-bl"></div>
+        <div class="scripture-corner corner-br"></div>
+        <div class="scripture-title">BIBLICAL FOUNDATION</div>
+        <div class="scripture-verse">"God came to Solomon: Ask what I shall give thee..."</div>
+        <div class="scripture-ref">— 1 KINGS 3:5 · DOMINION CITY</div>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    // Self-contained closed-form damped spring physics engine
+    class Spring {
+      constructor({ mass = 1.0, stiffness = 180.0, damping = 12.0 } = {}) {
+        this.mass = mass;
+        this.stiffness = stiffness;
+        this.damping = damping;
+        this.w0 = Math.sqrt(this.stiffness / this.mass);
+        this.zeta = this.damping / (2 * Math.sqrt(this.stiffness * this.mass));
+        this.wd = this.zeta < 1.0 ? this.w0 * Math.sqrt(1.0 - this.zeta * this.zeta) : 0;
+      }
+      evaluate(dt) {
+        if (dt <= 0) return 0.0;
+        if (this.zeta < 1.0) {
+          const envelope = Math.exp(-this.zeta * this.w0 * dt);
+          const cosTerm = Math.cos(this.wd * dt);
+          const sinTerm = Math.sin(this.wd * dt);
+          return 1.0 - envelope * (cosTerm + (this.zeta * this.w0 / this.wd) * sinTerm);
+        } else {
+          const decay = Math.exp(-this.w0 * dt);
+          return 1.0 - decay * (1.0 + this.w0 * dt);
+        }
+      }
+    }
+    const MotionPhysics = {
+      Springs: {
+        snappy: new Spring({ mass: 0.8, stiffness: 260, damping: 20 }),
+        bouncy: new Spring({ mass: 1.0, stiffness: 180, damping: 10 }),
+        gentle: new Spring({ mass: 1.4, stiffness: 85, damping: 15 }),
+        heavy: new Spring({ mass: 2.2, stiffness: 110, damping: 22 })
+      }
+    };
+    window.MotionPhysics = MotionPhysics;
+
+    // Lengths of SVG paths for stroke-dashoffset animation
+    const underlinePath = document.getElementById("hook-underline-path");
+    const strikePath1 = document.getElementById("strikeout-path-1");
+    const strikePath2 = document.getElementById("strikeout-path-2");
+    const circlePath = document.getElementById("highlight-circle-path");
+    const highlightFill = document.getElementById("highlighter-fill");
+
+    const underlineLen = underlinePath ? underlinePath.getTotalLength() : 600;
+    const strike1Len = strikePath1 ? strikePath1.getTotalLength() : 600;
+    const strike2Len = strikePath2 ? strikePath2.getTotalLength() : 600;
+    const circleLen = circlePath ? circlePath.getTotalLength() : 1800;
+
+    if (underlinePath) {
+      underlinePath.style.strokeDasharray = underlineLen;
+      underlinePath.style.strokeDashoffset = underlineLen;
+    }
+    if (strikePath1) {
+      strikePath1.style.strokeDasharray = strike1Len;
+      strikePath1.style.strokeDashoffset = strike1Len;
+    }
+    if (strikePath2) {
+      strikePath2.style.strokeDasharray = strike2Len;
+      strikePath2.style.strokeDashoffset = strike2Len;
+    }
+    if (circlePath) {
+      circlePath.style.strokeDasharray = circleLen;
+      circlePath.style.strokeDashoffset = circleLen;
+    }
+
+    // Closed-form spring helper for opacity, scale, Y-translate
+    function evaluateEventSpring(t, startT, duration) {
+      const endT = startT + duration;
+      if (t < startT || t > endT) {
+        return { opacity: 0, scale: 0.85, translateY: 30, visible: false };
+      }
+
+      // Enter window: 0.5s spring
+      const enterDt = t - startT;
+      const exitLead = endT - t;
+
+      let opacity = 1.0;
+      let scale = 1.0;
+      let translateY = 0;
+
+      if (enterDt < 0.6) {
+        const p = MotionPhysics.Springs.bouncy.evaluate(enterDt);
+        opacity = Math.min(1.0, enterDt / 0.25);
+        scale = 0.85 + 0.15 * p;
+        translateY = 30 * (1.0 - p);
+      } else if (exitLead < 0.45) {
+        // Exit fade
+        const exitP = exitLead / 0.45;
+        opacity = Math.max(0.0, exitP);
+        scale = 0.95 + 0.05 * exitP;
+        translateY = -15 * (1.0 - exitP);
+      }
+
+      return { opacity, scale, translateY, visible: true };
+    }
+
+    // Master seek function called by headless Chromium renderer per frame
+    window.seek = function(t) {
+      // 1. Hook Event (0.0s - 3.8s)
+      const hook = evaluateEventSpring(t, 0.0, 3.8);
+      const hookEl = document.getElementById("hook-event");
+      hookEl.style.opacity = hook.opacity;
+      hookEl.style.transform = `scale(${hook.scale}) translateY(${hook.translateY}px)`;
+
+      if (hook.visible && underlinePath) {
+        // Underline writes from t = 0.3s to t = 1.1s
+        const drawProgress = Math.max(0, Math.min(1, (t - 0.3) / 0.8));
+        const smoothP = MotionPhysics.Springs.snappy.evaluate(drawProgress * 0.8);
+        underlinePath.style.strokeDashoffset = underlineLen * (1.0 - Math.min(1.0, smoothP));
+      }
+
+      // 2. Speaker Lower-Third (4.2s - 8.2s)
+      const spk = evaluateEventSpring(t, 4.2, 4.0);
+      const spkEl = document.getElementById("speaker-event");
+      spkEl.style.opacity = spk.opacity;
+      spkEl.style.transform = `translateX(${spk.visible ? 0 : -80}px) scale(${spk.scale})`;
+
+      // 3. Misconception Strikeout (10.5s - 15.2s)
+      const misc = evaluateEventSpring(t, 10.5, 4.7);
+      const miscEl = document.getElementById("misconception-event");
+      miscEl.style.opacity = misc.opacity;
+      miscEl.style.transform = `scale(${misc.scale}) translateY(${misc.translateY}px)`;
+
+      if (misc.visible) {
+        // Strikeout 1 starts at t = 11.8s
+        const s1Progress = Math.max(0, Math.min(1, (t - 11.8) / 0.35));
+        const s1P = MotionPhysics.Springs.snappy.evaluate(s1Progress * 0.6);
+        if (strikePath1) strikePath1.style.strokeDashoffset = strike1Len * (1.0 - Math.min(1.0, s1P));
+
+        // Strikeout 2 starts at t = 12.1s
+        const s2Progress = Math.max(0, Math.min(1, (t - 12.1) / 0.35));
+        const s2P = MotionPhysics.Springs.snappy.evaluate(s2Progress * 0.6);
+        if (strikePath2) strikePath2.style.strokeDashoffset = strike2Len * (1.0 - Math.min(1.0, s2P));
+      }
+
+      // 4. Spoken Emphasis & Highlighter Sweep (19.5s - 25.5s)
+      const hl = evaluateEventSpring(t, 19.5, 6.0);
+      const hlEl = document.getElementById("highlighter-event");
+      hlEl.style.opacity = hl.opacity;
+      hlEl.style.transform = `scale(${hl.scale}) translateY(${hl.translateY}px)`;
+
+      if (hl.visible) {
+        // Highlighter fill sweeps across from t = 20.8s to 21.6s
+        const wipeProgress = Math.max(0, Math.min(1, (t - 20.8) / 0.8));
+        const wipeP = MotionPhysics.Springs.snappy.evaluate(wipeProgress * 0.7);
+        const clipRight = Math.max(0, 100 * (1.0 - Math.min(1.0, wipeP)));
+        if (highlightFill) highlightFill.style.clipPath = `inset(0 ${clipRight}% 0 0)`;
+
+        // Circle draws from t = 21.6s to 22.6s
+        const circleProgress = Math.max(0, Math.min(1, (t - 21.6) / 1.0));
+        const circleP = MotionPhysics.Springs.snappy.evaluate(circleProgress * 0.7);
+        if (circlePath) circlePath.style.strokeDashoffset = circleLen * (1.0 - Math.min(1.0, circleP));
+      }
+
+      // 5. Scripture Insight Wisdom Plaque (25.8s - 29.8s)
+      const scrip = evaluateEventSpring(t, 25.8, 4.0);
+      const scripEl = document.getElementById("scripture-event");
+      scripEl.style.opacity = scrip.opacity;
+      scripEl.style.transform = `scale(${scrip.scale}) translateY(${scrip.translateY}px)`;
+    };
+
+    window.TOTAL_DURATION = 30.0;
+
+    window.initStage = function() {
+      window.seek(0);
+    };
+  </script>
+</body>
+</html>

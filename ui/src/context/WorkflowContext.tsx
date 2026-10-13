@@ -41,7 +41,7 @@ export interface TimelineState {
 
 export interface SubtitlesState {
   headline: string;
-  hookBannerPreset?: 'frosted_gold' | 'cyber_neon' | 'clean_minimal' | 'viral_warning';
+  hookBannerPreset?: 'frosted_gold' | 'cyber_neon' | 'clean_minimal' | 'viral_warning' | 'kinetic_spring';
   stylePreset: 'tiktok_bold' | 'dynamic_pop' | 'clean_white';
   includeSocialPills: boolean;
   includeOutro: boolean;
@@ -66,7 +66,7 @@ export interface ClipCandidate {
   isRendered?: boolean;
   renderedPath?: string;
   customHeadline?: string;
-  hookBannerPreset?: 'frosted_gold' | 'cyber_neon' | 'clean_minimal' | 'viral_warning';
+  hookBannerPreset?: 'frosted_gold' | 'cyber_neon' | 'clean_minimal' | 'viral_warning' | 'kinetic_spring';
   subtitlePreset?: 'tiktok_bold' | 'dynamic_pop' | 'clean_white';
   durationAdvisory?: string;
   storyArc?: 'complete_story' | 'punchy_takeaway' | 'extended_narrative' | string;
@@ -803,6 +803,17 @@ export const WorkflowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     const idx = targetIndex !== undefined ? targetIndex : activeClipIndex;
     const clip = clips[idx];
     if (!clip) return null;
+
+    // Global re-render guard: confirm before overwriting a previously rendered clip
+    if (clip.isRendered && clip.renderedPath) {
+      const confirmed = window.confirm(
+        `Clip #${idx + 1} "${clip.title}" has already been rendered.\n\nRe-render and overwrite the existing file?`
+      );
+      if (!confirmed) {
+        addLog(`[${activeProject.name}] Re-render cancelled for Clip #${idx + 1}.`, 'info');
+        return clip.renderedPath;
+      }
+    }
 
     const outFilename = `${clip.id || `Clip_${idx + 1}`}.mp4`;
     const targetOut = `clips/${outFilename}`;
