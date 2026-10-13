@@ -225,7 +225,26 @@ Example format:
 
         if content:
             return self._parse_cues_deduped(content)
-        
+
+        # 3. If no subtitle file and video_path exists, try faster-whisper transcription
+        if video_path and os.path.exists(video_path):
+            try:
+                from engine.subtitles import SubtitleEngine
+                sub = SubtitleEngine()
+                whisper_cues = sub.transcribe_with_whisper(video_path, model_size="base")
+                if whisper_cues:
+                    v_p = Path(video_path)
+                    vtt_out = v_p.with_suffix(".vtt")
+                    with open(vtt_out, "w", encoding="utf-8") as vf:
+                        vf.write("WEBVTT\n\n")
+                        for c in whisper_cues:
+                            s_tc = f"{int(c['start']//3600):02d}:{int((c['start']%3600)//60):02d}:{c['start']%60:06.3f}"
+                            e_tc = f"{int(c['end']//3600):02d}:{int((c['end']%3600)//60):02d}:{c['end']%60:06.3f}"
+                            vf.write(f"{s_tc} --> {e_tc}\n{c['text']}\n\n")
+                    return whisper_cues
+            except Exception:
+                pass
+
         return []
 
     def _parse_timecode(self, tc: str) -> float:
@@ -539,11 +558,24 @@ Example format:
 
             return selected[:count]
 
-        # If cues are unavailable, generate dynamic windows across estimated video length
+        # If cues are unavailable, generate dynamic windows across real probed video length
         video_dur = 1200.0
         base_title = "Sermon Insight"
         if video_path:
             p = Path(video_path)
+            if p.exists():
+                try:
+                    import cv2
+                    cap = cv2.VideoCapture(str(p.resolve()))
+                    if cap.isOpened():
+                        fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+                        fc = cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0
+                        if fc > 0 and fps > 0:
+                            video_dur = max(30.0, float(fc / fps))
+                        cap.release()
+                except Exception:
+                    pass
+
             raw = p.stem
             # Strip YouTube IDs like [4_Uetxw16pE]
             raw = re.sub(r'\[[a-zA-Z0-9_-]+\]', '', raw)
@@ -556,8 +588,8 @@ Example format:
             if clean_name:
                 base_title = clean_name[:45]
 
-        target_dur = (min_dur + max_dur) / 2.0
-        step = max(target_dur + 30.0, video_dur / max(count, 1))
+        target_dur = min(video_dur * 0.8, (min_dur + max_dur) / 2.0)
+        step = max(target_dur + 5.0, (video_dur - target_dur) / max(count, 1))
 
         fallback_clips = []
         for i in range(count):

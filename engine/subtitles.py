@@ -11,11 +11,12 @@ import re
 import html
 import subprocess
 from pathlib import Path
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any, Optional, Tuple, Callable
+import shutil
 
 from PIL import Image, ImageDraw, ImageFont
 
-from engine import FONTS_DIR, BRANDING_DIR
+from engine import FONTS_DIR, BRANDING_DIR, HARDWARE_ENCODER
 
 class SubtitleEngine:
     """
@@ -320,3 +321,134 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         Path(output_png).parent.mkdir(parents=True, exist_ok=True)
         img.save(output_png)
         return str(Path(output_png).resolve())
+
+    def burn_subtitles_and_branding(
+        self,
+        video_path: str,
+        output_path: str,
+        ass_path: Optional[str] = None,
+        banner_png: Optional[str] = None,
+        banner_duration: str = "first_5s",
+        audio_dsp_options: Optional[Dict[str, Any]] = None,
+        encoder: Optional[str] = None,
+        progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None
+    ) -> bool:
+        """
+        Composites styled ASS animated subtitles, frosted hook banner overlay,
+        and broadcast audio DSP (highpass + denoise + -14 LUFS loudness)
+        onto a vertical short video using hardware-accelerated FFmpeg.
+        """
+        ffmpeg_bin = shutil.which("ffmpeg") or "ffmpeg"
+        src_vid = Path(video_path).resolve()
+        if not src_vid.exists():
+            raise FileNotFoundError(f"Source video for compositing not found: {video_path}")
+
+        out_path = Path(output_path).resolve()
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+
+        inputs = ["-i", str(src_vid)]
+        filter_parts = []
+        next_v = "[0:v]"
+
+        # 1. Hook Banner Overlay Filter
+        if banner_png and Path(banner_png).exists():
+            banner_resolved = Path(banner_png).resolve()
+            inputs.extend(["-i", str(banner_resolved)])
+
+            if banner_duration == "first_3s":
+                overlay_clause = "overlay=0:0:enable='lte(t,3.0)':eof_action=pass"
+            elif banner_duration == "first_5s":
+                overlay_clause = "overlay=0:0:enable='lte(t,5.0)':eof_action=pass"
+            else:  # full_clip
+                overlay_clause = "overlay=0:0:eof_action=pass"
+
+            filter_parts.append(f"{next_v}[1:v]{overlay_clause}[v_banner]")
+            next_v = "[v_banner]"
+
+        # 2. ASS Subtitles Burn-in Filter
+        if ass_path and Path(ass_path).exists():
+            ass_resolved = Path(ass_path).resolve()
+            # Escape path for FFmpeg filter argument
+            norm_ass = str(ass_resolved).replace("\\", "/").replace(":", "\\:")
+            norm_fonts = str(FONTS_DIR.resolve()).replace("\\", "/").replace(":", "\\:")
+            ass_filter = f"ass='{norm_ass}':fontsdir='{norm_fonts}'"
+            filter_parts.append(f"{next_v}{ass_filter}[v_sub]")
+            next_v = "[v_sub]"
+
+        # Final video output pad
+        v_map = next_v
+
+        # 3. Audio DSP Mastering Filter Chain
+        audio_filters = []
+        if audio_dsp_options:
+            if audio_dsp_options.get("highpass", False) or audio_dsp_options.get("denoise", False):
+                audio_filters.append("highpass=f=80")
+            if audio_dsp_options.get("denoise", False):
+                audio_filters.append("afftdn=nf=-25:tn=1")
+            if audio_dsp_options.get("loudnorm", True):
+                audio_filters.append("acompressor=threshold=-21dB:ratio=3.5:attack=15:release=180:makeup=2.5dB")
+                audio_filters.append("loudnorm=I=-14:LRA=7:TP=-1.0")
+
+        # Select encoder (hardware QSV/NVENC with libx264 fallback)
+        encoders_to_try = []
+        chosen_enc = encoder or HARDWARE_ENCODER
+        if chosen_enc and chosen_enc != "libx264":
+            encoders_to_try.append(chosen_enc)
+        encoders_to_try.append("libx264")
+
+        success = False
+        last_err = ""
+
+        for enc in encoders_to_try:
+            vcodec_args = ["-c:v", enc]
+            if enc == "h264_qsv":
+                vcodec_args.extend(["-global_quality", "22"])
+            elif enc == "h264_nvenc":
+                vcodec_args.extend(["-cq", "22", "-preset", "p4"])
+            else:
+                vcodec_args.extend(["-crf", "20", "-preset", "fast"])
+
+            cmd = [
+                str(ffmpeg_bin), "-y",
+                *inputs
+            ]
+
+            if filter_parts:
+                full_vf = ";".join(filter_parts)
+                cmd.extend(["-filter_complex", full_vf, "-map", v_map])
+            else:
+                cmd.extend(["-map", "0:v"])
+
+            # Map audio
+            cmd.append("-map")
+            cmd.append("0:a?")
+
+            if audio_filters:
+                cmd.extend(["-af", ",".join(audio_filters)])
+
+            cmd.extend([
+                *vcodec_args,
+                "-c:a", "aac",
+                "-b:a", "192k",
+                "-ar", "48000",
+                str(out_path)
+            ])
+
+            if progress_callback:
+                progress_callback({"phase": "compositing", "percent": 75.0, "encoder": enc})
+
+            res = subprocess.run(cmd, capture_output=True, text=True)
+            if res.returncode == 0 and out_path.exists() and out_path.stat().st_size > 5000:
+                success = True
+                break
+            else:
+                last_err = res.stderr[-500:] if res.stderr else "Unknown FFmpeg error"
+
+        if success and progress_callback:
+            progress_callback({"phase": "completed", "percent": 100.0, "output": str(out_path)})
+
+        if not success:
+            raise RuntimeError(f"FFmpeg composite failed on all encoders: {last_err}")
+
+        return True
+

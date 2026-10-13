@@ -145,7 +145,7 @@ export interface WorkflowContextType {
   reframeState: ReframeState;
   setReframeState: React.Dispatch<React.SetStateAction<ReframeState>>;
   startAnalyzeTrajectory: () => Promise<void>;
-  startRenderClip: (clipIndex?: number, force?: boolean) => Promise<string | null>;
+  startRenderClip: (clipIndex?: number, force?: boolean, fullMaster?: boolean) => Promise<string | null>;
   startBatchRenderAll: (skipExisting?: boolean) => Promise<void>;
   
   // Subtitles (Embedded in Active Project)
@@ -633,14 +633,14 @@ export const WorkflowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         hookBannerPreset: c.hookBannerPreset || prev.hookBannerPreset || 'frosted_gold',
         stylePreset: c.subtitlePreset || 'tiktok_bold'
       }));
-      if (c.renderedPath) {
-        setReframeState((prev) => ({
-          ...prev,
-          renderedOutput: c.renderedPath || null,
-          renderPhase: 'completed',
-          renderProgress: 100
-        }));
-      }
+      setReframeState((prev) => ({
+        ...prev,
+        isRendering: false,
+        isAnalyzing: false,
+        renderedOutput: c.renderedPath || null,
+        renderProgress: c.isRendered ? 100 : 0,
+        renderPhase: c.isRendered ? 'completed' : 'idle'
+      }));
     }
   };
 
@@ -660,14 +660,28 @@ export const WorkflowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       const unsubEvent = window.hclipper.onEngineEvent((data) => {
         addLog(`Event: ${data.event}`, 'engine');
 
-        if (data.event === 'reframe_progress') {
+        if (data.event === 'trajectory_progress') {
           setReframeState((prev) => ({
             ...prev,
-            isRendering: true,
-            renderProgress: typeof data.percent === 'number' ? Math.round(data.percent * 10) / 10 : prev.renderProgress,
-            renderPhase: (data.phase as any) || 'rendering'
+            isAnalyzing: true,
+            analysisProgress: typeof data.percent === 'number' ? Math.round(data.percent * 10) / 10 : prev.analysisProgress
           }));
-        } else if (data.event === 'reframe_result') {
+        } else if (data.event === 'reframe_progress' || data.event === 'export_progress') {
+          if (data.phase === 'tracking') {
+            setReframeState((prev) => ({
+              ...prev,
+              isAnalyzing: true,
+              analysisProgress: typeof data.percent === 'number' ? Math.round(data.percent * 20) / 10 : prev.analysisProgress
+            }));
+          } else {
+            setReframeState((prev) => ({
+              ...prev,
+              isRendering: true,
+              renderProgress: typeof data.percent === 'number' ? Math.round(data.percent * 10) / 10 : prev.renderProgress,
+              renderPhase: (data.phase as any) || 'rendering'
+            }));
+          }
+        } else if (data.event === 'reframe_result' || data.event === 'export_result') {
           setReframeState((prev) => ({
             ...prev,
             isRendering: false,
@@ -676,12 +690,13 @@ export const WorkflowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             renderedOutput: data.output || prev.renderedOutput,
             renderError: null
           }));
-          addLog(`✓ Reframe render completed: ${data.output}`, 'success');
+          addLog(`✓ Master clip render completed: ${data.output}`, 'success');
         } else if (data.event === 'trajectory') {
           setReframeState((prev) => ({
             ...prev,
             isAnalyzing: false,
             analysisProgress: 100,
+            isRendering: false,
             trajectoryData: data.trajectory || []
           }));
         }
@@ -704,7 +719,8 @@ export const WorkflowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setReframeState((prev) => ({
       ...prev,
       isAnalyzing: true,
-      analysisProgress: 10
+      analysisProgress: 10,
+      isRendering: false
     }));
 
     const curClip = clips[activeClipIndex];
@@ -722,12 +738,19 @@ export const WorkflowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         '--deadzone', reframeState.deadzone.toString(),
         '--smooth', reframeState.smoothFactor.toString()
       ]);
+      setReframeState((prev) => ({
+        ...prev,
+        isAnalyzing: false,
+        analysisProgress: 100,
+        isRendering: false
+      }));
     } else {
       setTimeout(() => {
         setReframeState((prev) => ({
           ...prev,
           isAnalyzing: false,
           analysisProgress: 100,
+          isRendering: false,
           trajectoryData: Array.from({ length: 300 }, (_, i) => 400 + Math.sin(i / 15) * 80)
         }));
       }, 600);
@@ -735,7 +758,7 @@ export const WorkflowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   // Render Targeted Single Clip Fast (4-8 seconds on GPU)
-  const startRenderClip = async (targetIndex?: number, _force?: boolean): Promise<string | null> => {
+  const startRenderClip = async (targetIndex?: number, _force?: boolean, fullMaster: boolean = true): Promise<string | null> => {
     const idx = targetIndex !== undefined ? targetIndex : activeClipIndex;
     const clip = clips[idx];
     if (!clip) return null;
@@ -752,7 +775,7 @@ export const WorkflowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       renderError: null
     }));
 
-    addLog(`[${activeProject.name}] Hardware render for Clip #${idx + 1} (${clip.start}s - ${clip.end}s): ${targetOut}`, 'reframe');
+    addLog(`[${activeProject.name}] Hardware render for Clip #${idx + 1} (${clip.start}s - ${clip.end}s): ${targetOut} (Master: ${fullMaster ? 'Yes - Burned Captions & Branding' : 'Reframe Only'})`, 'reframe');
 
     // Register into holistic queue helper
     const registerHolisticQueue = async () => {
@@ -788,17 +811,58 @@ export const WorkflowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     };
 
     if (window.hclipper && sourceVideo) {
-      const res = await window.hclipper.runEngine('reframe', [
-        sourceVideo,
-        targetOut,
-        '--start', clip.start.toString(),
-        '--end', clip.end.toString(),
-        '--aspect', reframeState.aspectRatio,
-        '--deadzone', reframeState.deadzone.toString(),
-        '--smooth', reframeState.smoothFactor.toString()
-      ]);
+      const normalizedDeadzone = Math.min(0.5, Math.max(0.02, reframeState.deadzone > 1 ? reframeState.deadzone / 100 : reframeState.deadzone)).toString();
+      let res;
 
-      if (res.success) {
+      if (fullMaster) {
+        const headlineText = clip.customHeadline || clip.hook || subtitlesState.headline || clip.title || '';
+        const bannerStyle = clip.hookBannerPreset || subtitlesState.hookBannerPreset || 'frosted_gold';
+        
+        let preset = 'hormozi';
+        const rawPreset = (clip.subtitlePreset || subtitlesState.stylePreset || 'tiktok_bold') as string;
+        if (rawPreset === 'dynamic_pop') preset = 'karaoke';
+        else if (rawPreset === 'clean_white') preset = 'minimal';
+        else if (rawPreset === 'beast' || rawPreset === 'hype_burst') preset = 'beast';
+
+        const args = [
+          sourceVideo,
+          targetOut,
+          '--start', clip.start.toString(),
+          '--end', clip.end.toString(),
+          '--aspect', reframeState.aspectRatio,
+          '--deadzone', normalizedDeadzone,
+          '--smooth', reframeState.smoothFactor.toString(),
+          '--headline', headlineText,
+          '--banner-style', bannerStyle,
+          '--banner-duration', '5.0',
+          '--preset', preset
+        ];
+
+        if (timelineState.cadenceTrim) {
+          args.push('--cadence');
+          const threshNum = parseFloat(timelineState.noiseThreshold.replace('dB', '')) || -30.0;
+          args.push('--threshold', threshNum.toString());
+          args.push('--min-silence', (timelineState.minSilence || 0.75).toString());
+        }
+
+        if (clip.transcriptCues && clip.transcriptCues.length > 0) {
+          args.push('--text-cues', JSON.stringify(clip.transcriptCues));
+        }
+
+        res = await window.hclipper.runEngine('export-clip', args);
+      } else {
+        res = await window.hclipper.runEngine('reframe', [
+          sourceVideo,
+          targetOut,
+          '--start', clip.start.toString(),
+          '--end', clip.end.toString(),
+          '--aspect', reframeState.aspectRatio,
+          '--deadzone', normalizedDeadzone,
+          '--smooth', reframeState.smoothFactor.toString()
+        ]);
+      }
+
+      if (res && res.success) {
         setClips((prev) => {
           const up = [...prev];
           if (up[idx]) {
@@ -820,7 +884,7 @@ export const WorkflowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           ...prev,
           isRendering: false,
           renderPhase: 'error',
-          renderError: 'Render terminated. Verify video file format.'
+          renderError: 'Render terminated. Verify video file format and logs.'
         }));
         return null;
       }
@@ -846,7 +910,7 @@ export const WorkflowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   // Batch Render All Discovered Clips
-  const startBatchRenderAll = async (skipExisting = false) => {
+  const startBatchRenderAll = async (skipExisting = false, fullMaster = true) => {
     addLog(`[${activeProject.name}] Batch rendering short clips (${skipExisting ? 'skipping already rendered' : 'rendering all'})...`, 'batch');
     for (let i = 0; i < clips.length; i++) {
       if (skipExisting && clips[i].isRendered) {
@@ -855,7 +919,7 @@ export const WorkflowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       }
       selectClip(i);
       addLog(`[Batch ${i + 1}/${clips.length}] Rendering ${clips[i].title}...`, 'batch');
-      await startRenderClip(i, true);
+      await startRenderClip(i, true, fullMaster);
     }
     addLog(`✓ Batch render process completed for clips!`, 'success');
   };

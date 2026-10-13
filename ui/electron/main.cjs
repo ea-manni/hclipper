@@ -405,30 +405,58 @@ function getPersistentProjectsPath() {
   return userProjects;
 }
 
-function getPersistentQueuePath() {
-  return path.join(app.getPath('userData'), 'clips_queue.json');
+function getPersistentQueuePaths() {
+  const rootQueue = path.join(PROJECT_ROOT, 'clips_queue.json');
+  const userQueue = path.join(app.getPath('userData'), 'clips_queue.json');
+  return { rootQueue, userQueue };
 }
 
 // IPC Handler: Read Clips Queue directly from clips_queue.json
 ipcMain.handle('hclipper:read-queue', async () => {
-  const queuePath = getPersistentQueuePath();
-  if (fs.existsSync(queuePath)) {
+  const { rootQueue, userQueue } = getPersistentQueuePaths();
+  // Check root queue first (which Python updates)
+  if (fs.existsSync(rootQueue)) {
     try {
-      const data = fs.readFileSync(queuePath, 'utf8');
-      return JSON.parse(data);
-    } catch (e) {
-      return [];
-    }
+      const data = fs.readFileSync(rootQueue, 'utf8');
+      const items = JSON.parse(data);
+      if (Array.isArray(items) && items.length > 0) {
+        try {
+          fs.mkdirSync(path.dirname(userQueue), { recursive: true });
+          fs.writeFileSync(userQueue, data, 'utf8');
+        } catch (e) {}
+        return items;
+      }
+    } catch (e) {}
+  }
+  // Fallback to userQueue
+  if (fs.existsSync(userQueue)) {
+    try {
+      const data = fs.readFileSync(userQueue, 'utf8');
+      const items = JSON.parse(data);
+      if (Array.isArray(items) && items.length > 0) {
+        try {
+          fs.writeFileSync(rootQueue, data, 'utf8');
+        } catch (e) {}
+        return items;
+      }
+    } catch (e) {}
   }
   return [];
 });
 
 // IPC Handler: Save Clips Queue to clips_queue.json
 ipcMain.handle('hclipper:save-queue', async (event, items) => {
-  const queuePath = getPersistentQueuePath();
+  const { rootQueue, userQueue } = getPersistentQueuePaths();
   try {
-    fs.mkdirSync(path.dirname(queuePath), { recursive: true });
-    fs.writeFileSync(queuePath, JSON.stringify(items, null, 2), 'utf8');
+    const jsonStr = JSON.stringify(items, null, 2);
+    try {
+      fs.mkdirSync(path.dirname(rootQueue), { recursive: true });
+      fs.writeFileSync(rootQueue, jsonStr, 'utf8');
+    } catch (e) {}
+    try {
+      fs.mkdirSync(path.dirname(userQueue), { recursive: true });
+      fs.writeFileSync(userQueue, jsonStr, 'utf8');
+    } catch (e) {}
     return true;
   } catch (e) {
     return false;

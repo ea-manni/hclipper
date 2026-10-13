@@ -162,20 +162,23 @@ export const ReframeView: React.FC<ReframeViewProps> = ({
     }
   };
 
+  const clipRenderPath = activeClip.renderedPath || renderedOutput;
+  const isClipRendered = Boolean(activeClip.isRendered || clipRenderPath);
+
   const handleOpenRendered = () => {
-    if (window.hclipper && renderedOutput) {
-      window.hclipper.openPath(renderedOutput);
+    if (window.hclipper && clipRenderPath) {
+      window.hclipper.openPath(clipRenderPath);
     }
   };
 
   const handleShowInFolder = () => {
-    if (window.hclipper && renderedOutput) {
-      window.hclipper.showInFolder(renderedOutput);
+    if (window.hclipper && clipRenderPath) {
+      window.hclipper.showInFolder(clipRenderPath);
     }
   };
 
   const handleRenderActiveClip = async () => {
-    if (activeClip.isRendered || renderedOutput) {
+    if (isClipRendered) {
       setShowRerenderConfirm(true);
       return;
     }
@@ -398,7 +401,7 @@ export const ReframeView: React.FC<ReframeViewProps> = ({
             </div>
 
             <div className="flex items-center space-x-2">
-              {renderedOutput && !isRendering ? (
+              {isClipRendered && !isRendering ? (
                 <div className="flex items-center space-x-2">
                   <button
                     onClick={handleOpenRendered}

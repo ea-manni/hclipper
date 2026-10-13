@@ -140,6 +140,13 @@ def cmd_reframe(args):
 
     try:
         if args.trajectory_only:
+            def on_trajectory_progress(p):
+                scaled_pct = min(100.0, round(float(p.get("percent", 0.0)) * 2.0, 1))
+                if args.json:
+                    emit_json("trajectory_progress", {"phase": "tracking", "percent": scaled_pct})
+                else:
+                    print(f"[tracking] {scaled_pct}%", end="\r", flush=True)
+
             traj = reframer.compute_crop_trajectory(
                 args.input,
                 aspect_ratio=ratio_tuple,
@@ -147,7 +154,7 @@ def cmd_reframe(args):
                 smooth_factor=smooth_factor,
                 start_time=start_t,
                 end_time=end_t,
-                progress_callback=on_progress
+                progress_callback=on_trajectory_progress
             )
             if args.json:
                 emit_json("trajectory", traj)
@@ -317,6 +324,210 @@ def cmd_motion(args):
             emit_json("motion_result", {"success": False, "error": str(e), "output": args.output})
         else:
             print(f"Motion design rendering failed: {e}", file=sys.stderr)
+def cmd_export_clip(args):
+    """Renders full master short combining auto-reframe, subtitles, hook banner, and audio DSP."""
+    from engine.subtitles import SubtitleEngine
+    from engine.reframe import AutoReframer
+    from engine.audio_dsp import AudioDSP
+    from engine.trimmer import TimelineTrimmer
+    from engine.publisher import QueueManager
+    import tempfile
+    import shutil
+
+    sub = SubtitleEngine()
+    reframer = AutoReframer()
+    trimmer = TimelineTrimmer()
+
+    input_video = reframer._resolve_video_path(args.input)
+    output_video = reframer._resolve_output_path(args.output)
+
+    start_time = getattr(args, "start", None)
+    end_time = getattr(args, "end", None)
+    aspect = getattr(args, "aspect", "9:16")
+    deadzone = getattr(args, "deadzone", 25.0)
+    smooth = getattr(args, "smooth", 0.06)
+
+    aspect_map = {
+        "9:16": ((9, 16), 1080, 1920),
+        "1:1": ((1, 1), 1080, 1080),
+        "16:9": ((16, 9), 1920, 1080),
+    }
+    ratio_tuple, out_w, out_h = aspect_map.get(aspect, ((9, 16), 1080, 1920))
+
+    def on_progress(p):
+        if args.json:
+            emit_json("export_progress", p)
+        else:
+            print(f"[{p.get('phase', 'export')}] {p.get('percent', 0)}%", end="\\r", flush=True)
+
+    try:
+        on_progress({"phase": "init", "percent": 5})
+        temp_dir = Path(tempfile.mkdtemp(prefix="hclipper_export_"))
+
+        # 1. Cadence pause trimming if requested
+        work_input = input_video
+        clip_start = start_time
+        clip_end = end_time
+
+        if getattr(args, "cadence", False):
+            on_progress({"phase": "cadence_trim", "percent": 15})
+            trimmed_seg = temp_dir / "cadence_trimmed.mp4"
+            if start_time is not None and end_time is not None:
+                range_cut = temp_dir / "range_cut.mp4"
+                trimmer.cut_range(input_video, str(range_cut), start_time, end_time, reencode=True)
+                trimmer.cadence_silence_trim(
+                    str(range_cut), str(trimmed_seg),
+                    noise_threshold=getattr(args, "threshold", "-33dB"),
+                    min_silence=getattr(args, "min_silence", 0.75)
+                )
+                work_input = str(trimmed_seg)
+                clip_start = None
+                clip_end = None
+            else:
+                trimmer.cadence_silence_trim(
+                    input_video, str(trimmed_seg),
+                    noise_threshold=getattr(args, "threshold", "-33dB"),
+                    min_silence=getattr(args, "min_silence", 0.75)
+                )
+                work_input = str(trimmed_seg)
+
+        # 2. Render reframed vertical video
+        on_progress({"phase": "reframing", "percent": 30})
+        reframed_temp = temp_dir / "reframed_temp.mp4"
+        reframer.render_reframed_video(
+            work_input,
+            str(reframed_temp),
+            out_width=out_w,
+            out_height=out_h,
+            start_time=clip_start,
+            end_time=clip_end,
+            progress_callback=lambda p: on_progress({"phase": "reframing", "percent": 25.0 + (p.get("percent", 0.0) * 0.35)})
+        )
+
+        # 3. Generate Subtitles ASS file
+        ass_path = None
+        if not getattr(args, "no_subs", False):
+            on_progress({"phase": "subtitles", "percent": 65})
+            cues = []
+            if getattr(args, "text_cues", None):
+                try:
+                    cues = json.loads(args.text_cues)
+                except Exception:
+                    pass
+
+            if not cues and getattr(args, "vtt", None) and os.path.exists(args.vtt):
+                cues = sub.parse_vtt_file(args.vtt)
+
+            if not cues:
+                v_path = Path(input_video)
+                for ext in [".en.vtt", ".vtt", ".en.srt", ".srt"]:
+                    cand = v_path.with_suffix(ext)
+                    if cand.exists():
+                        cues = sub.parse_vtt_file(str(cand))
+                        break
+                    cand2 = v_path.parent / f"{v_path.stem}{ext}"
+                    if cand2.exists():
+                        cues = sub.parse_vtt_file(str(cand2))
+                        break
+
+            if cues:
+                ass_file = temp_dir / "clip_subtitles.ass"
+                clip_offset = float(start_time) if start_time is not None else 0.0
+                clip_dur = (float(end_time) - float(start_time)) if (start_time is not None and end_time is not None) else None
+                sub.generate_ass(
+                    cues,
+                    str(ass_file),
+                    style_preset=getattr(args, "preset", "tiktok_bold"),
+                    clip_start_offset=clip_offset,
+                    clip_duration=clip_dur
+                )
+                ass_path = str(ass_file)
+
+        # 4. Generate Hook Banner PNG
+        banner_path = None
+        headline = getattr(args, "headline", "")
+        if not getattr(args, "no_banner", False) and headline:
+            on_progress({"phase": "banner", "percent": 75})
+            banner_file = temp_dir / "hook_banner.png"
+            sub.create_hook_banner(
+                headline,
+                str(banner_file),
+                banner_style=getattr(args, "banner_style", "frosted_gold"),
+                width=out_w,
+                height=out_h
+            )
+            banner_path = str(banner_file)
+
+        # 5. Audio DSP Options
+        audio_dsp_opts = {
+            "highpass": getattr(args, "highpass", True),
+            "denoise": getattr(args, "denoise", True),
+            "loudnorm": getattr(args, "loudnorm", True)
+        }
+
+        # 6. Composite into final Master Short
+        on_progress({"phase": "compositing", "percent": 80})
+        sub.burn_subtitles_and_branding(
+            str(reframed_temp),
+            output_video,
+            ass_path=ass_path,
+            banner_png=banner_path,
+            banner_duration=getattr(args, "banner_duration", "first_5s"),
+            audio_dsp_options=audio_dsp_opts,
+            progress_callback=lambda p: on_progress({"phase": "compositing", "percent": 80.0 + (p.get("percent", 0.0) * 0.18)})
+        )
+
+        # 7. Auto-register into clips_queue.json
+        try:
+            qm = QueueManager()
+            file_name = Path(output_video).name
+            clean_title = headline or qm._clean_title_from_filename(file_name)
+            new_item = {
+                "id": Path(output_video).stem,
+                "file_path": output_video.replace("\\", "/"),
+                "filename": file_name,
+                "title": clean_title,
+                "caption": f"{clean_title}\\n\\n#Shorts #Reels #TikTok",
+                "duration": f"{round(float(end_time) - float(start_time))}s" if (start_time is not None and end_time is not None) else "30s",
+                "status": {
+                    "youtube": "pending",
+                    "instagram": "pending",
+                    "tiktok_us": "pending",
+                    "tiktok_ng": "pending"
+                }
+            }
+            replaced = False
+            for idx, existing in enumerate(qm.items):
+                if existing.get("id") == new_item["id"] or existing.get("filename") == file_name:
+                    qm.items[idx] = new_item
+                    replaced = True
+                    break
+            if not replaced:
+                qm.items.append(new_item)
+            qm.save()
+        except Exception:
+            pass
+
+        # Cleanup temp dir
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+        on_progress({"phase": "completed", "percent": 100.0, "output": output_video})
+        if args.json:
+            emit_json("export_result", {
+                "success": True,
+                "output": output_video,
+                "aspect": aspect,
+                "has_subtitles": bool(ass_path),
+                "has_banner": bool(banner_path)
+            })
+        else:
+            print(f"\\nMaster Clip Exported successfully -> {output_video}")
+
+    except Exception as e:
+        if args.json:
+            emit_json("export_result", {"success": False, "error": str(e), "output": getattr(args, "output", "")})
+        else:
+            print(f"\\nMaster clip export failed: {e}", file=sys.stderr)
         sys.exit(1)
 
 def main():
@@ -428,6 +639,31 @@ def main():
     p_mo.add_argument("--topic", help="Topic or sermon title")
     p_mo.add_argument("--template", default="kinetic_hook.html", help="Motion template name")
     p_mo.set_defaults(func=cmd_motion)
+
+    # Master Short Export (Full pipeline: reframe + subtitles + hook banner + audio DSP)
+    p_ec = subparsers.add_parser("export-clip", help="Render finished master short with reframing, captions, hook banner, and audio DSP", parents=[common_parser])
+    p_ec.add_argument("input", help="Source video")
+    p_ec.add_argument("output", help="Output master video path")
+    p_ec.add_argument("--start", type=float, help="Start timestamp in seconds")
+    p_ec.add_argument("--end", type=float, help="End timestamp in seconds")
+    p_ec.add_argument("--aspect", choices=["9:16", "1:1", "16:9"], default="9:16", help="Target aspect ratio")
+    p_ec.add_argument("--deadzone", type=float, default=25.0, help="Camera deadzone leeway")
+    p_ec.add_argument("--smooth", type=float, default=0.06, help="Camera pan smoothing factor")
+    p_ec.add_argument("--headline", default="", help="Hook banner headline text")
+    p_ec.add_argument("--banner-style", default="frosted_gold", choices=["frosted_gold", "cyber_neon", "clean_minimal", "viral_warning", "kinetic_spring"], help="Banner visual style")
+    p_ec.add_argument("--banner-duration", default="first_5s", choices=["first_3s", "first_5s", "full_clip"], help="Banner on-screen duration")
+    p_ec.add_argument("--no-banner", action="store_true", help="Omit top hook banner")
+    p_ec.add_argument("--preset", default="tiktok_bold", choices=["tiktok_bold", "dynamic_pop", "clean_white"], help="Subtitle animation style preset")
+    p_ec.add_argument("--no-subs", action="store_true", help="Omit subtitles")
+    p_ec.add_argument("--vtt", help="Path to WebVTT/SRT file")
+    p_ec.add_argument("--text-cues", help="JSON encoded transcript cues")
+    p_ec.add_argument("--highpass", action="store_true", default=True, help="Enable 80Hz rumble highpass")
+    p_ec.add_argument("--denoise", action="store_true", default=True, help="Enable FFT noise reduction")
+    p_ec.add_argument("--loudnorm", action="store_true", default=True, help="Enable -14 LUFS loudness mastering")
+    p_ec.add_argument("--cadence", action="store_true", help="Enable cadence silence trimming")
+    p_ec.add_argument("--threshold", default="-33dB", help="Cadence silence threshold")
+    p_ec.add_argument("--min-silence", type=float, default=0.75, help="Minimum silence duration")
+    p_ec.set_defaults(func=cmd_export_clip)
 
     args = parser.parse_args()
     args.func(args)

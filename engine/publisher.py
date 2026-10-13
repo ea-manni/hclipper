@@ -27,8 +27,14 @@ class QueueManager:
     Manages central publishing queue stored in clips_queue.json.
     """
 
-    def __init__(self, queue_path: Path = QUEUE_FILE):
-        self.queue_path = queue_path
+    def __init__(self, queue_path: Optional[Path] = None):
+        self.queue_path = Path(queue_path) if queue_path else QUEUE_FILE
+        self.alt_queue_path = None
+        if sys.platform == "win32":
+            appdata = os.environ.get("APPDATA")
+            if appdata:
+                self.alt_queue_path = Path(appdata) / "hclipper-studio" / "clips_queue.json"
+
         (PROJECT_ROOT / "clips").mkdir(parents=True, exist_ok=True)
         self.items: List[Dict[str, Any]] = self.load()
         self._ensure_platform_keys()
@@ -46,19 +52,25 @@ class QueueManager:
 
     def load(self) -> List[Dict[str, Any]]:
         loaded_items = []
-        if self.queue_path.exists():
-            try:
-                with open(self.queue_path, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                    if isinstance(data, list):
-                        for item in data:
-                            fpath = item.get("file_path", "")
-                            # Check if file exists relative to PROJECT_ROOT or absolute
-                            full_path = Path(fpath) if Path(fpath).is_absolute() else (PROJECT_ROOT / fpath)
-                            if full_path.exists():
-                                loaded_items.append(item)
-            except Exception:
-                pass
+        sources = [self.queue_path]
+        if self.alt_queue_path and self.alt_queue_path != self.queue_path:
+            sources.append(self.alt_queue_path)
+
+        for src in sources:
+            if src.exists():
+                try:
+                    with open(src, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                        if isinstance(data, list):
+                            for item in data:
+                                fpath = item.get("file_path", "")
+                                full_path = Path(fpath) if Path(fpath).is_absolute() else (PROJECT_ROOT / fpath)
+                                if full_path.exists() and item not in loaded_items:
+                                    loaded_items.append(item)
+                except Exception:
+                    pass
+            if loaded_items:
+                break
 
         self.items = loaded_items
         # Automatically scan clips directory for real rendered files
@@ -66,8 +78,17 @@ class QueueManager:
         return self.items
 
     def save(self):
-        with open(self.queue_path, "w", encoding="utf-8") as f:
-            json.dump(self.items, f, indent=2, ensure_ascii=False)
+        targets = [self.queue_path]
+        if self.alt_queue_path and self.alt_queue_path != self.queue_path:
+            targets.append(self.alt_queue_path)
+
+        for target in targets:
+            try:
+                target.parent.mkdir(parents=True, exist_ok=True)
+                with open(target, "w", encoding="utf-8") as f:
+                    json.dump(self.items, f, indent=2, ensure_ascii=False)
+            except Exception:
+                pass
 
     def scan_clips_directory(self, clips_dir: Optional[Path] = None) -> int:
         target_dir = clips_dir or (PROJECT_ROOT / "clips")
@@ -260,6 +281,18 @@ class SocialPublisher:
 
         profile_name = f"{platform}_{account}_profile"
         profile_path = self.sessions_dir / profile_name
+
+        statuses = self.check_session_status()
+        plat_key = "tiktok_us" if platform in ("tiktok", "tiktok_us") else ("tiktok_ng" if platform == "tiktok_ng" else platform)
+        if not statuses.get(plat_key, False) and not profile_path.exists():
+            return {
+                "success": False,
+                "platform": platform,
+                "account": account,
+                "video": video_file.name,
+                "status": "failed",
+                "error": f"Session profile not found for {platform}. Click 'Click to Login' in Step 6 to authenticate first."
+            }
 
         return {
             "success": True,
