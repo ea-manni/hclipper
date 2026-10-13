@@ -43,6 +43,7 @@ export interface SubtitlesState {
   headline: string;
   hookBannerPreset?: 'frosted_gold' | 'cyber_neon' | 'clean_minimal' | 'viral_warning' | 'kinetic_spring';
   stylePreset: 'tiktok_bold' | 'dynamic_pop' | 'clean_white';
+  includeSubtitles?: boolean;
   includeSocialPills: boolean;
   includeOutro: boolean;
   tiktokHandle: string;
@@ -217,6 +218,7 @@ const EMPTY_PROJECT: Project = {
   subtitlesState: {
     headline: '',
     stylePreset: 'tiktok_bold',
+    includeSubtitles: true,
     includeSocialPills: false,
     includeOutro: false,
     tiktokHandle: '',
@@ -559,6 +561,7 @@ export const WorkflowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       subtitlesState: {
         headline: '',
         stylePreset: 'tiktok_bold',
+        includeSubtitles: true,
         includeSocialPills: false,
         includeOutro: false,
         tiktokHandle: '',
@@ -773,7 +776,7 @@ export const WorkflowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
     if (window.hclipper && sourceVideo) {
       addLog(`[${activeProject.name}] Initiating YuNet face tracking on ${sourceVideo} [${sTime}s - ${eTime}s]...`, 'reframe');
-      await window.hclipper.runEngine('reframe', [
+      const res = await window.hclipper.runEngine('reframe', [
         sourceVideo,
         '--trajectory-only',
         '--start', sTime.toString(),
@@ -782,12 +785,17 @@ export const WorkflowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         '--deadzone', reframeState.deadzone.toString(),
         '--smooth', reframeState.smoothFactor.toString()
       ]);
+      const trajEvent = res?.events?.find((e: any) => e.event === 'trajectory');
       setReframeState((prev) => ({
         ...prev,
         isAnalyzing: false,
         analysisProgress: 100,
-        isRendering: false
+        isRendering: false,
+        trajectoryData: trajEvent?.trajectory || prev.trajectoryData
       }));
+      if (trajEvent?.trajectory) {
+        addLog(`✓ YuNet face tracking analysis complete! (${trajEvent.trajectory.length} frames tracked)`, 'success');
+      }
     } else {
       setTimeout(() => {
         setReframeState((prev) => ({
@@ -807,8 +815,14 @@ export const WorkflowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     const clip = clips[idx];
     if (!clip) return null;
 
-    const outFilename = `${clip.id || `Clip_${idx + 1}`}.mp4`;
-    const targetOut = `clips/${outFilename}`;
+    const cleanHeadline = (clip.customHeadline || clip.title || clip.id || `Clip_${idx + 1}`)
+      .replace(/[^a-zA-Z0-9_-]/g, '_')
+      .replace(/_+/g, '_')
+      .replace(/^_|_$/g, '')
+      .substring(0, 50);
+    const outFilename = `Clip${idx + 1}_${cleanHeadline || 'Highlight'}.mp4`;
+    const clipsDir = settings.clipsDir || 'clips';
+    const targetOut = `${clipsDir}/${outFilename}`;
 
     setReframeState((prev) => ({
       ...prev,
@@ -859,15 +873,13 @@ export const WorkflowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       let res;
 
       if (fullMaster) {
-        const headlineText = clip.customHeadline || clip.hook || subtitlesState.headline || clip.title || '';
-        const bannerStyle = clip.hookBannerPreset || subtitlesState.hookBannerPreset || 'frosted_gold';
+        // Grounded presets: Workflow 3, 4 & 5 state is the authoritative truth!
+        const headlineText = subtitlesState.headline || clip.customHeadline || clip.hook || clip.title || '';
+        const bannerStyle = subtitlesState.hookBannerPreset || clip.hookBannerPreset || 'frosted_gold';
         const bannerDuration = subtitlesState.hookBannerDuration || 'first_5s';
-        
-        let preset: 'tiktok_bold' | 'dynamic_pop' | 'clean_white' = 'tiktok_bold';
-        const rawPreset = (clip.subtitlePreset || subtitlesState.stylePreset || 'tiktok_bold') as string;
-        if (rawPreset === 'dynamic_pop') preset = 'dynamic_pop';
-        else if (rawPreset === 'clean_white') preset = 'clean_white';
-        else preset = 'tiktok_bold';
+        const preset = subtitlesState.stylePreset || clip.subtitlePreset || 'tiktok_bold';
+        const includeSubs = subtitlesState.includeSubtitles !== false;
+        const enableBanner = subtitlesState.enableHookBanner !== false;
 
         const args = [
           sourceVideo,
@@ -882,6 +894,13 @@ export const WorkflowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           '--banner-duration', bannerDuration,
           '--preset', preset
         ];
+
+        if (!includeSubs) {
+          args.push('--no-subs');
+        }
+        if (!enableBanner) {
+          args.push('--no-banner');
+        }
 
         if (timelineState.cadenceTrim) {
           args.push('--cadence');

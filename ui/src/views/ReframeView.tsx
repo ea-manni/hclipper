@@ -156,8 +156,9 @@ export const ReframeView: React.FC<ReframeViewProps> = ({
         Math.floor((elapsed / dur) * trajectoryData.length)
       );
       setCurrentFrameIndex(idx);
-      const frameCoord = trajectoryData[idx];
-      const pct = (frameCoord / 1280) * 100;
+      const frameCoord = trajectoryData[idx] ?? 0;
+      const videoWidth = v.videoWidth > 0 ? v.videoWidth : 1280;
+      const pct = Math.max(0, Math.min(100 - config.widthPct, (frameCoord / videoWidth) * 100));
       setCropXPercent(pct);
     }
   };

@@ -150,23 +150,41 @@ class SubtitleEngine:
         style_preset: str = "tiktok_bold",
         clip_start_offset: float = 0.0,
         clip_duration: Optional[float] = None,
-        highlight_color: str = "&H0000D4FF&"  # Vibrant Gold in ASS BGR format
+        highlight_color: Optional[str] = None
     ) -> str:
         """
         Builds Advanced SubStation Alpha (.ass) subtitle file formatted for
-        the 9:16 vertical safe zone (avoiding mobile platform UI overlay elements).
+        the 9:16 vertical safe zone with dynamic progressive word-by-word karaoke
+        underlining and user-selected visual styling preset.
         """
-        margin_v = 740  # Sits naturally in upper lower-third safe zone
-        font_size = 52
-        outline = 5
-        shadow = 2
+        preset = (style_preset or "tiktok_bold").lower()
+        if preset == "dynamic_pop":
+            active_color = highlight_color or "&H00FFFF00&"  # Electric Neon Cyan (BGR)
+            style_primary = "&H00FFFFFF&"
+            font_size = 54
+            margin_v = 730
+            outline = 5
+            shadow = 2
+        elif preset == "clean_white":
+            active_color = highlight_color or "&H00FFFFFF&"
+            style_primary = "&H00DDDDDD&"
+            font_size = 50
+            margin_v = 740
+            outline = 4
+            shadow = 1
+        else:  # tiktok_bold
+            active_color = highlight_color or "&H0000D4FF&"  # Vibrant Gold (BGR)
+            style_primary = "&H00FFFFFF&"
+            font_size = 52
+            margin_v = 740
+            outline = 5
+            shadow = 2
 
         dialogues = []
-        last_text = ""
 
         for cue in cues:
-            start = cue["start"] - clip_start_offset
-            end = cue["end"] - clip_start_offset
+            start = cue.get("start", 0.0) - clip_start_offset
+            end = cue.get("end", 0.0) - clip_start_offset
 
             if start < 0.0 and end < 0.2:
                 continue
@@ -176,38 +194,57 @@ class SubtitleEngine:
             rel_s = max(0.0, start)
             rel_e = min(clip_duration, end) if clip_duration else end
 
-            txt = cue["text"].replace('>>', '').strip()
+            txt = cue.get("text", "").replace('>>', '').strip()
             txt = re.sub(r'\[.*?\]', '', txt).strip()
 
-            if not txt or txt == last_text or rel_e <= rel_s + 0.15:
+            if not txt or rel_e <= rel_s + 0.15:
                 continue
 
-            # Break long lines to ~26-28 chars max
-            words = txt.upper().split()
-            lines = []
-            cur_line = []
-            cur_len = 0
-            for w in words:
-                if cur_len + len(w) + 1 > 26 and cur_line:
-                    lines.append(" ".join(cur_line))
-                    cur_line = [w]
-                    cur_len = len(w)
-                else:
-                    cur_line.append(w)
-                    cur_len += len(w) + 1
-            if cur_line:
-                lines.append(" ".join(cur_line))
+            raw_words = [w for w in txt.upper().split() if w]
+            if not raw_words:
+                continue
 
-            formatted_txt = "\\N".join(lines)
+            cue_words = cue.get("words", [])
+            has_word_ts = isinstance(cue_words, list) and len(cue_words) == len(raw_words)
 
-            # Optional pop animation tag if requested
-            if style_preset == "dynamic_pop":
-                formatted_txt = f"{{\\t(0,70,\\fscx112\\fscy112)}}{{\\t(70,140,\\fscx100\\fscy100)}}{formatted_txt}"
+            chunk_size = 4
+            word_chunks = [raw_words[i:i + chunk_size] for i in range(0, len(raw_words), chunk_size)]
+            
+            total_duration = max(0.2, rel_e - rel_s)
+            time_per_word = total_duration / len(raw_words)
 
-            dialogues.append(
-                f"Dialogue: 0,{self._sec_to_ass(rel_s)},{self._sec_to_ass(rel_e)},Default,,0,0,0,,{formatted_txt}"
-            )
-            last_text = txt
+            word_idx = 0
+            for chunk in word_chunks:
+                chunk_len = len(chunk)
+                for i in range(chunk_len):
+                    if has_word_ts:
+                        w_obj = cue_words[word_idx]
+                        w_start = max(rel_s, w_obj.get("start", rel_s + word_idx * time_per_word) - clip_start_offset)
+                        w_end = min(rel_e, w_obj.get("end", w_start + time_per_word) - clip_start_offset)
+                    else:
+                        w_start = rel_s + word_idx * time_per_word
+                        w_end = rel_s + (word_idx + 1) * time_per_word
+
+                    if w_end <= w_start:
+                        w_end = w_start + 0.1
+
+                    phrase_parts = []
+                    for ci, cw in enumerate(chunk):
+                        if ci == i:
+                            if preset == "dynamic_pop":
+                                phrase_parts.append(f"{{\\c{active_color}}}{{\\u1}}{{\\fscx112\\fscy112}}{cw}{{\\fscx100\\fscy100}}{{\\u0}}{{\\c{style_primary}}}")
+                            elif preset == "clean_white":
+                                phrase_parts.append(f"{{\\c{active_color}}}{{\\u1}}{cw}{{\\u0}}{{\\c{style_primary}}}")
+                            else:  # tiktok_bold
+                                phrase_parts.append(f"{{\\c{active_color}}}{{\\u1}}{cw}{{\\u0}}{{\\c{style_primary}}}")
+                        else:
+                            phrase_parts.append(cw)
+
+                    formatted_line = " ".join(phrase_parts)
+                    dialogues.append(
+                        f"Dialogue: 0,{self._sec_to_ass(w_start)},{self._sec_to_ass(w_end)},Default,,0,0,0,,{formatted_line}"
+                    )
+                    word_idx += 1
 
         ass_content = f"""[Script Info]
 Title: hclipper Auto Subtitles
@@ -217,7 +254,7 @@ PlayResY: 1920
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Default,{self.font_name},{font_size},&H00FFFFFF,{highlight_color},&H00000000,&H80000000,-1,0,0,0,100,100,1,0,1,{outline},{shadow},2,60,60,{margin_v},1
+Style: Default,{self.font_name},{font_size},{style_primary},{active_color},&H00000000,&H80000000,-1,0,0,0,100,100,1,0,1,{outline},{shadow},2,60,60,{margin_v},1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text

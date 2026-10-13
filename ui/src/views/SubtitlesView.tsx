@@ -1,4 +1,4 @@
-import React, { useState, useRef, useMemo } from 'react';
+import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { 
   Type, 
   Palette, 
@@ -13,7 +13,12 @@ import {
   Film,
   Zap,
   Loader2,
-  FolderOpen
+  FolderOpen,
+  FileText,
+  Plus,
+  Trash2,
+  Clock,
+  Eye
 } from 'lucide-react';
 import { YoutubeIcon, TikTokIcon, InstagramIcon } from '../components/Icons';
 import { useWorkflow } from '../context/WorkflowContext';
@@ -43,10 +48,8 @@ export const SubtitlesView: React.FC<SubtitlesViewProps> = ({
   // Derive speaker name and organization dynamically from the active project
   const projectName = activeProject?.name || '';
   const speakerName = (() => {
-    // Try to extract a name after common prefixes like "Pastor", "Dr.", etc.
     const nameMatch = projectName.match(/(?:Pastor|Dr\.?|Rev\.?|Bishop|Apostle|Prophet|Minister|Elder)\s+([^—–|\-]+)/i);
     if (nameMatch) return nameMatch[0].trim();
-    // Fallback: use text before first delimiter
     const before = projectName.split(/[—–|\-]/)[0].trim();
     return before || 'Speaker';
   })();
@@ -58,7 +61,8 @@ export const SubtitlesView: React.FC<SubtitlesViewProps> = ({
   const {
     headline,
     hookBannerPreset = 'frosted_gold',
-    stylePreset,
+    stylePreset = 'tiktok_bold',
+    includeSubtitles = true,
     includeSocialPills,
     tiktokHandle,
     youtubeHandle,
@@ -66,24 +70,6 @@ export const SubtitlesView: React.FC<SubtitlesViewProps> = ({
     enableHookBanner = true,
     hookBannerDuration = 'first_5s'
   } = subtitlesState;
-
-  const [isPlaying, setIsPlaying] = useState(true);
-  const [isMuted, setIsMuted] = useState(true);
-  const [videoCurrentTime, setVideoCurrentTime] = useState(0);
-  const [isRenderingMotion, setIsRenderingMotion] = useState(false);
-  const [renderMotionStatus, setRenderMotionStatus] = useState<string | null>(null);
-  const videoRef = useRef<HTMLVideoElement>(null);
-
-  const cleanSermonHeadline = (text?: string): string => {
-    if (!text) return 'SERMON HIGHLIGHT';
-    let clean = text
-      .replace(/\[[a-zA-Z0-9_-]+\]/g, '')
-      .replace(/(?:JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)[a-z]*\.?\s+\d{1,2},?\s+\d{4}/gi, '')
-      .replace(/\b\d{4}\b/g, '');
-    const parts = clean.split(/[|｜—–]/);
-    clean = (parts[0] || clean).trim().replace(/\s+/g, ' ');
-    return clean.toUpperCase() || 'SERMON HIGHLIGHT';
-  };
 
   const activeClip = clips[activeClipIndex] || {
     id: 'Clip1',
@@ -95,7 +81,38 @@ export const SubtitlesView: React.FC<SubtitlesViewProps> = ({
     start: 15.0,
     end: 45.0,
     isRendered: false,
-    renderedPath: undefined
+    renderedPath: undefined,
+    transcriptCues: []
+  };
+
+  const [isPlaying, setIsPlaying] = useState(true);
+  const [isMuted, setIsMuted] = useState(true);
+  const [videoCurrentTime, setVideoCurrentTime] = useState(0);
+  const [isRenderingMotion, setIsRenderingMotion] = useState(false);
+  const [renderMotionStatus, setRenderMotionStatus] = useState<string | null>(null);
+  const [previewMode, setPreviewMode] = useState<'design' | 'rendered'>(
+    activeClip.isRendered ? 'rendered' : 'design'
+  );
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  // Automatically update preview mode when active clip changes or is rendered
+  useEffect(() => {
+    if (activeClip.isRendered && activeClip.renderedPath) {
+      setPreviewMode('rendered');
+    } else {
+      setPreviewMode('design');
+    }
+  }, [activeClip.id, activeClip.isRendered]);
+
+  const cleanSermonHeadline = (text?: string): string => {
+    if (!text) return 'SERMON HIGHLIGHT';
+    let clean = text
+      .replace(/\[[a-zA-Z0-9_-]+\]/g, '')
+      .replace(/(?:JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)[a-z]*\.?\s+\d{1,2},?\s+\d{4}/gi, '')
+      .replace(/\b\d{4}\b/g, '');
+    const parts = clean.split(/[|｜—–]/);
+    clean = (parts[0] || clean).trim().replace(/\s+/g, ' ');
+    return clean.toUpperCase() || 'SERMON HIGHLIGHT';
   };
 
   const toFileUrl = (rawPath: string | null | undefined): string => {
@@ -110,42 +127,39 @@ export const SubtitlesView: React.FC<SubtitlesViewProps> = ({
     return norm.startsWith('/') ? `file://${norm}` : `file:///${norm}`;
   };
 
-  const [resolvedVideoUrl, setResolvedVideoUrl] = useState<string>('');
-
-  // Convert paths to file:/// URLs for Electron video playback
-  const clipVideoUrl = useMemo(() => {
-    let p = activeClip.renderedPath;
-    if (!p && activeClip.id) {
-      p = `clips/${activeClip.id}.mp4`;
+  // Resolve video URL for playback depending on preview mode
+  const currentVideoSrc = useMemo(() => {
+    if (previewMode === 'rendered' && activeClip.renderedPath) {
+      return toFileUrl(activeClip.renderedPath);
     }
-    if (!p && sourceVideo) {
-      p = sourceVideo;
+    // In design mode, use sourceVideo so frames have NO burned-in duplicate text
+    if (sourceVideo) {
+      return toFileUrl(sourceVideo);
     }
-    return toFileUrl(p);
-  }, [activeClip.renderedPath, activeClip.id, sourceVideo]);
+    return activeClip.renderedPath ? toFileUrl(activeClip.renderedPath) : '';
+  }, [previewMode, activeClip.renderedPath, sourceVideo]);
 
-  // Synchronously & asynchronously resolve absolute media URL via Electron
-  React.useEffect(() => {
-    let raw = activeClip.renderedPath;
-    if (!raw && activeClip.id) raw = `clips/${activeClip.id}.mp4`;
-    if (!raw && sourceVideo) raw = sourceVideo;
-
-    if (!raw) {
-      setResolvedVideoUrl('');
-      return;
+  // Keep design preview loop within clip boundaries
+  useEffect(() => {
+    if (!videoRef.current) return;
+    if (previewMode === 'design' && sourceVideo && activeClip.start !== undefined) {
+      videoRef.current.currentTime = activeClip.start;
+      setVideoCurrentTime(activeClip.start);
     }
+  }, [activeClip.id, activeClip.start, previewMode, sourceVideo]);
 
-    if (window.hclipper?.resolveMediaUrl) {
-      window.hclipper.resolveMediaUrl(raw).then((url) => {
-        if (url) setResolvedVideoUrl(url);
-        else setResolvedVideoUrl(toFileUrl(raw));
-      }).catch(() => {
-        setResolvedVideoUrl(toFileUrl(raw));
-      });
-    } else {
-      setResolvedVideoUrl(toFileUrl(raw));
+  const handleTimeUpdate = (e: React.SyntheticEvent<HTMLVideoElement>) => {
+    const v = e.currentTarget;
+    const curTime = v.currentTime;
+    if (previewMode === 'design' && sourceVideo && activeClip.end !== undefined && activeClip.start !== undefined) {
+      if (curTime >= activeClip.end || curTime < activeClip.start) {
+        v.currentTime = activeClip.start;
+        setVideoCurrentTime(activeClip.start);
+        return;
+      }
     }
-  }, [activeClip.renderedPath, activeClip.id, sourceVideo]);
+    setVideoCurrentTime(curTime);
+  };
 
   const togglePlay = () => {
     if (!videoRef.current) return;
@@ -181,65 +195,138 @@ export const SubtitlesView: React.FC<SubtitlesViewProps> = ({
     updateActiveClip({ hookBannerPreset: preset });
   };
 
-  // Dynamic synchronized captions based on active clip content
-  const activeCaptionData = useMemo(() => {
-    const cleanSource = cleanSermonHeadline(activeClip.customHeadline || activeClip.title || activeClip.hook);
-    const rawWords = cleanSource.split(' ').filter(Boolean);
-    const chunks: { start: number; end: number; before: string; highlight: string; after: string }[] = [];
-    
-    for (let i = 0; i < rawWords.length; i += 3) {
-      const start = (i / 3) * 2.5;
-      const end = start + 2.5;
-      const triplet = rawWords.slice(i, i + 3);
-      if (triplet.length === 1) {
-        chunks.push({ start, end, before: '', highlight: triplet[0].toUpperCase(), after: '' });
-      } else if (triplet.length === 2) {
-        chunks.push({ start, end, before: triplet[0].toUpperCase() + ' ', highlight: triplet[1].toUpperCase(), after: '' });
-      } else {
-        chunks.push({ start, end, before: triplet[0].toUpperCase() + ' ', highlight: triplet[1].toUpperCase(), after: ' ' + triplet[2].toUpperCase() });
-      }
-    }
+  const handlePresetChange = (preset: 'tiktok_bold' | 'dynamic_pop' | 'clean_white') => {
+    setSubtitlesState((prev) => ({ ...prev, stylePreset: preset }));
+    updateActiveClip({ subtitlePreset: preset });
+  };
 
-    return chunks.length ? chunks : [{ start: 0, end: 5, before: 'DISCOVER YOUR ', highlight: 'PURPOSE', after: ' TODAY' }];
-  }, [activeClip.customHeadline, activeClip.title, activeClip.hook]);
-
-  // Synchronized real spoken captions from the preacher
+  // Dynamic progressive word-by-word active caption computation
   const currentCaption = useMemo(() => {
-    // 1. Prioritize real spoken speech transcript cues from Whisper/VTT
+    // 1. Spoken transcript cues (from Whisper, VTT, or user edits)
     if (activeClip.transcriptCues && activeClip.transcriptCues.length > 0) {
-      const match = activeClip.transcriptCues.find(
-        (c) => videoCurrentTime >= c.start && videoCurrentTime <= c.end
-      );
+      const relativeTime = (videoCurrentTime >= activeClip.start && videoCurrentTime <= activeClip.end)
+        ? videoCurrentTime - activeClip.start
+        : videoCurrentTime;
+
+      const match = activeClip.transcriptCues.find((c) => {
+        if (videoCurrentTime >= c.start && videoCurrentTime <= c.end) return true;
+        if (relativeTime >= c.start && relativeTime <= c.end) return true;
+        return false;
+      });
+
       if (match) {
-        const words = match.text.split(' ').filter(Boolean);
-        if (words.length === 1) {
-          return { before: '', highlight: words[0].toUpperCase(), after: '' };
-        }
-        const midIdx = Math.floor(words.length / 2);
+        const words = match.text.split(/\s+/).filter(Boolean);
+        if (words.length === 0) return null;
+
+        const isAbs = videoCurrentTime >= match.start && videoCurrentTime <= match.end;
+        const cur = isAbs ? videoCurrentTime : relativeTime;
+        const cueDur = Math.max(0.1, match.end - match.start);
+        const elapsed = Math.max(0, cur - match.start);
+        const progress = Math.min(0.999, elapsed / cueDur);
+        const activeWordIdx = Math.floor(progress * words.length);
+
         return {
-          before: words.slice(0, midIdx).join(' ').toUpperCase() + (midIdx > 0 ? ' ' : ''),
-          highlight: words[midIdx].toUpperCase(),
-          after: (midIdx < words.length - 1 ? ' ' : '') + words.slice(midIdx + 1).join(' ').toUpperCase()
+          words,
+          activeWordIdx,
+          rawText: match.text,
+          start: match.start,
+          end: match.end
         };
       }
       return null;
     }
 
-    // 2. Fallback to rhythmic title chunking
-    if (!activeCaptionData.length) return null;
-    const totalDuration = activeCaptionData.length * 2.5;
-    const loopTime = totalDuration > 0 ? (videoCurrentTime % totalDuration) : 0;
-    return activeCaptionData.find((c) => loopTime >= c.start && loopTime < c.end) || activeCaptionData[0];
-  }, [activeClip.transcriptCues, activeCaptionData, videoCurrentTime]);
+    // 2. Fallback to rhythmic words from headline/title if no cues exist yet
+    const cleanSource = cleanSermonHeadline(activeClip.customHeadline || activeClip.title || activeClip.hook);
+    const words = cleanSource.split(/\s+/).filter(Boolean);
+    if (!words.length) return null;
 
+    const groupSize = 4;
+    const totalGroups = Math.ceil(words.length / groupSize);
+    const loopDur = totalGroups * 2.5;
+    const loopTime = loopDur > 0 ? (videoCurrentTime % loopDur) : 0;
+    const currentGroupIdx = Math.floor(loopTime / 2.5);
+    const groupStart = currentGroupIdx * groupSize;
+    const groupWords = words.slice(groupStart, groupStart + groupSize);
+    const groupElapsed = loopTime - (currentGroupIdx * 2.5);
+    const activeWordIdx = Math.min(
+      groupWords.length - 1,
+      Math.floor((groupElapsed / 2.5) * groupWords.length)
+    );
+
+    return {
+      words: groupWords,
+      activeWordIdx,
+      rawText: groupWords.join(' '),
+      start: 0,
+      end: 2.5
+    };
+  }, [activeClip.transcriptCues, activeClip.customHeadline, activeClip.title, activeClip.hook, activeClip.start, activeClip.end, videoCurrentTime]);
+
+  // Hook banner visibility window
   const isHookVisible = enableHookBanner && (
     hookBannerDuration === 'full_clip' ||
-    (hookBannerDuration === 'first_3s' ? videoCurrentTime <= 3.2 : videoCurrentTime <= 5.2)
+    (hookBannerDuration === 'first_3s' ? (videoCurrentTime - (activeClip.start || 0)) <= 3.2 : (videoCurrentTime - (activeClip.start || 0)) <= 5.2)
   );
 
-  const handlePresetChange = (preset: 'tiktok_bold' | 'dynamic_pop' | 'clean_white') => {
-    setSubtitlesState((prev) => ({ ...prev, stylePreset: preset }));
-    updateActiveClip({ subtitlePreset: preset });
+  // Transcript Cue Editor handlers
+  const handleUpdateCueText = (index: number, newText: string) => {
+    const currentCues = [...(activeClip.transcriptCues || [])];
+    if (currentCues[index]) {
+      currentCues[index] = { ...currentCues[index], text: newText };
+      updateActiveClip({ transcriptCues: currentCues });
+    }
+  };
+
+  const handleAddCue = () => {
+    const currentCues = [...(activeClip.transcriptCues || [])];
+    const clipStart = activeClip.start || 0;
+    const clipEnd = activeClip.end || (clipStart + 30);
+    const lastEnd = currentCues.length > 0 
+      ? currentCues[currentCues.length - 1].end 
+      : clipStart;
+    const newStart = Math.min(clipEnd, lastEnd);
+    const newEnd = Math.min(clipEnd, newStart + 3.0);
+    currentCues.push({
+      start: Number(newStart.toFixed(1)),
+      end: Number(newEnd.toFixed(1)),
+      text: 'New spoken phrase...'
+    });
+    updateActiveClip({ transcriptCues: currentCues });
+  };
+
+  const handleDeleteCue = (index: number) => {
+    const currentCues = (activeClip.transcriptCues || []).filter((_, i) => i !== index);
+    updateActiveClip({ transcriptCues: currentCues });
+  };
+
+  const handlePopulateDefaultCues = () => {
+    const headlineWords = (activeClip.customHeadline || activeClip.title || activeClip.hook || 'Key sermon insight').split(/\s+/).filter(Boolean);
+    const sTime = activeClip.start || 0;
+    const eTime = activeClip.end || (sTime + 30);
+    const dur = Math.max(1, eTime - sTime);
+    const chunkSize = 4;
+    const totalChunks = Math.ceil(headlineWords.length / chunkSize);
+    const chunkDur = dur / Math.max(1, totalChunks);
+    const newCues = [];
+    for (let i = 0; i < totalChunks; i++) {
+      const s = sTime + (i * chunkDur);
+      const e = s + chunkDur;
+      const txt = headlineWords.slice(i * chunkSize, (i + 1) * chunkSize).join(' ');
+      newCues.push({
+        start: Number(s.toFixed(1)),
+        end: Number(e.toFixed(1)),
+        text: txt
+      });
+    }
+    updateActiveClip({ transcriptCues: newCues });
+  };
+
+  const handleSeekToCue = (startSec: number) => {
+    if (videoRef.current) {
+      videoRef.current.currentTime = startSec;
+      setVideoCurrentTime(startSec);
+    }
   };
 
   const hookPresets: {
@@ -300,7 +387,7 @@ export const SubtitlesView: React.FC<SubtitlesViewProps> = ({
             </span>
           </div>
           <p className="text-xs text-slate-400 mt-1">
-            Customize individual hook banner headlines, karaoke subtitle styles, and watermark badges for each specific clip.
+            Grounded workflow presets: customize individual hook banners, progressive word-by-word karaoke subtitles, and transcript cues for publication.
           </p>
         </div>
 
@@ -390,7 +477,7 @@ export const SubtitlesView: React.FC<SubtitlesViewProps> = ({
                   </button>
                 </div>
 
-                {/* Banner Display Duration (Avoids blocking speaker's face) */}
+                {/* Banner Display Duration */}
                 <div className="pt-2 border-t border-white/5 space-y-2">
                   <div className="flex items-center justify-between">
                     <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
@@ -475,49 +562,171 @@ export const SubtitlesView: React.FC<SubtitlesViewProps> = ({
             )}
           </div>
 
-          {/* Subtitle Style Presets */}
+          {/* Subtitle Style Presets (With Burn Toggle) */}
           <div className="glass-card rounded-xl p-5 space-y-3.5 border-white/10">
-            <span className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-              <Palette className="w-4 h-4 text-sky-400" />
-              Subtitle Styling Presets (ASS)
-            </span>
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                <Palette className="w-4 h-4 text-sky-400" />
+                Subtitle Styling Presets (ASS Progressive Karaoke)
+              </span>
+              <label className="flex items-center space-x-1.5 text-xs text-slate-300 cursor-pointer font-medium">
+                <input 
+                  type="checkbox" 
+                  checked={includeSubtitles !== false}
+                  onChange={(e) => setSubtitlesState((prev) => ({ ...prev, includeSubtitles: e.target.checked }))}
+                  className="accent-amber-400 w-3.5 h-3.5"
+                />
+                <span className={includeSubtitles !== false ? 'text-amber-300 font-bold' : 'text-slate-400'}>
+                  Burn Subtitles into Video
+                </span>
+              </label>
+            </div>
 
-            <div className="grid grid-cols-3 gap-3">
-              <button
-                onClick={() => handlePresetChange('tiktok_bold')}
-                className={`p-3 rounded-lg border text-left transition-all ${
-                  stylePreset === 'tiktok_bold'
-                    ? 'bg-amber-400/10 border-amber-400/50 text-white shadow-sm'
-                    : 'bg-slate-900 border-white/5 text-slate-400 hover:text-white'
-                }`}
-              >
-                <div className="text-xs font-bold text-amber-400">TikTok Bold</div>
-                <div className="text-[10px] text-slate-400 mt-1 leading-snug">Segoe UI Black with gold word highlight</div>
-              </button>
+            {includeSubtitles !== false ? (
+              <div className="grid grid-cols-3 gap-3">
+                <button
+                  onClick={() => handlePresetChange('tiktok_bold')}
+                  className={`p-3 rounded-lg border text-left transition-all ${
+                    stylePreset === 'tiktok_bold'
+                      ? 'bg-amber-400/10 border-amber-400/50 text-white shadow-sm ring-1 ring-amber-400/30'
+                      : 'bg-slate-900 border-white/5 text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <div className="text-xs font-bold text-amber-400 flex items-center justify-between">
+                    <span>TikTok Bold</span>
+                    {stylePreset === 'tiktok_bold' && <CheckCircle2 className="w-3.5 h-3.5 text-amber-400" />}
+                  </div>
+                  <div className="text-[10px] text-slate-400 mt-1 leading-snug">
+                    Segoe UI Black with gold word highlight & active word underline
+                  </div>
+                </button>
 
-              <button
-                onClick={() => handlePresetChange('dynamic_pop')}
-                className={`p-3 rounded-lg border text-left transition-all ${
-                  stylePreset === 'dynamic_pop'
-                    ? 'bg-sky-400/10 border-sky-400/50 text-white shadow-sm'
-                    : 'bg-slate-900 border-white/5 text-slate-400 hover:text-white'
-                }`}
-              >
-                <div className="text-xs font-bold text-sky-400">Dynamic Pop</div>
-                <div className="text-[10px] text-slate-400 mt-1 leading-snug">Bouncing word animation with neon cyan box</div>
-              </button>
+                <button
+                  onClick={() => handlePresetChange('dynamic_pop')}
+                  className={`p-3 rounded-lg border text-left transition-all ${
+                    stylePreset === 'dynamic_pop'
+                      ? 'bg-sky-400/10 border-sky-400/50 text-white shadow-sm ring-1 ring-sky-400/30'
+                      : 'bg-slate-900 border-white/5 text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <div className="text-xs font-bold text-sky-400 flex items-center justify-between">
+                    <span>Dynamic Pop</span>
+                    {stylePreset === 'dynamic_pop' && <CheckCircle2 className="w-3.5 h-3.5 text-sky-400" />}
+                  </div>
+                  <div className="text-[10px] text-slate-400 mt-1 leading-snug">
+                    Bouncing word animation with neon cyan box & active word underline
+                  </div>
+                </button>
 
-              <button
-                onClick={() => handlePresetChange('clean_white')}
-                className={`p-3 rounded-lg border text-left transition-all ${
-                  stylePreset === 'clean_white'
-                    ? 'bg-white/10 border-white/40 text-white shadow-sm'
-                    : 'bg-slate-900 border-white/5 text-slate-400 hover:text-white'
-                }`}
-              >
-                <div className="text-xs font-bold text-slate-200">Clean Minimal</div>
-                <div className="text-[10px] text-slate-400 mt-1 leading-snug">Understated semi-bold with crisp shadow</div>
-              </button>
+                <button
+                  onClick={() => handlePresetChange('clean_white')}
+                  className={`p-3 rounded-lg border text-left transition-all ${
+                    stylePreset === 'clean_white'
+                      ? 'bg-white/10 border-white/40 text-white shadow-sm ring-1 ring-white/30'
+                      : 'bg-slate-900 border-white/5 text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <div className="text-xs font-bold text-slate-200 flex items-center justify-between">
+                    <span>Clean Minimal</span>
+                    {stylePreset === 'clean_white' && <CheckCircle2 className="w-3.5 h-3.5 text-white" />}
+                  </div>
+                  <div className="text-[10px] text-slate-400 mt-1 leading-snug">
+                    Understated semi-bold with crisp shadow & clean word underline
+                  </div>
+                </button>
+              </div>
+            ) : (
+              <div className="p-3 bg-slate-900/80 rounded-lg border border-white/5 text-slate-400 text-xs italic flex items-center gap-2">
+                <FileText className="w-4 h-4 text-slate-500" />
+                <span>Subtitles are disabled for this clip. Video will render 100% clean without burned-in dialogue captions.</span>
+              </div>
+            )}
+          </div>
+
+          {/* Spoken Transcript Cues (Interactive Inline Editor) */}
+          <div className="glass-card rounded-xl p-5 space-y-3.5 border-white/10">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                <FileText className="w-4 h-4 text-amber-400" />
+                Spoken Transcript Cues (Click to Edit)
+              </span>
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={handlePopulateDefaultCues}
+                  className="px-2.5 py-1 bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10 text-[10px] font-semibold rounded transition-colors"
+                  title="Auto-split clip title/headline into rhythmic speech cues"
+                >
+                  Auto-Split Headline
+                </button>
+                <button
+                  onClick={handleAddCue}
+                  className="px-2.5 py-1 bg-amber-400/10 hover:bg-amber-400/20 text-amber-300 border border-amber-400/30 text-[10px] font-semibold rounded flex items-center gap-1 transition-colors"
+                >
+                  <Plus className="w-3 h-3" />
+                  <span>Add Cue</span>
+                </button>
+              </div>
+            </div>
+
+            <p className="text-[11px] text-slate-400 leading-snug">
+              Edit the spoken words burned into the video. The karaoke engine underlines and highlights each word dynamically as speech advances.
+            </p>
+
+            <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+              {activeClip.transcriptCues && activeClip.transcriptCues.length > 0 ? (
+                activeClip.transcriptCues.map((cue, idx) => {
+                  const isCurCue = videoCurrentTime >= cue.start && videoCurrentTime <= cue.end;
+                  return (
+                    <div 
+                      key={idx}
+                      className={`flex items-center gap-2 p-2 rounded-lg border transition-all ${
+                        isCurCue 
+                          ? 'bg-amber-400/10 border-amber-400/40 shadow-sm' 
+                          : 'bg-slate-900/80 border-white/5'
+                      }`}
+                    >
+                      <button
+                        onClick={() => handleSeekToCue(cue.start)}
+                        className={`px-2 py-1 rounded text-[10px] font-mono font-bold flex items-center gap-1 border shrink-0 transition-colors ${
+                          isCurCue
+                            ? 'bg-amber-400 text-slate-950 border-amber-300'
+                            : 'bg-black/60 text-slate-300 border-white/10 hover:text-white'
+                        }`}
+                        title="Click to seek player to this cue"
+                      >
+                        <Clock className="w-2.5 h-2.5" />
+                        <span>{cue.start.toFixed(1)}s - {cue.end.toFixed(1)}s</span>
+                      </button>
+
+                      <input
+                        type="text"
+                        value={cue.text}
+                        onChange={(e) => handleUpdateCueText(idx, e.target.value)}
+                        className="flex-1 bg-slate-950/80 border border-white/10 rounded px-2.5 py-1 text-xs text-white focus:outline-none focus:border-amber-400/60"
+                        placeholder="Spoken words..."
+                      />
+
+                      <button
+                        onClick={() => handleDeleteCue(idx)}
+                        className="p-1 text-slate-500 hover:text-red-400 transition-colors rounded"
+                        title="Delete this cue"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  );
+                })
+              ) : (
+                <div className="p-4 bg-slate-900/50 rounded-lg border border-white/5 text-center space-y-2">
+                  <p className="text-xs text-slate-400">No custom speech cues recorded for this clip yet.</p>
+                  <button
+                    onClick={handlePopulateDefaultCues}
+                    className="px-3 py-1.5 bg-amber-400/10 hover:bg-amber-400/20 text-amber-300 border border-amber-400/30 text-xs font-semibold rounded transition-colors"
+                  >
+                    Generate Speech Cues from Clip Title
+                  </button>
+                </div>
+              )}
             </div>
           </div>
 
@@ -599,7 +808,7 @@ export const SubtitlesView: React.FC<SubtitlesViewProps> = ({
             </div>
 
             <p className="text-[11px] text-slate-300 leading-relaxed">
-              Burns stylized karaoke subtitles, frosted glass hook banner, and broadcast audio mastering (loudnorm, vocal highpass, denoise) into a publish-ready 1080x1920 MP4 via Intel QSV hardware acceleration.
+              Burns stylized progressive karaoke subtitles, frosted glass hook banner, and broadcast audio mastering (loudnorm, vocal highpass, denoise) into a publish-ready 1080x1920 MP4 via Intel QSV hardware acceleration.
             </p>
 
             {/* Progress bar if rendering */}
@@ -624,7 +833,7 @@ export const SubtitlesView: React.FC<SubtitlesViewProps> = ({
                 onClick={async () => {
                   const out = await startRenderClip(activeClipIndex, true, true);
                   if (out) {
-                    setResolvedVideoUrl(toFileUrl(out));
+                    setPreviewMode('rendered');
                   }
                 }}
                 className={`flex-1 py-2.5 rounded-lg font-bold text-xs flex items-center justify-center gap-2 shadow-lg transition-all ${
@@ -701,7 +910,7 @@ export const SubtitlesView: React.FC<SubtitlesViewProps> = ({
             </div>
 
             <p className="text-[11px] text-slate-300 leading-relaxed">
-              Synthesizes physical spring physics typography, responsive lower-third speaker identifiers, and synchronized tactile sound effects (whoosh, pop, slide) directly onto the reframed vertical short.
+              Synthesizes physical spring physics typography, responsive lower-third speaker identifiers, and synchronized tactile sound effects directly onto the reframed vertical short.
             </p>
 
             <div className="space-y-2 pt-1 border-t border-white/10">
@@ -729,7 +938,7 @@ export const SubtitlesView: React.FC<SubtitlesViewProps> = ({
                 <div className="flex items-center justify-between p-2 rounded-lg bg-slate-900/80 border border-white/5 text-xs">
                   <div className="flex items-center gap-2">
                     <span className="text-emerald-400 font-bold">⚡ 0.0s - End</span>
-                    <span className="text-white font-semibold">Karaoke Dialogue: Synchronized Preacher Subtitles</span>
+                    <span className="text-white font-semibold">Karaoke Dialogue: Progressive Underlined Subtitles</span>
                   </div>
                   <span className="text-[10px] bg-emerald-950 text-emerald-300 px-2 py-0.5 rounded border border-emerald-500/30">Karaoke Engine</span>
                 </div>
@@ -771,7 +980,7 @@ export const SubtitlesView: React.FC<SubtitlesViewProps> = ({
                         isRendered: true,
                         renderedPath: targetOut
                       });
-                      setResolvedVideoUrl(toFileUrl(targetOut));
+                      setPreviewMode('rendered');
                       setRenderMotionStatus(`✓ Motion design short rendered successfully -> ${targetOut}`);
                     } else {
                       setRenderMotionStatus('Motion render finished.');
@@ -819,24 +1028,49 @@ export const SubtitlesView: React.FC<SubtitlesViewProps> = ({
             )}
           </div>
 
+          {/* Mode Switcher: Live Design Overlays vs Final Burned Master */}
+          <div className="flex bg-slate-900 border border-white/10 rounded-lg p-0.5 text-[11px] mb-3 w-72 justify-center shadow-inner">
+            <button
+              onClick={() => setPreviewMode('design')}
+              className={`flex-1 py-1.5 px-2 rounded-md font-bold transition-all flex items-center justify-center gap-1.5 ${
+                previewMode === 'design'
+                  ? 'bg-amber-400 text-slate-950 shadow-md font-bold'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <Eye className="w-3 h-3" />
+              <span>✨ Live Design</span>
+            </button>
+            <button
+              onClick={() => setPreviewMode('rendered')}
+              disabled={!activeClip.isRendered}
+              className={`flex-1 py-1.5 px-2 rounded-md font-bold transition-all flex items-center justify-center gap-1.5 ${
+                previewMode === 'rendered'
+                  ? 'bg-emerald-500 text-slate-950 shadow-md font-bold'
+                  : activeClip.isRendered
+                  ? 'text-slate-400 hover:text-white'
+                  : 'text-slate-600 cursor-not-allowed opacity-40'
+              }`}
+              title={activeClip.isRendered ? 'View final rendered video with burned subtitles' : 'Render master short first to view baked video'}
+            >
+              <Film className="w-3 h-3" />
+              <span>🎬 Rendered Master</span>
+            </button>
+          </div>
+
           {/* Vertical 9:16 Mockup Frame */}
           <div className="relative w-72 h-[505px] bg-slate-950 rounded-3xl border-4 border-slate-800 overflow-hidden shadow-2xl flex flex-col justify-between p-3.5 select-none ring-1 ring-white/10">
             {/* Background Video Player */}
-            {(resolvedVideoUrl || clipVideoUrl) ? (
+            {currentVideoSrc ? (
               <video
                 ref={videoRef}
-                src={resolvedVideoUrl || clipVideoUrl}
+                src={currentVideoSrc}
                 className="absolute inset-0 w-full h-full object-cover"
                 autoPlay
                 loop
                 muted={isMuted}
                 playsInline
-                onTimeUpdate={(e) => setVideoCurrentTime((e.target as HTMLVideoElement).currentTime)}
-                onError={() => {
-                  if (sourceVideo && (resolvedVideoUrl || clipVideoUrl) !== toFileUrl(sourceVideo)) {
-                    setResolvedVideoUrl(toFileUrl(sourceVideo));
-                  }
-                }}
+                onTimeUpdate={handleTimeUpdate}
               />
             ) : (
               <div className="absolute inset-0 bg-slate-950 flex items-center justify-center text-slate-600 text-xs font-medium">
@@ -847,50 +1081,81 @@ export const SubtitlesView: React.FC<SubtitlesViewProps> = ({
             {/* Cinematic Readability Vignette */}
             <div className="absolute inset-0 bg-gradient-to-b from-black/80 via-transparent to-black/85 pointer-events-none z-10" />
 
-            {/* Top Hook Banner Overlay with Auto-Fade */}
-            <div className={`relative z-20 w-full mt-2 px-1 transition-all duration-500 ${isHookVisible ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-2 pointer-events-none'}`}>
-              <div className={`w-full rounded-xl p-2.5 text-center transition-all ${currentHookConfig.bannerClasses}`}>
-                <span className={`text-[11px] font-black uppercase tracking-wider font-display leading-tight block ${currentHookConfig.textClasses}`}>
-                  {cleanSermonHeadline(headline || activeClip.customHeadline || activeClip.hook || activeClip.title)}
-                </span>
+            {/* Mode Indicator Pill inside player */}
+            {previewMode === 'rendered' ? (
+              <div className="relative z-20 w-full mt-1 px-1">
+                <div className="bg-emerald-950/85 backdrop-blur-md border border-emerald-400/40 text-emerald-300 text-[10px] font-bold px-2 py-1 rounded-lg text-center shadow-lg">
+                  ✓ Viewing Rendered Video (Burned Subtitles Baked In)
+                </div>
               </div>
-            </div>
+            ) : null}
 
-            {/* Middle Dynamic Synchronized Subtitle Karaoke */}
-            <div className="relative z-20 text-center px-2 space-y-1 my-auto transition-all">
-              {stylePreset === 'tiktok_bold' && (
-                <div className="text-base font-black tracking-tight leading-snug drop-shadow-[0_2px_8px_rgba(0,0,0,1)]">
-                  <span className="text-white">{currentCaption?.before}</span>
-                  <span className="text-amber-400 bg-black/80 px-1.5 py-0.5 rounded border border-amber-400/50 shadow-lg inline-block animate-in zoom-in-95">
-                    {currentCaption?.highlight}
+            {/* In Design Mode: Live Top Hook Banner Overlay with Auto-Fade */}
+            {previewMode === 'design' && (
+              <div className={`relative z-20 w-full mt-1 px-1 transition-all duration-500 ${isHookVisible ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-2 pointer-events-none'}`}>
+                <div className={`w-full rounded-xl p-2.5 text-center transition-all ${currentHookConfig.bannerClasses}`}>
+                  <span className={`text-[11px] font-black uppercase tracking-wider font-display leading-tight block ${currentHookConfig.textClasses}`}>
+                    {cleanSermonHeadline(headline || activeClip.customHeadline || activeClip.hook || activeClip.title)}
                   </span>
-                  <span className="text-white">{currentCaption?.after}</span>
                 </div>
-              )}
+              </div>
+            )}
 
-              {stylePreset === 'dynamic_pop' && (
-                <div className="text-base font-black tracking-tight leading-snug drop-shadow-[0_2px_8px_rgba(0,0,0,1)]">
-                  <span className="text-white">{currentCaption?.before}</span>
-                  <span className="text-sky-300 bg-sky-950/95 px-2 py-0.5 rounded border border-sky-400/80 shadow-[0_0_12px_rgba(56,189,248,0.4)] inline-block animate-pulse">
-                    {currentCaption?.highlight}
-                  </span>
-                  <span className="text-white">{currentCaption?.after}</span>
+            {/* In Design Mode: Middle Dynamic Synchronized Subtitle Karaoke with Active Word Underline */}
+            {previewMode === 'design' && includeSubtitles !== false && currentCaption && (
+              <div className="relative z-20 text-center px-2 space-y-1 my-auto transition-all">
+                <div className="text-base font-black tracking-tight leading-snug drop-shadow-[0_2px_8px_rgba(0,0,0,1)] flex flex-wrap justify-center items-center gap-y-1">
+                  {currentCaption.words.map((word, wIdx) => {
+                    const isActive = wIdx === currentCaption.activeWordIdx;
+
+                    if (stylePreset === 'tiktok_bold') {
+                      return (
+                        <span
+                          key={wIdx}
+                          className={`inline-block mx-1 transition-all duration-150 ${
+                            isActive
+                              ? 'text-amber-400 font-black underline decoration-amber-400 decoration-4 underline-offset-4 bg-black/85 px-2 py-0.5 rounded shadow-lg ring-1 ring-amber-400/50 scale-105 -translate-y-0.5'
+                              : 'text-white font-extrabold drop-shadow-[0_2px_4px_rgba(0,0,0,1)]'
+                          }`}
+                        >
+                          {word.toUpperCase()}
+                        </span>
+                      );
+                    } else if (stylePreset === 'dynamic_pop') {
+                      return (
+                        <span
+                          key={wIdx}
+                          className={`inline-block mx-1 transition-all duration-150 ${
+                            isActive
+                              ? 'text-cyan-300 font-black underline decoration-cyan-400 decoration-4 underline-offset-4 bg-cyan-950/95 px-2 py-0.5 rounded border border-cyan-400 shadow-[0_0_15px_rgba(6,182,212,0.6)] scale-110 -translate-y-0.5 animate-pulse'
+                              : 'text-white font-extrabold drop-shadow-[0_2px_4px_rgba(0,0,0,1)]'
+                          }`}
+                        >
+                          {word.toUpperCase()}
+                        </span>
+                      );
+                    } else {
+                      // clean_white
+                      return (
+                        <span
+                          key={wIdx}
+                          className={`inline-block mx-1 transition-all duration-150 ${
+                            isActive
+                              ? 'text-amber-300 font-black underline decoration-amber-300 decoration-2 underline-offset-4 scale-105'
+                              : 'text-white/90 font-bold drop-shadow-[0_2px_4px_rgba(0,0,0,1)]'
+                          }`}
+                        >
+                          {word.toUpperCase()}
+                        </span>
+                      );
+                    }
+                  })}
                 </div>
-              )}
+              </div>
+            )}
 
-              {stylePreset === 'clean_white' && (
-                <div className="text-sm font-semibold tracking-wide text-white drop-shadow-[0_2px_6px_rgba(0,0,0,0.9)]">
-                  <span>{currentCaption?.before}</span>
-                  <span className="text-amber-300 font-bold underline underline-offset-4 decoration-amber-400/70 mx-1">
-                    {currentCaption?.highlight}
-                  </span>
-                  <span>{currentCaption?.after}</span>
-                </div>
-              )}
-            </div>
-
-            {/* Bottom Safe Zone: Watermark Pills (TikTok + YouTube + Instagram) */}
-            {includeSocialPills && (
+            {/* In Design Mode: Bottom Safe Zone Watermark Pills */}
+            {previewMode === 'design' && includeSocialPills && (
               <div className="relative z-20 w-full flex flex-wrap justify-center gap-1.5 mb-2">
                 {tiktokHandle && (
                   <div className="bg-black/75 backdrop-blur-md border border-white/15 rounded-full px-2.5 py-0.5 flex items-center space-x-1 shadow">
