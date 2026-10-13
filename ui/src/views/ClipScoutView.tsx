@@ -922,7 +922,7 @@ export const ClipScoutView: React.FC<ClipScoutViewProps> = ({
       {/* Single Clip Re-render Confirmation Modal */}
       {rerenderConfirmIndex !== null && clips[rerenderConfirmIndex] && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="glass-card max-w-md w-full p-6 rounded-2xl border-amber-400/40 space-y-4 shadow-2xl animate-in zoom-in-95 bg-slate-900/95">
+          <div className="glass-card max-w-lg w-full p-6 rounded-2xl border-amber-400/40 space-y-4 shadow-2xl animate-in zoom-in-95 bg-slate-900/95 overflow-hidden">
             <div className="flex items-center space-x-3 text-amber-400">
               <div className="p-2 rounded-xl bg-amber-400/10 border border-amber-400/20 text-amber-400">
                 <AlertCircle className="w-5 h-5" />
@@ -933,13 +933,15 @@ export const ClipScoutView: React.FC<ClipScoutViewProps> = ({
               </div>
             </div>
 
-            <div className="p-3.5 rounded-xl bg-slate-950/60 border border-white/5 space-y-1.5">
-              <div className="text-xs font-bold text-white line-clamp-1">
+            <div className="p-3.5 rounded-xl bg-slate-950/60 border border-white/5 space-y-2 overflow-hidden">
+              <div className="text-xs font-bold text-white line-clamp-2">
                 {clips[rerenderConfirmIndex].title}
               </div>
-              <div className="text-[11px] text-slate-400 font-mono flex items-center space-x-2">
-                <span>Saved path:</span>
-                <span className="text-emerald-400 font-semibold">{clips[rerenderConfirmIndex].renderedPath || `clips/${clips[rerenderConfirmIndex].id}.mp4`}</span>
+              <div className="text-[11px] text-slate-400 font-mono space-y-1">
+                <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider block">Saved Destination:</span>
+                <span className="text-emerald-400 font-semibold break-all bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1.5 rounded-lg block leading-relaxed select-all">
+                  {clips[rerenderConfirmIndex].renderedPath || `clips/${clips[rerenderConfirmIndex].id}.mp4`}
+                </span>
               </div>
             </div>
 
