@@ -32,6 +32,7 @@ temp/
 output/
 clips/
 downloads/
+scratch/
 
 # Session and Auth Profiles
 sessions/

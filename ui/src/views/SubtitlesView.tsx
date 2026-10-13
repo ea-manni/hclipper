@@ -10,7 +10,10 @@ import {
   Pause,
   Volume2,
   VolumeX,
-  Film
+  Film,
+  Zap,
+  Loader2,
+  FolderOpen
 } from 'lucide-react';
 import { YoutubeIcon, TikTokIcon, InstagramIcon } from '../components/Icons';
 import { useWorkflow } from '../context/WorkflowContext';
@@ -31,7 +34,10 @@ export const SubtitlesView: React.FC<SubtitlesViewProps> = ({
     clips, 
     activeClipIndex, 
     selectClip,
-    updateActiveClip 
+    updateActiveClip,
+    reframeState,
+    startRenderClip,
+    startBatchRenderAll
   } = useWorkflow();
 
   // Derive speaker name and organization dynamically from the active project
@@ -575,6 +581,108 @@ export const SubtitlesView: React.FC<SubtitlesViewProps> = ({
                 </div>
               </div>
             )}
+          </div>
+
+          {/* Master Short Composite Render Card (Captions + Hook + Audio DSP) */}
+          <div className="glass-card rounded-xl p-5 space-y-3.5 border-amber-400/30 bg-gradient-to-br from-slate-950 via-slate-900 to-amber-950/20 shadow-[0_0_25px_rgba(245,158,11,0.08)]">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-amber-300 uppercase tracking-wider flex items-center gap-1.5">
+                <Zap className="w-4 h-4 text-amber-400" />
+                Render Master Short (Captions + Hook + Audio)
+              </span>
+              {activeClip.isRendered && (
+                <span className="text-[10px] text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/30 font-semibold flex items-center gap-1">
+                  <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                  Rendered (QSV)
+                </span>
+              )}
+            </div>
+
+            <p className="text-[11px] text-slate-300 leading-relaxed">
+              Burns stylized karaoke subtitles, frosted glass hook banner, and broadcast audio mastering (loudnorm, vocal highpass, denoise) into a publish-ready 1080x1920 MP4 via Intel QSV hardware acceleration.
+            </p>
+
+            {/* Progress bar if rendering */}
+            {reframeState.isRendering && (
+              <div className="space-y-1.5 pt-1">
+                <div className="flex justify-between text-[11px] text-slate-400">
+                  <span className="capitalize">{reframeState.renderPhase}...</span>
+                  <span className="font-mono text-amber-400 font-bold">{reframeState.renderProgress}%</span>
+                </div>
+                <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-gradient-to-r from-amber-500 to-amber-400 transition-all duration-300"
+                    style={{ width: `${reframeState.renderProgress}%` }}
+                  />
+                </div>
+              </div>
+            )}
+
+            <div className="flex items-center space-x-2 pt-1">
+              <button
+                disabled={reframeState.isRendering || !sourceVideo}
+                onClick={async () => {
+                  const out = await startRenderClip(activeClipIndex, true, true);
+                  if (out) {
+                    setResolvedVideoUrl(toFileUrl(out));
+                  }
+                }}
+                className={`flex-1 py-2.5 rounded-lg font-bold text-xs flex items-center justify-center gap-2 shadow-lg transition-all ${
+                  reframeState.isRendering || !sourceVideo
+                    ? 'bg-slate-800 text-slate-400 border border-white/10 cursor-not-allowed'
+                    : 'bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 active:scale-95 shadow-amber-500/20'
+                }`}
+              >
+                {reframeState.isRendering ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-slate-950" />
+                    <span>Rendering Master Short ({reframeState.renderProgress}%)...</span>
+                  </>
+                ) : (
+                  <>
+                    <Zap className="w-4 h-4" />
+                    <span>{activeClip.isRendered ? 'Re-render Master Short' : 'Render Master Short (GPU)'}</span>
+                  </>
+                )}
+              </button>
+
+              {activeClip.isRendered && (
+                <>
+                  <button
+                    onClick={handleOpenRendered}
+                    className="px-3 py-2.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 text-xs font-semibold flex items-center space-x-1.5 transition-colors"
+                    title="Play in Default Video Player"
+                  >
+                    <Film className="w-3.5 h-3.5" />
+                    <span>Play</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      const p = activeClip.renderedPath || (activeClip.id ? `clips/${activeClip.id}.mp4` : null);
+                      if (window.hclipper && p) window.hclipper.showInFolder(p);
+                    }}
+                    className="px-3 py-2.5 rounded-lg bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10 text-xs font-semibold flex items-center space-x-1.5 transition-colors"
+                    title="Show in File Explorer"
+                  >
+                    <FolderOpen className="w-3.5 h-3.5" />
+                  </button>
+                </>
+              )}
+            </div>
+
+            <div className="pt-2 border-t border-white/10 flex items-center justify-between">
+              <span className="text-[10px] text-slate-400">All {clips.length} discovered clips in project:</span>
+              <button
+                disabled={reframeState.isRendering || !sourceVideo}
+                onClick={async () => {
+                  await startBatchRenderAll(false, true);
+                }}
+                className="text-[11px] font-bold text-amber-400 hover:text-amber-300 flex items-center gap-1 transition-colors disabled:opacity-50"
+              >
+                <Zap className="w-3 h-3" />
+                <span>Batch Render All Masters</span>
+              </button>
+            </div>
           </div>
 
           {/* Bespoke Dynamic Motion Design Track */}

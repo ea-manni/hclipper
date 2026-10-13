@@ -182,12 +182,12 @@ export const ReframeView: React.FC<ReframeViewProps> = ({
       setShowRerenderConfirm(true);
       return;
     }
-    await startRenderClip(activeClipIndex);
+    await startRenderClip(activeClipIndex, true, false);
   };
 
   const handleBatchRenderAll = async () => {
     setIsBatchRendering(true);
-    await startBatchRenderAll();
+    await startBatchRenderAll(false, false);
     setIsBatchRendering(false);
   };
 
@@ -632,7 +632,7 @@ export const ReframeView: React.FC<ReframeViewProps> = ({
               <button
                 onClick={async () => {
                   setShowRerenderConfirm(false);
-                  await startRenderClip(activeClipIndex);
+                  await startRenderClip(activeClipIndex, true, false);
                 }}
                 className="px-4 py-2 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-bold shadow-lg shadow-amber-500/20 transition-all"
               >

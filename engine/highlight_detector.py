@@ -128,7 +128,7 @@ Example format:
         }
         duration_desc = dur_labels.get(duration, "dynamic story arc prioritizing narrative completeness (45 to 95 seconds)")
 
-        if self.api_key and self.provider != "local" and cues:
+        if (self.api_key or self.provider in ("local", "ollama")) and cues:
             # Build dialogue text with timestamps
             dialogue_lines = []
             for c in cues:
@@ -142,9 +142,9 @@ Example format:
             try:
                 if self.provider == "gemini":
                     clips = self._call_gemini(dialogue_str, prompt)
-                elif self.provider in ("openai", "deepseek"):
+                elif self.provider in ("openai", "deepseek", "groq", "xai", "grok", "kimi", "local", "ollama"):
                     clips = self._call_openai_compatible(dialogue_str, prompt)
-                elif self.provider == "anthropic":
+                elif self.provider in ("anthropic", "claude"):
                     clips = self._call_anthropic(dialogue_str, prompt)
                 else:
                     clips = []
@@ -189,14 +189,22 @@ Example format:
         # 1. From video path
         if video_path:
             v_path = Path(video_path)
-            for ext in [".en.vtt", ".vtt", ".en.srt", ".srt"]:
+            for ext in [".en.vtt", ".en-orig.vtt", ".vtt", ".en.srt", ".srt"]:
                 candidate_files.append(v_path.with_suffix(ext))
                 candidate_files.append(Path(str(v_path) + ext))
 
             # Also check downloads directory if applicable
             parent = v_path.parent
-            for ext in [".en.vtt", ".vtt", ".en.srt", ".srt"]:
+            for ext in [".en.vtt", ".en-orig.vtt", ".vtt", ".en.srt", ".srt"]:
                 candidate_files.append(parent / f"{v_path.stem}{ext}")
+
+            # Check for any subtitle file in parent matching stem prefix
+            if parent.exists():
+                stem_prefix = v_path.stem[:25]
+                for f in parent.glob(f"*{stem_prefix}*.vtt"):
+                    candidate_files.append(f)
+                for f in parent.glob(f"*{stem_prefix}*.srt"):
+                    candidate_files.append(f)
 
         # 2. From transcript_text if it looks like a path
         if transcript_text:
@@ -339,10 +347,22 @@ Example format:
             return self._clean_json(text)
 
     def _call_openai_compatible(self, dialogue_str: str, system_prompt: str) -> List[Dict[str, Any]]:
-        """OpenAI or DeepSeek chat completions."""
+        """OpenAI, Groq, DeepSeek, xAI, Kimi, or Ollama chat completions."""
         if self.provider == "deepseek":
             endpoint = "https://api.deepseek.com/chat/completions"
             model_name = self.model or "deepseek-chat"
+        elif self.provider == "groq":
+            endpoint = "https://api.groq.com/openai/v1/chat/completions"
+            model_name = self.model or "llama-3.3-70b-versatile"
+        elif self.provider in ("xai", "grok"):
+            endpoint = "https://api.x.ai/v1/chat/completions"
+            model_name = self.model or "grok-2-latest"
+        elif self.provider == "kimi":
+            endpoint = "https://api.moonshot.cn/v1/chat/completions"
+            model_name = self.model or "moonshot-v1-8k"
+        elif self.provider in ("local", "ollama"):
+            endpoint = os.environ.get("OLLAMA_API_URL") or "http://localhost:11434/v1/chat/completions"
+            model_name = self.model or "llama3.2"
         else:
             endpoint = "https://api.openai.com/v1/chat/completions"
             model_name = self.model or "gpt-4o-mini"

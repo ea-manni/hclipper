@@ -91,9 +91,22 @@ export interface Project {
   subtitlesState: SubtitlesState;
 }
 
+export interface ApiKeysSettings {
+  gemini?: string;
+  groq?: string;
+  deepseek?: string;
+  xai?: string;
+  openai?: string;
+  claude?: string;
+  kimi?: string;
+  ollamaUrl?: string;
+}
+
 export interface AppSettings {
   downloadsDir: string;
   clipsDir: string;
+  apiKeys: ApiKeysSettings;
+  defaultProvider?: string;
 }
 
 export interface WorkflowContextType {
@@ -146,7 +159,7 @@ export interface WorkflowContextType {
   setReframeState: React.Dispatch<React.SetStateAction<ReframeState>>;
   startAnalyzeTrajectory: () => Promise<void>;
   startRenderClip: (clipIndex?: number, force?: boolean, fullMaster?: boolean) => Promise<string | null>;
-  startBatchRenderAll: (skipExisting?: boolean) => Promise<void>;
+  startBatchRenderAll: (skipExisting?: boolean, fullMaster?: boolean) => Promise<void>;
   
   // Subtitles (Embedded in Active Project)
   subtitlesState: SubtitlesState;
@@ -227,9 +240,25 @@ export const WorkflowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   ]);
 
   // Persistent Settings
-  const [settings, setSettings] = useState<AppSettings>({
-    downloadsDir: 'downloads',
-    clipsDir: 'clips'
+  const [settings, setSettings] = useState<AppSettings>(() => {
+    let savedKeys: ApiKeysSettings = {};
+    try {
+      const k = localStorage.getItem('hclipper_api_keys');
+      if (k) savedKeys = JSON.parse(k);
+    } catch (e) {}
+    ['gemini', 'groq', 'deepseek', 'xai', 'grok', 'openai', 'claude', 'kimi'].forEach((p) => {
+      const leg = localStorage.getItem(`hclipper_key_${p}`);
+      if (leg && !(savedKeys as any)[p]) {
+        (savedKeys as any)[p] = leg;
+      }
+    });
+
+    return {
+      downloadsDir: 'downloads',
+      clipsDir: 'clips',
+      apiKeys: savedKeys,
+      defaultProvider: localStorage.getItem('hclipper_default_provider') || 'gemini'
+    };
   });
 
   // Projects State
@@ -300,10 +329,12 @@ export const WorkflowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if (window.hclipper?.getSettings) {
       window.hclipper.getSettings().then((s) => {
         if (s) {
-          setSettings({
-            downloadsDir: s.downloadsDir || 'downloads',
-            clipsDir: s.clipsDir || 'clips'
-          });
+          setSettings((prev) => ({
+            downloadsDir: s.downloadsDir || prev.downloadsDir || 'downloads',
+            clipsDir: s.clipsDir || prev.clipsDir || 'clips',
+            apiKeys: { ...prev.apiKeys, ...(s.apiKeys || {}) },
+            defaultProvider: s.defaultProvider || prev.defaultProvider || 'gemini'
+          }));
         }
       }).catch(() => {});
     }
@@ -346,11 +377,24 @@ export const WorkflowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   }, []);
 
   const updateSettings = async (newSettings: Partial<AppSettings>) => {
-    const merged = { ...settings, ...newSettings };
+    const merged: AppSettings = { 
+      ...settings, 
+      ...newSettings,
+      apiKeys: {
+        ...settings.apiKeys,
+        ...(newSettings.apiKeys || {})
+      }
+    };
     setSettings(merged);
-    if (window.hclipper?.saveSettings) {
-      await window.hclipper.saveSettings(merged);
-    }
+    try {
+      localStorage.setItem('hclipper_api_keys', JSON.stringify(merged.apiKeys));
+      if (merged.defaultProvider) {
+        localStorage.setItem('hclipper_default_provider', merged.defaultProvider);
+      }
+      if (window.hclipper?.saveSettings) {
+        await window.hclipper.saveSettings(merged);
+      }
+    } catch (e) {}
   };
 
   const openDirectory = async (dirPath: string) => {
@@ -758,7 +802,7 @@ export const WorkflowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   // Render Targeted Single Clip Fast (4-8 seconds on GPU)
-  const startRenderClip = async (targetIndex?: number, _force?: boolean, fullMaster: boolean = true): Promise<string | null> => {
+  const startRenderClip = async (targetIndex?: number, _force?: boolean, fullMaster: boolean = false): Promise<string | null> => {
     const idx = targetIndex !== undefined ? targetIndex : activeClipIndex;
     const clip = clips[idx];
     if (!clip) return null;
@@ -817,12 +861,13 @@ export const WorkflowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       if (fullMaster) {
         const headlineText = clip.customHeadline || clip.hook || subtitlesState.headline || clip.title || '';
         const bannerStyle = clip.hookBannerPreset || subtitlesState.hookBannerPreset || 'frosted_gold';
+        const bannerDuration = subtitlesState.hookBannerDuration || 'first_5s';
         
-        let preset = 'hormozi';
+        let preset: 'tiktok_bold' | 'dynamic_pop' | 'clean_white' = 'tiktok_bold';
         const rawPreset = (clip.subtitlePreset || subtitlesState.stylePreset || 'tiktok_bold') as string;
-        if (rawPreset === 'dynamic_pop') preset = 'karaoke';
-        else if (rawPreset === 'clean_white') preset = 'minimal';
-        else if (rawPreset === 'beast' || rawPreset === 'hype_burst') preset = 'beast';
+        if (rawPreset === 'dynamic_pop') preset = 'dynamic_pop';
+        else if (rawPreset === 'clean_white') preset = 'clean_white';
+        else preset = 'tiktok_bold';
 
         const args = [
           sourceVideo,
@@ -830,18 +875,17 @@ export const WorkflowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           '--start', clip.start.toString(),
           '--end', clip.end.toString(),
           '--aspect', reframeState.aspectRatio,
-          '--deadzone', normalizedDeadzone,
+          '--deadzone', reframeState.deadzone.toString(),
           '--smooth', reframeState.smoothFactor.toString(),
           '--headline', headlineText,
           '--banner-style', bannerStyle,
-          '--banner-duration', '5.0',
+          '--banner-duration', bannerDuration,
           '--preset', preset
         ];
 
         if (timelineState.cadenceTrim) {
           args.push('--cadence');
-          const threshNum = parseFloat(timelineState.noiseThreshold.replace('dB', '')) || -30.0;
-          args.push('--threshold', threshNum.toString());
+          args.push('--threshold', timelineState.noiseThreshold || '-33dB');
           args.push('--min-silence', (timelineState.minSilence || 0.75).toString());
         }
 
@@ -910,7 +954,7 @@ export const WorkflowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   // Batch Render All Discovered Clips
-  const startBatchRenderAll = async (skipExisting = false, fullMaster = true) => {
+  const startBatchRenderAll = async (skipExisting = false, fullMaster = false) => {
     addLog(`[${activeProject.name}] Batch rendering short clips (${skipExisting ? 'skipping already rendered' : 'rendering all'})...`, 'batch');
     for (let i = 0; i < clips.length; i++) {
       if (skipExisting && clips[i].isRendered) {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { 
   Sparkles, 
   Flame, 
@@ -6,158 +6,18 @@ import {
   Scissors, 
   Zap, 
   Key, 
-  ExternalLink, 
-  HelpCircle, 
-  X, 
   Film, 
   Layers, 
   ArrowRight,
   FolderOpen,
   Loader2,
-  Cpu,
-  AlertCircle
+  AlertCircle,
+  Check
 } from 'lucide-react';
 import { useWorkflow } from '../context/WorkflowContext';
 import type { ClipCandidate } from '../context/WorkflowContext';
 
-const PROVIDER_GUIDES: Record<string, {
-  title: string;
-  badge: string;
-  badgeColor: string;
-  description: string;
-  steps: Array<{ step: number; title: string; desc: string; url?: string; urlLabel?: string }>;
-  keyPrefix?: string;
-  isOffline?: boolean;
-}> = {
-  gemini: {
-    title: "Google Gemini 2.5 Flash Setup",
-    badge: "100% Free Forever Tier",
-    badgeColor: "bg-amber-400/10 border-amber-400/20 text-amber-300",
-    description: "Google AI Studio provides every Google account 15 requests per minute (1,500 free requests per day) with Gemini 2.5 Flash. No billing account or credit card required.",
-    steps: [
-      {
-        step: 1,
-        title: "Open Google AI Studio",
-        desc: "Visit the official Google AI Studio website and sign in with any personal or workspace Google account.",
-        url: "https://aistudio.google.com/app/apikey",
-        urlLabel: "Open aistudio.google.com/app/apikey"
-      },
-      {
-        step: 2,
-        title: 'Click "Create API Key"',
-        desc: 'Click the blue "Create API key in new project" button. Google generates your personal secret token in seconds.'
-      },
-      {
-        step: 3,
-        title: "Copy & Paste into hclipper",
-        desc: "Copy your key string (begins with AIzaSy...) and paste it into the field below."
-      }
-    ],
-    keyPrefix: "AIzaSy..."
-  },
-  deepseek: {
-    title: "DeepSeek V3 / R1 Engine Setup",
-    badge: "High Virality • Ultra Low Cost",
-    badgeColor: "bg-blue-400/10 border-blue-400/20 text-blue-300",
-    description: "DeepSeek V3 / R1 provides state-of-the-art transcript and sermon narrative reasoning at pennies per million tokens.",
-    steps: [
-      {
-        step: 1,
-        title: "Open DeepSeek Open Platform",
-        desc: "Log in or register your account at the official DeepSeek Platform.",
-        url: "https://platform.deepseek.com/api_keys",
-        urlLabel: "Open platform.deepseek.com/api_keys"
-      },
-      {
-        step: 2,
-        title: 'Generate an API Key',
-        desc: 'Navigate to "API Keys", click "Create new API key", name it "hclipper Studio", and copy the token.'
-      },
-      {
-        step: 3,
-        title: "Paste & Save in hclipper",
-        desc: "Paste your sk-... key below. Keys are stored locally on your machine and never transmitted to third parties."
-      }
-    ],
-    keyPrefix: "sk-..."
-  },
-  openai: {
-    title: "OpenAI GPT-4o-mini Setup",
-    badge: "OpenAI Platform Key",
-    badgeColor: "bg-emerald-400/10 border-emerald-400/20 text-emerald-300",
-    description: "Connect OpenAI's official GPT-4o-mini engine for structured hook banner generation and timestamped clip segmentation.",
-    steps: [
-      {
-        step: 1,
-        title: "Open OpenAI API Platform",
-        desc: "Sign in to OpenAI Developer Dashboard.",
-        url: "https://platform.openai.com/api-keys",
-        urlLabel: "Open platform.openai.com/api-keys"
-      },
-      {
-        step: 2,
-        title: 'Create Secret Key',
-        desc: 'Click "+ Create new secret key", copy the generated string.'
-      },
-      {
-        step: 3,
-        title: "Paste into hclipper",
-        desc: "Paste your sk-proj-... token below to unlock GPT-4o highlight discovery."
-      }
-    ],
-    keyPrefix: "sk-proj-..."
-  },
-  anthropic: {
-    title: "Anthropic Claude 3.5 Haiku Setup",
-    badge: "Claude 3.5 Haiku",
-    badgeColor: "bg-orange-400/10 border-orange-400/20 text-orange-300",
-    description: "Claude 3.5 Haiku delivers lightning-fast transcript reasoning with deep sensitivity to spoken rhythm and rhetorical nuances.",
-    steps: [
-      {
-        step: 1,
-        title: "Open Anthropic Console",
-        desc: "Sign in to the Anthropic API Console.",
-        url: "https://console.anthropic.com/settings/keys",
-        urlLabel: "Open console.anthropic.com/settings/keys"
-      },
-      {
-        step: 2,
-        title: 'Create API Key',
-        desc: 'Click "Create Key", copy your secret token.'
-      },
-      {
-        step: 3,
-        title: "Paste into hclipper",
-        desc: "Paste your sk-ant-... key below."
-      }
-    ],
-    keyPrefix: "sk-ant-..."
-  },
-  local: {
-    title: "100% Offline Local Engine Architecture",
-    badge: "Zero Network • 100% Private",
-    badgeColor: "bg-emerald-400/10 border-emerald-400/20 text-emerald-300",
-    description: "Processes your videos completely on your device without sending a single byte of data to the cloud or external servers.",
-    isOffline: true,
-    steps: [
-      {
-        step: 1,
-        title: "On-Device Audio Cadence & Energy Heuristics",
-        desc: "Uses FFmpeg native audio analysis to detect vocal inflection, pauses, breathing cadence, and volume peaks directly on your local CPU."
-      },
-      {
-        step: 2,
-        title: "Natural Speech Segmentation",
-        desc: "Locates stand-alone 30–60 second narrative windows that start on strong opening declarations and conclude on complete thoughts."
-      },
-      {
-        step: 3,
-        title: "Zero API Keys, Zero Cost, Zero Internet Required",
-        desc: "Fully functional in airplane mode, air-gapped studio computers, or high-security production environments."
-      }
-    ]
-  }
-};
+
 
 interface ClipScoutViewProps {
   onNavigateToTimeline: () => void;
@@ -167,6 +27,7 @@ interface ClipScoutViewProps {
 
 export const ClipScoutView: React.FC<ClipScoutViewProps> = ({
   onNavigateToTimeline,
+  onNavigateToReframe,
   onNavigateToSubtitles
 }) => {
   const { 
@@ -179,37 +40,34 @@ export const ClipScoutView: React.FC<ClipScoutViewProps> = ({
     startRenderClip, 
     startBatchRenderAll,
     openDirectory,
-    addLog 
+    addLog,
+    settings,
+    setShowSettingsModal
   } = useWorkflow();
 
   const [clipCount, setClipCount] = useState<number>(5);
   const [targetDuration, setTargetDuration] = useState<'story' | 'short' | 'standard' | 'long'>('story');
-  const [provider, setProvider] = useState<string>('gemini');
-  const [apiKey, setApiKey] = useState<string>('');
-  const [showKeyModal, setShowKeyModal] = useState<boolean>(false);
+  const [provider, setProvider] = useState<string>(settings.defaultProvider || 'gemini');
   const [isScouting, setIsScouting] = useState<boolean>(false);
   const [isBatchRendering, setIsBatchRendering] = useState<boolean>(false);
   const [rerenderConfirmIndex, setRerenderConfirmIndex] = useState<number | null>(null);
   const [showBatchConfirm, setShowBatchConfirm] = useState<boolean>(false);
+  const [scoutError, setScoutError] = useState<string | null>(null);
 
-  // Load saved API key from localStorage
-  useEffect(() => {
-    const saved = localStorage.getItem(`hclipper_key_${provider}`);
-    if (saved) {
-      setApiKey(saved);
-    } else {
-      setApiKey('');
-    }
-  }, [provider]);
-
-  const handleSaveApiKey = (keyToSave: string) => {
-    setApiKey(keyToSave);
-    localStorage.setItem(`hclipper_key_${provider}`, keyToSave);
-  };
+  const activeApiKey = (settings.apiKeys as any)?.[provider] || '';
+  const hasKey = provider === 'local' || Boolean(activeApiKey.trim());
 
   const handleScoutClips = async () => {
+    setScoutError(null);
+
+    if (provider !== 'local' && !activeApiKey.trim()) {
+      setScoutError(`API Key for ${provider.toUpperCase()} is not configured. Click "Manage API Keys in Settings" to add your key, or switch to the 100% Offline Local Engine.`);
+      addLog(`AI Scout aborted: Missing ${provider.toUpperCase()} API key.`, 'warn');
+      return;
+    }
+
     setIsScouting(true);
-    addLog(`Running AI Highlight Scout (${clipCount} clips, provider: ${provider.toUpperCase()})...`, 'scout');
+    addLog(`Running AI Highlight Scout (${clipCount} clips, provider: ${provider.toUpperCase()}, duration: ${targetDuration})...`, 'scout');
 
     if (window.hclipper) {
       const args = [
@@ -220,55 +78,65 @@ export const ClipScoutView: React.FC<ClipScoutViewProps> = ({
       if (sourceVideo) {
         args.push('--video', sourceVideo);
       }
-      if (apiKey.trim()) {
-        args.push('--api-key', apiKey.trim());
+      if (activeApiKey.trim()) {
+        args.push('--api-key', activeApiKey.trim());
       }
 
-      const res = await window.hclipper.runEngine('highlights', args);
-      setIsScouting(false);
+      try {
+        const res = await window.hclipper.runEngine('highlights', args);
+        setIsScouting(false);
 
-      if (res.success && res.events) {
-        const found = res.events.find((e: any) => e.event === 'highlights_result');
-        if (found && found.clips && Array.isArray(found.clips) && found.clips.length > 0) {
-          const formatted: ClipCandidate[] = found.clips.slice(0, clipCount).map((c: any, i: number) => ({
-            id: `Clip${i + 1}_${(c.title || `Moment_${i + 1}`).replace(/[^a-zA-Z0-9]/g, '_')}`,
-            start: typeof c.start === 'number' ? c.start : (i * 60 + 15),
-            end: typeof c.end === 'number' ? c.end : (i * 60 + 55),
-            score: typeof c.score === 'number' ? c.score : Math.max(80, 96 - i * 2),
-            title: c.title || `Viral Highlight #${i + 1}`,
-            hook: c.hook || c.title || `KEY LESSON #${i + 1}`,
-            reason: c.reason || 'Strong emotional hook and self-contained message.',
-            durationAdvisory: c.duration_advisory || c.durationAdvisory || '',
-            storyArc: c.story_arc || c.storyArc || ((typeof c.end === 'number' && typeof c.start === 'number' && (c.end - c.start) >= 50) ? 'complete_story' : 'punchy_takeaway'),
-            customHeadline: (c.customHeadline || c.title || `VIRAL CLIP #${i + 1}`).toUpperCase(),
-            subtitlePreset: 'tiktok_bold',
-            transcriptCues: c.transcript_cues || c.transcriptCues || [],
-            isRendered: false
-          }));
-          setClips(formatted);
-          selectClip(0);
-          addLog(`✓ AI Scout discovered ${formatted.length} viral clip moments!`, 'success');
-          return;
+        if (res && res.success && res.events) {
+          const found = res.events.find((e: any) => e.event === 'highlights_result');
+          if (found && found.clips && Array.isArray(found.clips) && found.clips.length > 0) {
+            const formatted: ClipCandidate[] = found.clips.slice(0, clipCount).map((c: any, i: number) => ({
+              id: `Clip${i + 1}_${(c.title || `Moment_${i + 1}`).replace(/[^a-zA-Z0-9]/g, '_')}`,
+              start: typeof c.start === 'number' ? c.start : (i * 60 + 15),
+              end: typeof c.end === 'number' ? c.end : (i * 60 + 55),
+              score: typeof c.score === 'number' ? c.score : Math.max(80, 96 - i * 2),
+              title: c.title || `Viral Highlight #${i + 1}`,
+              hook: c.hook || c.title || `KEY LESSON #${i + 1}`,
+              reason: c.reason || 'Strong emotional hook and self-contained message.',
+              durationAdvisory: c.duration_advisory || c.durationAdvisory || '',
+              storyArc: c.story_arc || c.storyArc || ((typeof c.end === 'number' && typeof c.start === 'number' && (c.end - c.start) >= 50) ? 'complete_story' : 'punchy_takeaway'),
+              customHeadline: (c.customHeadline || c.title || `VIRAL CLIP #${i + 1}`).toUpperCase(),
+              subtitlePreset: 'tiktok_bold',
+              transcriptCues: c.transcript_cues || c.transcriptCues || [],
+              isRendered: false
+            }));
+            setClips(formatted);
+            selectClip(0);
+            setScoutError(null);
+            addLog(`✓ AI Scout discovered ${formatted.length} viral clip moments!`, 'success');
+            return;
+          }
         }
+
+        const errMsg = (res as any)?.error || (res?.events?.find((e: any) => e.event === 'error')?.message) || 'AI Scout engine did not return valid clip boundaries. Verify the video has speech audio or check engine console logs.';
+        setScoutError(errMsg);
+        addLog(`[AI Scout Error] ${errMsg}`, 'error');
+        return;
+      } catch (err: any) {
+        setIsScouting(false);
+        const errText = err?.message || String(err);
+        setScoutError(`AI Scout execution failed: ${errText}`);
+        addLog(`[AI Scout Exception] ${errText}`, 'error');
+        return;
       }
-      addLog(`AI Scout engine completed. Processing results...`, 'info');
     }
 
-    // Dynamic browser preview fallback (used when running outside Electron)
+    // Dynamic browser preview fallback (ONLY executed when running outside Electron dev environment)
     setTimeout(() => {
       setIsScouting(false);
       let rawName = sourceVideo ? sourceVideo.split(/[/\\]/).pop()?.replace(/\.[^.]+$/, '') || 'Media' : 'Video Highlight';
-      // Strip YouTube IDs like [4_Uetxw16pE]
       rawName = rawName.replace(/\[[a-zA-Z0-9_-]+\]/g, '');
-      // Strip dates like JAN. 21, 2025
       rawName = rawName.replace(/(?:JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)[a-z]*\.?\s+\d{1,2},?\s+\d{4}/gi, '');
       rawName = rawName.replace(/\b\d{4}\b/g, '');
-      // Keep only title before delimiter (| or — or -)
       const parts = rawName.split(/[|｜—–]/);
       const baseName = (parts[0] || rawName).trim().replace(/\s+/g, ' ') || 'Sermon Highlight';
 
-      const durSec = targetDuration === 'short' ? 35 : targetDuration === 'long' ? 75 : 55;
-      const step = durSec + 30;
+      const durSec = targetDuration === 'short' ? 35 : targetDuration === 'long' ? 95 : 65;
+      const step = durSec + 25;
       const generated: ClipCandidate[] = Array.from({ length: clipCount }, (_, i) => ({
         id: `Clip${i + 1}_${baseName.replace(/[^a-zA-Z0-9]/g, '_')}_Part${i + 1}`,
         start: 15.0 + i * step,
@@ -283,7 +151,7 @@ export const ClipScoutView: React.FC<ClipScoutViewProps> = ({
       }));
       setClips(generated);
       selectClip(0);
-      addLog(`✓ Discovered ${generated.length} candidate moments for preview!`, 'success');
+      addLog(`✓ Discovered ${generated.length} candidate moments for preview (Browser Demo Mode)!`, 'success');
     }, 600);
   };
 
@@ -298,7 +166,7 @@ export const ClipScoutView: React.FC<ClipScoutViewProps> = ({
 
   const executeBatchRender = async (skipExisting: boolean) => {
     setIsBatchRendering(true);
-    await startBatchRenderAll(skipExisting);
+    await startBatchRenderAll(skipExisting, false);
     setIsBatchRendering(false);
   };
 
@@ -399,11 +267,12 @@ export const ClipScoutView: React.FC<ClipScoutViewProps> = ({
                 AI Discovery Engine
               </label>
               <button
-                onClick={() => setShowKeyModal(true)}
+                type="button"
+                onClick={() => setShowSettingsModal(true)}
                 className="text-[11px] text-amber-400 hover:text-amber-300 font-semibold flex items-center space-x-1 underline decoration-dotted"
               >
-                <HelpCircle className="w-3 h-3" />
-                <span>{provider === 'local' ? 'Offline Architecture Guide' : `${provider.toUpperCase()} Key Guide`}</span>
+                <Key className="w-3 h-3" />
+                <span>API Keys in Settings</span>
               </button>
             </div>
             <select
@@ -412,156 +281,65 @@ export const ClipScoutView: React.FC<ClipScoutViewProps> = ({
               className="w-full bg-slate-900 border border-white/15 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-400 font-medium"
             >
               <option value="gemini">Google Gemini 2.5 Flash (100% Free - 15 RPM)</option>
-              <option value="local">100% Offline Local Engine (No API Key Required)</option>
+              <option value="groq">GroqCloud (Ultra-Fast 500 T/s Llama 3.3 70B - Free)</option>
               <option value="deepseek">DeepSeek V3 / R1 (Platform BYOK)</option>
               <option value="openai">OpenAI GPT-4o-mini (BYOK)</option>
-              <option value="anthropic">Anthropic Claude 3.5 Haiku (BYOK)</option>
+              <option value="claude">Anthropic Claude 3.5 Haiku (BYOK)</option>
+              <option value="xai">xAI Grok-2 (BYOK)</option>
+              <option value="kimi">Moonshot AI (Kimi - Long Context)</option>
+              <option value="local">100% Offline Local Engine (No API Key Required)</option>
             </select>
           </div>
         </div>
 
-        {/* Dynamic Inline Walkthrough Card */}
-        {provider === 'deepseek' && (
-          <div className="p-3.5 bg-blue-500/10 border border-blue-400/30 rounded-xl space-y-2.5 animate-in fade-in duration-150">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-blue-300 flex items-center space-x-1.5">
-                <Sparkles className="w-3.5 h-3.5 text-blue-400" />
-                <span>DeepSeek V3 / R1 API Key Setup Guide</span>
+        {/* API Key Status & Settings Integration Card */}
+        <div className="flex items-center justify-between p-3.5 rounded-xl bg-slate-900/80 border border-white/10 text-xs">
+          <div className="flex items-center space-x-2.5">
+            {hasKey ? (
+              <span className="flex items-center space-x-1.5 text-emerald-400 font-bold bg-emerald-500/10 px-2.5 py-1 rounded-lg border border-emerald-500/20">
+                <Check className="w-3.5 h-3.5" />
+                <span>
+                  {provider === 'local' 
+                    ? '100% Offline Engine (Speech Cadence & Natural Sentence Pauses)'
+                    : `${provider.toUpperCase()} API Key Active (Configured in Settings)`}
+                </span>
               </span>
-              <button
-                type="button"
-                onClick={() => window.hclipper?.openPath?.('https://platform.deepseek.com/api_keys')}
-                className="text-[11px] font-bold text-sky-400 hover:text-sky-300 flex items-center space-x-1 underline"
-              >
-                <span>Open platform.deepseek.com/api_keys</span>
-                <ExternalLink className="w-3 h-3" />
-              </button>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-[11px] text-slate-300">
-              <div className="p-2.5 bg-slate-900/80 rounded-lg border border-white/5 space-y-0.5">
-                <strong className="text-white block">Step 1: Sign In</strong>
-                <p className="text-slate-400 text-[10px]">Log in to DeepSeek Open Platform with email or phone.</p>
-              </div>
-              <div className="p-2.5 bg-slate-900/80 rounded-lg border border-white/5 space-y-0.5">
-                <strong className="text-white block">Step 2: Generate Key</strong>
-                <p className="text-slate-400 text-[10px]">Click "API Keys" → "Create new API key" and copy token (<code className="text-amber-300">sk-...</code>).</p>
-              </div>
-              <div className="p-2.5 bg-slate-900/80 rounded-lg border border-white/5 space-y-0.5">
-                <strong className="text-white block">Step 3: Paste Below</strong>
-                <p className="text-slate-400 text-[10px]">Paste into field below. Stored 100% locally on your computer.</p>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {provider === 'gemini' && (
-          <div className="p-3.5 bg-amber-500/10 border border-amber-400/30 rounded-xl space-y-2.5 animate-in fade-in duration-150">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-amber-300 flex items-center space-x-1.5">
-                <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                <span>Google Gemini 100% Free Forever Tier Guide</span>
+            ) : (
+              <span className="flex items-center space-x-1.5 text-amber-400 font-bold bg-amber-500/10 px-2.5 py-1 rounded-lg border border-amber-500/20">
+                <AlertCircle className="w-3.5 h-3.5" />
+                <span>No API Key Configured for {provider.toUpperCase()}</span>
               </span>
-              <button
-                type="button"
-                onClick={() => window.hclipper?.openPath?.('https://aistudio.google.com/app/apikey')}
-                className="text-[11px] font-bold text-sky-400 hover:text-sky-300 flex items-center space-x-1 underline"
-              >
-                <span>Open aistudio.google.com/app/apikey</span>
-                <ExternalLink className="w-3 h-3" />
-              </button>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-[11px] text-slate-300">
-              <div className="p-2.5 bg-slate-900/80 rounded-lg border border-white/5 space-y-0.5">
-                <strong className="text-white block">Step 1: Open AI Studio</strong>
-                <p className="text-slate-400 text-[10px]">Sign in with any standard Gmail account. No credit card required.</p>
-              </div>
-              <div className="p-2.5 bg-slate-900/80 rounded-lg border border-white/5 space-y-0.5">
-                <strong className="text-white block">Step 2: Create API Key</strong>
-                <p className="text-slate-400 text-[10px]">Click "Create API key in new project" and copy token (<code className="text-amber-300">AIzaSy...</code>).</p>
-              </div>
-              <div className="p-2.5 bg-slate-900/80 rounded-lg border border-white/5 space-y-0.5">
-                <strong className="text-white block">Step 3: Paste Below</strong>
-                <p className="text-slate-400 text-[10px]">Free tier provides 15 requests/min (1,500 requests/day).</p>
-              </div>
-            </div>
+            )}
+            <span className="text-[11px] text-slate-400 hidden md:inline">
+              {hasKey 
+                ? 'Ready to extract self-contained viral moments with narrative resolution.'
+                : 'Configure key in Settings to use LLM intelligence, or switch to the 100% Offline Local Engine.'}
+            </span>
           </div>
-        )}
 
-        {provider === 'openai' && (
-          <div className="p-3.5 bg-emerald-500/10 border border-emerald-400/30 rounded-xl space-y-2.5 animate-in fade-in duration-150">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-emerald-300 flex items-center space-x-1.5">
-                <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
-                <span>OpenAI Platform (GPT-4o-mini) Setup Guide</span>
-              </span>
-              <button
-                type="button"
-                onClick={() => window.hclipper?.openPath?.('https://platform.openai.com/api-keys')}
-                className="text-[11px] font-bold text-sky-400 hover:text-sky-300 flex items-center space-x-1 underline"
-              >
-                <span>Open platform.openai.com/api-keys</span>
-                <ExternalLink className="w-3 h-3" />
-              </button>
-            </div>
-            <p className="text-[11px] text-slate-300">
-              Generate an API key on the OpenAI developer console (<code className="text-amber-300">sk-proj-...</code>) and paste it below.
-            </p>
-          </div>
-        )}
+          <button
+            type="button"
+            onClick={() => setShowSettingsModal(true)}
+            className="px-3.5 py-1.5 rounded-lg bg-amber-400/10 hover:bg-amber-400/20 text-amber-300 border border-amber-400/30 text-xs font-semibold flex items-center space-x-1.5 transition-colors shrink-0"
+          >
+            <Key className="w-3.5 h-3.5" />
+            <span>Manage Keys in Settings</span>
+          </button>
+        </div>
 
-        {provider === 'anthropic' && (
-          <div className="p-3.5 bg-orange-500/10 border border-orange-400/30 rounded-xl space-y-2.5 animate-in fade-in duration-150">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-orange-300 flex items-center space-x-1.5">
-                <Sparkles className="w-3.5 h-3.5 text-orange-400" />
-                <span>Anthropic Console (Claude 3.5 Haiku) Setup Guide</span>
-              </span>
-              <button
-                type="button"
-                onClick={() => window.hclipper?.openPath?.('https://console.anthropic.com/settings/keys')}
-                className="text-[11px] font-bold text-sky-400 hover:text-sky-300 flex items-center space-x-1 underline"
-              >
-                <span>Open console.anthropic.com/settings/keys</span>
-                <ExternalLink className="w-3 h-3" />
-              </button>
-            </div>
-            <p className="text-[11px] text-slate-300">
-              Generate an API key on the Anthropic console (<code className="text-amber-300">sk-ant-...</code>) and paste it below.
-            </p>
-          </div>
-        )}
-
-        {provider === 'local' && (
-          <div className="p-3.5 bg-emerald-500/10 border border-emerald-400/30 rounded-xl space-y-1.5 animate-in fade-in duration-150">
-            <div className="flex items-center space-x-2 text-xs font-bold text-emerald-300">
-              <Cpu className="w-4 h-4 text-emerald-400" />
-              <span>100% Offline Local Engine Active (Zero API Key Required)</span>
-            </div>
-            <p className="text-[11px] text-slate-300 leading-relaxed">
-              Processes audio and video locally using on-device FFmpeg cadence audio energy detection and natural speech pause analysis. Zero internet connection required and 100% private.
-            </p>
-          </div>
-        )}
-
-        {/* API Key Bar (if not local) */}
-        {provider !== 'local' && (
-          <div className="flex items-center space-x-3 pt-2 border-t border-white/5">
-            <div className="relative flex-1">
-              <Key className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-2.5" />
-              <input
-                type="password"
-                value={apiKey}
-                onChange={(e) => handleSaveApiKey(e.target.value)}
-                placeholder={`Paste your ${provider.toUpperCase()} API key here (saved locally in your app)...`}
-                className="w-full bg-slate-900/80 border border-white/10 rounded-lg pl-9 pr-3 py-2 text-xs text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-amber-400 font-mono"
-              />
+        {/* Error notification banner if scout failed */}
+        {scoutError && (
+          <div className="p-3.5 bg-rose-500/10 border border-rose-500/30 rounded-xl flex items-center justify-between text-xs text-rose-300 animate-in fade-in">
+            <div className="flex items-center space-x-2">
+              <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+              <span className="leading-relaxed">{scoutError}</span>
             </div>
             <button
-              onClick={() => setShowKeyModal(true)}
-              className="px-3.5 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10 text-xs font-semibold flex items-center space-x-1.5 whitespace-nowrap"
+              type="button"
+              onClick={() => setScoutError(null)}
+              className="text-slate-400 hover:text-white text-xs font-bold px-2 py-0.5 shrink-0"
             >
-              <ExternalLink className="w-3.5 h-3.5 text-amber-400" />
-              <span>{`${provider.toUpperCase()} Modal Walkthrough`}</span>
+              Dismiss
             </button>
           </div>
         )}
@@ -594,7 +372,7 @@ export const ClipScoutView: React.FC<ClipScoutViewProps> = ({
             <span>Ranked Viral Clips Deck ({clips.length} Clips)</span>
           </h3>
           <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-            {renderedCount} of {clips.length} Rendered & Playable
+            {renderedCount} of {clips.length} Pre-rendered (Raw 9:16)
           </span>
         </div>
 
@@ -602,9 +380,10 @@ export const ClipScoutView: React.FC<ClipScoutViewProps> = ({
           onClick={handleBatchRenderClick}
           disabled={isBatchRendering || clips.length === 0}
           className="px-4 py-2 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-bold text-xs rounded-lg flex items-center space-x-2 shadow-md shadow-emerald-500/10 transition-all disabled:opacity-50"
+          title="Pre-renders clean raw 9:16 vertical crop. Captions, banners, and audio mastering are finalized in Step 5."
         >
           <Zap className="w-3.5 h-3.5" />
-          <span>{isBatchRendering ? 'Rendering Batch on GPU...' : `⚡ Render All ${clips.length} Clips (Batch QSV)`}</span>
+          <span>{isBatchRendering ? 'Pre-rendering Raw 9:16 Batch...' : `⚡ Pre-render All ${clips.length} Raw 9:16 Clips (QSV)`}</span>
         </button>
       </div>
 
@@ -721,8 +500,22 @@ export const ClipScoutView: React.FC<ClipScoutViewProps> = ({
                     className="px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10 text-[11px] font-semibold flex items-center space-x-1 transition-colors"
                   >
                     <Scissors className="w-3 h-3 text-amber-400" />
-                    <span>Step 3: Timeline & Audio</span>
+                    <span>Step 3: Timeline</span>
                   </button>
+
+                  {onNavigateToReframe && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        selectClip(index);
+                        onNavigateToReframe();
+                      }}
+                      className="px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10 text-[11px] font-semibold flex items-center space-x-1 transition-colors"
+                    >
+                      <Layers className="w-3 h-3 text-emerald-400" />
+                      <span>Step 4: Reframe</span>
+                    </button>
+                  )}
 
                   <button
                     onClick={(e) => {
@@ -733,7 +526,7 @@ export const ClipScoutView: React.FC<ClipScoutViewProps> = ({
                     className="px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10 text-[11px] font-semibold flex items-center space-x-1 transition-colors"
                   >
                     <Film className="w-3 h-3 text-sky-400" />
-                    <span>Step 5: Edit Hook & Captions</span>
+                    <span>Step 5: Master Short</span>
                   </button>
 
                   <button
@@ -743,7 +536,7 @@ export const ClipScoutView: React.FC<ClipScoutViewProps> = ({
                       if (clip.isRendered) {
                         setRerenderConfirmIndex(index);
                       } else {
-                        startRenderClip(index, true);
+                        startRenderClip(index, true, false);
                       }
                     }}
                     disabled={reframeState.isRendering && activeClipIndex === index}
@@ -758,17 +551,17 @@ export const ClipScoutView: React.FC<ClipScoutViewProps> = ({
                     {reframeState.isRendering && activeClipIndex === index ? (
                       <>
                         <Loader2 className="w-3 h-3 animate-spin text-amber-400" />
-                        <span>Rendering ({reframeState.renderProgress}%)...</span>
+                        <span>Pre-rendering ({reframeState.renderProgress}%)...</span>
                       </>
                     ) : clip.isRendered ? (
                       <>
                         <CheckCircle2 className="w-3 h-3 text-emerald-400" />
-                        <span>Rendered ✓ (Re-render)</span>
+                        <span>Raw 9:16 Ready ✓</span>
                       </>
                     ) : (
                       <>
                         <Zap className="w-3 h-3" />
-                        <span>Render 9:16 Short (GPU)</span>
+                        <span>Pre-render Raw 9:16</span>
                       </>
                     )}
                   </button>
@@ -797,139 +590,7 @@ export const ClipScoutView: React.FC<ClipScoutViewProps> = ({
         </div>
       )}
 
-      {/* Dynamic Step-by-Step API Key Setup & Offline Architecture Modal */}
-      {showKeyModal && (() => {
-        const guide = PROVIDER_GUIDES[provider] || PROVIDER_GUIDES.gemini;
-        return (
-          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
-            <div className="glass-card bg-[#0e121c] border border-white/15 rounded-2xl max-w-xl w-full p-6 space-y-5 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
-              <div className="flex items-center justify-between border-b border-white/10 pb-4">
-                <div className="flex items-center space-x-2.5">
-                  <div className="w-8 h-8 rounded-lg bg-amber-400/10 border border-amber-400/20 flex items-center justify-center">
-                    {guide.isOffline ? (
-                      <Cpu className="w-4 h-4 text-emerald-400" />
-                    ) : (
-                      <Key className="w-4 h-4 text-amber-400" />
-                    )}
-                  </div>
-                  <div>
-                    <h3 className="text-base font-bold text-white">{guide.title}</h3>
-                    <p className="text-[11px] text-slate-400">
-                      {guide.isOffline ? 'Complete on-device privacy — No internet or tokens needed' : 'Step-by-step setup guide for Bring-Your-Own-Key'}
-                    </p>
-                  </div>
-                </div>
-                <button 
-                  onClick={() => setShowKeyModal(false)}
-                  className="p-1 rounded-lg hover:bg-white/10 text-slate-400 hover:text-white transition-colors"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-
-              {/* Provider Selector Tabs inside Modal */}
-              <div className="flex items-center space-x-1 p-1 bg-slate-900/90 rounded-xl border border-white/10 overflow-x-auto">
-                {[
-                  { id: 'deepseek', label: 'DeepSeek V3 / R1' },
-                  { id: 'gemini', label: 'Google Gemini' },
-                  { id: 'openai', label: 'OpenAI GPT-4o' },
-                  { id: 'anthropic', label: 'Claude 3.5' },
-                  { id: 'local', label: '100% Offline' }
-                ].map((tab) => (
-                  <button
-                    key={tab.id}
-                    type="button"
-                    onClick={() => {
-                      setProvider(tab.id);
-                      const saved = localStorage.getItem(`hclipper_key_${tab.id}`);
-                      setApiKey(saved || '');
-                    }}
-                    className={`flex-1 py-1.5 px-2 rounded-lg text-[11px] font-bold transition-all text-center whitespace-nowrap ${
-                      provider === tab.id
-                        ? 'bg-amber-400 text-slate-950 shadow-md shadow-amber-500/20'
-                        : 'text-slate-400 hover:text-white hover:bg-white/5'
-                    }`}
-                  >
-                    {tab.label}
-                  </button>
-                ))}
-              </div>
-
-              <div className="space-y-4 text-xs text-slate-300">
-                <div className={`p-3.5 rounded-xl border space-y-1 ${guide.badgeColor}`}>
-                  <div className="font-bold flex items-center space-x-1.5">
-                    <Sparkles className="w-3.5 h-3.5" />
-                    <span>{guide.badge}</span>
-                  </div>
-                  <p className="text-[11px] text-slate-300 leading-relaxed">
-                    {guide.description}
-                  </p>
-                </div>
-
-                {/* Steps List */}
-                <div className="space-y-3">
-                  {guide.steps.map((st) => (
-                    <div key={st.step} className="flex items-start space-x-3 p-3 rounded-lg bg-white/5 border border-white/5">
-                      <span className="w-6 h-6 rounded-full bg-amber-400 text-slate-950 font-bold flex items-center justify-center text-xs shrink-0 mt-0.5">
-                        {st.step}
-                      </span>
-                      <div className="flex-1 min-w-0">
-                        <div className="font-semibold text-white">{st.title}</div>
-                        <p className="text-[11px] text-slate-400 mt-0.5 leading-relaxed">
-                          {st.desc}
-                        </p>
-                        {st.url && (
-                          <button
-                            type="button"
-                            onClick={() => window.hclipper?.openPath?.(st.url!)}
-                            className="inline-flex items-center space-x-1 text-sky-400 hover:underline mt-1.5 font-semibold text-[11px]"
-                          >
-                            <span>{st.urlLabel || st.url}</span>
-                            <ExternalLink className="w-3 h-3" />
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Key Input inside modal if not offline */}
-                {!guide.isOffline ? (
-                  <div className="space-y-1.5 pt-2">
-                    <label className="text-[11px] font-bold text-slate-400 uppercase">
-                      Paste Your {provider.toUpperCase()} Key:
-                    </label>
-                    <div className="flex items-center space-x-2">
-                      <input
-                        type="password"
-                        value={apiKey}
-                        onChange={(e) => handleSaveApiKey(e.target.value)}
-                        placeholder={`Paste token here (e.g. ${guide.keyPrefix || 'key...'})`}
-                        className="flex-1 bg-slate-900 border border-white/15 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-400 font-mono"
-                      />
-                      <button
-                        onClick={() => setShowKeyModal(false)}
-                        className="px-4 py-2 bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold rounded-lg text-xs transition-colors"
-                      >
-                        Save & Close
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-center space-y-1">
-                    <div className="text-xs font-bold text-emerald-300">Ready for Instant Offline Execution</div>
-                    <p className="text-[11px] text-slate-400">
-                      All video files stay 100% on this PC. No subscription, API bill, or rate limit ever applies.
-                    </p>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        );
-      })()}
-
-      {/* Single Clip Re-render Confirmation Modal */}
+            {/* Single Clip Re-render Confirmation Modal */}
       {rerenderConfirmIndex !== null && clips[rerenderConfirmIndex] && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="glass-card max-w-lg w-full p-6 rounded-2xl border-amber-400/40 space-y-4 shadow-2xl animate-in zoom-in-95 bg-slate-900/95 overflow-hidden">
@@ -970,12 +631,12 @@ export const ClipScoutView: React.FC<ClipScoutViewProps> = ({
                 onClick={async () => {
                   const idx = rerenderConfirmIndex;
                   setRerenderConfirmIndex(null);
-                  await startRenderClip(idx, true);
+                  await startRenderClip(idx, true, false);
                 }}
                 className="px-4 py-2 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-bold shadow-lg shadow-amber-500/20 transition-all flex items-center space-x-1.5"
               >
                 <Zap className="w-3.5 h-3.5 fill-current" />
-                <span>Yes, Re-render Clip</span>
+                <span>Yes, Re-crop Raw 9:16</span>
               </button>
             </div>
           </div>
@@ -991,15 +652,15 @@ export const ClipScoutView: React.FC<ClipScoutViewProps> = ({
                 <AlertCircle className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="text-base font-bold text-white">Batch Render Confirmation</h3>
+                <h3 className="text-base font-bold text-white">Pre-render Raw 9:16 Batch Confirmation</h3>
                 <span className="text-[11px] text-amber-400 font-semibold">
-                  {renderedCount} of {clips.length} Clips Already Rendered
+                  {renderedCount} of {clips.length} Clips Already Pre-rendered (Raw 9:16)
                 </span>
               </div>
             </div>
 
             <p className="text-xs text-slate-300 leading-relaxed">
-              Some clips in this deck have already been rendered. How would you like the GPU batch render queue to proceed?
+              This will pre-render clean raw 9:16 vertical video crops with face tracking on Intel QSV hardware. No subtitles or banners are burned yet — you can customize those in Steps 3–5 before final master export.
             </p>
 
             <div className="space-y-2 pt-1">
