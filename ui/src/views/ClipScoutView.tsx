@@ -14,7 +14,8 @@ import {
   ArrowRight,
   FolderOpen,
   Loader2,
-  Cpu
+  Cpu,
+  AlertCircle
 } from 'lucide-react';
 import { useWorkflow } from '../context/WorkflowContext';
 import type { ClipCandidate } from '../context/WorkflowContext';
@@ -188,6 +189,8 @@ export const ClipScoutView: React.FC<ClipScoutViewProps> = ({
   const [showKeyModal, setShowKeyModal] = useState<boolean>(false);
   const [isScouting, setIsScouting] = useState<boolean>(false);
   const [isBatchRendering, setIsBatchRendering] = useState<boolean>(false);
+  const [rerenderConfirmIndex, setRerenderConfirmIndex] = useState<number | null>(null);
+  const [showBatchConfirm, setShowBatchConfirm] = useState<boolean>(false);
 
   // Load saved API key from localStorage
   useEffect(() => {
@@ -274,9 +277,18 @@ export const ClipScoutView: React.FC<ClipScoutViewProps> = ({
     }, 600);
   };
 
-  const handleBatchRender = async () => {
+  const handleBatchRenderClick = () => {
+    const renderedClips = clips.filter((c) => c.isRendered);
+    if (renderedClips.length > 0) {
+      setShowBatchConfirm(true);
+    } else {
+      executeBatchRender(false);
+    }
+  };
+
+  const executeBatchRender = async (skipExisting: boolean) => {
     setIsBatchRendering(true);
-    await startBatchRenderAll();
+    await startBatchRenderAll(skipExisting);
     setIsBatchRendering(false);
   };
 
@@ -577,7 +589,7 @@ export const ClipScoutView: React.FC<ClipScoutViewProps> = ({
         </div>
 
         <button
-          onClick={handleBatchRender}
+          onClick={handleBatchRenderClick}
           disabled={isBatchRendering}
           className="px-4 py-2 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-bold text-xs rounded-lg flex items-center space-x-2 shadow-md shadow-emerald-500/10 transition-all disabled:opacity-50"
         >
@@ -705,7 +717,11 @@ export const ClipScoutView: React.FC<ClipScoutViewProps> = ({
                     onClick={(e) => {
                       e.stopPropagation();
                       selectClip(index);
-                      startRenderClip(index);
+                      if (clip.isRendered) {
+                        setRerenderConfirmIndex(index);
+                      } else {
+                        startRenderClip(index, true);
+                      }
                     }}
                     disabled={reframeState.isRendering && activeClipIndex === index}
                     className={`px-3.5 py-1.5 rounded-lg font-bold text-[11px] flex items-center space-x-1.5 shadow-sm transition-all ${
@@ -886,6 +902,131 @@ export const ClipScoutView: React.FC<ClipScoutViewProps> = ({
           </div>
         );
       })()}
+
+      {/* Single Clip Re-render Confirmation Modal */}
+      {rerenderConfirmIndex !== null && clips[rerenderConfirmIndex] && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="glass-card max-w-md w-full p-6 rounded-2xl border-amber-400/40 space-y-4 shadow-2xl animate-in zoom-in-95 bg-slate-900/95">
+            <div className="flex items-center space-x-3 text-amber-400">
+              <div className="p-2 rounded-xl bg-amber-400/10 border border-amber-400/20 text-amber-400">
+                <AlertCircle className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-white">Clip Already Rendered</h3>
+                <span className="text-[11px] text-amber-400 font-semibold">Clip #{rerenderConfirmIndex + 1} • Overwrite Confirmation</span>
+              </div>
+            </div>
+
+            <div className="p-3.5 rounded-xl bg-slate-950/60 border border-white/5 space-y-1.5">
+              <div className="text-xs font-bold text-white line-clamp-1">
+                {clips[rerenderConfirmIndex].title}
+              </div>
+              <div className="text-[11px] text-slate-400 font-mono flex items-center space-x-2">
+                <span>Saved path:</span>
+                <span className="text-emerald-400 font-semibold">{clips[rerenderConfirmIndex].renderedPath || `clips/${clips[rerenderConfirmIndex].id}.mp4`}</span>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-300 leading-relaxed">
+              This clip has already been processed with GPU hardware acceleration. Re-rendering will re-process the reframing trajectory and overwrite the existing MP4 video file.
+            </p>
+
+            <div className="flex items-center justify-end space-x-3 pt-2">
+              <button
+                onClick={() => setRerenderConfirmIndex(null)}
+                className="px-4 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-slate-300 text-xs font-semibold border border-white/10 transition-colors"
+              >
+                Cancel (Keep Existing)
+              </button>
+              <button
+                onClick={async () => {
+                  const idx = rerenderConfirmIndex;
+                  setRerenderConfirmIndex(null);
+                  await startRenderClip(idx, true);
+                }}
+                className="px-4 py-2 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-bold shadow-lg shadow-amber-500/20 transition-all flex items-center space-x-1.5"
+              >
+                <Zap className="w-3.5 h-3.5 fill-current" />
+                <span>Yes, Re-render Clip</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Batch Re-render Confirmation Modal */}
+      {showBatchConfirm && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="glass-card max-w-lg w-full p-6 rounded-2xl border-amber-400/40 space-y-4 shadow-2xl animate-in zoom-in-95 bg-slate-900/95">
+            <div className="flex items-center space-x-3 text-amber-400">
+              <div className="p-2 rounded-xl bg-amber-400/10 border border-amber-400/20 text-amber-400">
+                <AlertCircle className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-white">Batch Render Confirmation</h3>
+                <span className="text-[11px] text-amber-400 font-semibold">
+                  {renderedCount} of {clips.length} Clips Already Rendered
+                </span>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-300 leading-relaxed">
+              Some clips in this deck have already been rendered. How would you like the GPU batch render queue to proceed?
+            </p>
+
+            <div className="space-y-2 pt-1">
+              {clips.length > renderedCount && (
+                <button
+                  onClick={async () => {
+                    setShowBatchConfirm(false);
+                    await executeBatchRender(true);
+                  }}
+                  className="w-full p-3 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-left flex items-center justify-between group transition-all"
+                >
+                  <div>
+                    <div className="text-xs font-bold text-emerald-300 flex items-center space-x-1.5">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>Render Unrendered Only ({clips.length - renderedCount} clips)</span>
+                    </div>
+                    <div className="text-[11px] text-slate-400 mt-0.5">
+                      Fastest option: Preserves your existing {renderedCount} rendered clips and only processes the remaining unrendered clips.
+                    </div>
+                  </div>
+                  <ArrowRight className="w-4 h-4 text-emerald-400 group-hover:translate-x-1 transition-transform shrink-0 ml-3" />
+                </button>
+              )}
+
+              <button
+                onClick={async () => {
+                  setShowBatchConfirm(false);
+                  await executeBatchRender(false);
+                }}
+                className="w-full p-3 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-left flex items-center justify-between group transition-all"
+              >
+                <div>
+                  <div className="text-xs font-bold text-amber-300 flex items-center space-x-1.5">
+                    <Zap className="w-3.5 h-3.5 text-amber-400 fill-current" />
+                    <span>Re-render All ({clips.length} clips, Overwrite Existing)</span>
+                  </div>
+                  <div className="text-[11px] text-slate-400 mt-0.5">
+                    Fresh rebuild: Re-encodes all {clips.length} clips from scratch, overwriting previous outputs.
+                  </div>
+                </div>
+                <ArrowRight className="w-4 h-4 text-amber-400 group-hover:translate-x-1 transition-transform shrink-0 ml-3" />
+              </button>
+            </div>
+
+            <div className="flex justify-end pt-2">
+              <button
+                onClick={() => setShowBatchConfirm(false)}
+                className="px-4 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white text-xs font-semibold transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

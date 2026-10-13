@@ -145,8 +145,8 @@ export interface WorkflowContextType {
   reframeState: ReframeState;
   setReframeState: React.Dispatch<React.SetStateAction<ReframeState>>;
   startAnalyzeTrajectory: () => Promise<void>;
-  startRenderClip: (clipIndex?: number) => Promise<string | null>;
-  startBatchRenderAll: () => Promise<void>;
+  startRenderClip: (clipIndex?: number, force?: boolean) => Promise<string | null>;
+  startBatchRenderAll: (skipExisting?: boolean) => Promise<void>;
   
   // Subtitles (Embedded in Active Project)
   subtitlesState: SubtitlesState;
@@ -799,21 +799,10 @@ export const WorkflowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   // Render Targeted Single Clip Fast (4-8 seconds on GPU)
-  const startRenderClip = async (targetIndex?: number): Promise<string | null> => {
+  const startRenderClip = async (targetIndex?: number, _force?: boolean): Promise<string | null> => {
     const idx = targetIndex !== undefined ? targetIndex : activeClipIndex;
     const clip = clips[idx];
     if (!clip) return null;
-
-    // Global re-render guard: confirm before overwriting a previously rendered clip
-    if (clip.isRendered && clip.renderedPath) {
-      const confirmed = window.confirm(
-        `Clip #${idx + 1} "${clip.title}" has already been rendered.\n\nRe-render and overwrite the existing file?`
-      );
-      if (!confirmed) {
-        addLog(`[${activeProject.name}] Re-render cancelled for Clip #${idx + 1}.`, 'info');
-        return clip.renderedPath;
-      }
-    }
 
     const outFilename = `${clip.id || `Clip_${idx + 1}`}.mp4`;
     const targetOut = `clips/${outFilename}`;
@@ -921,14 +910,18 @@ export const WorkflowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   // Batch Render All Discovered Clips
-  const startBatchRenderAll = async () => {
-    addLog(`[${activeProject.name}] Batch rendering ${clips.length} short clips...`, 'batch');
+  const startBatchRenderAll = async (skipExisting = false) => {
+    addLog(`[${activeProject.name}] Batch rendering short clips (${skipExisting ? 'skipping already rendered' : 'rendering all'})...`, 'batch');
     for (let i = 0; i < clips.length; i++) {
+      if (skipExisting && clips[i].isRendered) {
+        addLog(`[Batch ${i + 1}/${clips.length}] Skipping already rendered Clip #${i + 1} ("${clips[i].title}")`, 'info');
+        continue;
+      }
       selectClip(i);
       addLog(`[Batch ${i + 1}/${clips.length}] Rendering ${clips[i].title}...`, 'batch');
-      await startRenderClip(i);
+      await startRenderClip(i, true);
     }
-    addLog(`✓ All ${clips.length} short clips successfully rendered into clips/ folder!`, 'success');
+    addLog(`✓ Batch render process completed for clips!`, 'success');
   };
 
   return (
