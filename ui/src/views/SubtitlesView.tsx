@@ -18,7 +18,8 @@ import {
   Plus,
   Trash2,
   Clock,
-  Eye
+  Eye,
+  AlertCircle
 } from 'lucide-react';
 import { YoutubeIcon, TikTokIcon, InstagramIcon } from '../components/Icons';
 import { useWorkflow } from '../context/WorkflowContext';
@@ -91,7 +92,11 @@ export const SubtitlesView: React.FC<SubtitlesViewProps> = ({
   const [isMuted, setIsMuted] = useState(true);
   const [videoCurrentTime, setVideoCurrentTime] = useState(0);
   const [isRenderingMotion, setIsRenderingMotion] = useState(false);
+  const [motionProgress, setMotionProgress] = useState(0);
+  const [motionPhase, setMotionPhase] = useState<'idle' | 'sfx' | 'canvas' | 'compositing' | 'completed' | 'error'>('idle');
+  const [motionDetail, setMotionDetail] = useState('');
   const [renderMotionStatus, setRenderMotionStatus] = useState<string | null>(null);
+  const [showRerenderMasterConfirm, setShowRerenderMasterConfirm] = useState(false);
   const [previewMode, setPreviewMode] = useState<'design' | 'rendered'>(
     activeClip.isRendered ? 'rendered' : 'design'
   );
@@ -105,6 +110,34 @@ export const SubtitlesView: React.FC<SubtitlesViewProps> = ({
       setPreviewMode('design');
     }
   }, [activeClip.id, activeClip.isRendered]);
+
+  // IPC listener for real-time motion rendering progress
+  useEffect(() => {
+    if (!window.hclipper) return;
+    const unsub = window.hclipper.onEngineEvent((data) => {
+      if (data.event === 'motion_progress') {
+        if (typeof data.percent === 'number') {
+          setMotionProgress(data.percent);
+        }
+        if (data.phase) {
+          setMotionPhase(data.phase);
+        }
+        if (data.detail) {
+          setMotionDetail(data.detail);
+        }
+      } else if (data.event === 'motion_result') {
+        if (data.success) {
+          setMotionProgress(100);
+          setMotionPhase('completed');
+          setIsRenderingMotion(false);
+        } else {
+          setMotionPhase('error');
+          setIsRenderingMotion(false);
+        }
+      }
+    });
+    return () => unsub();
+  }, []);
 
   const cleanSermonHeadline = (text?: string): string => {
     if (!text) return 'SERMON HIGHLIGHT';
@@ -831,9 +864,13 @@ export const SubtitlesView: React.FC<SubtitlesViewProps> = ({
               <button
                 disabled={reframeState.isRendering || !sourceVideo}
                 onClick={async () => {
-                  const out = await startRenderClip(activeClipIndex, true, true);
-                  if (out) {
-                    setPreviewMode('rendered');
+                  if (activeClip.isRendered) {
+                    setShowRerenderMasterConfirm(true);
+                  } else {
+                    const out = await startRenderClip(activeClipIndex, true, true);
+                    if (out) {
+                      setPreviewMode('rendered');
+                    }
                   }
                 }}
                 className={`flex-1 py-2.5 rounded-lg font-bold text-xs flex items-center justify-center gap-2 shadow-lg transition-all ${
@@ -945,9 +982,113 @@ export const SubtitlesView: React.FC<SubtitlesViewProps> = ({
               </div>
             </div>
 
-            {renderMotionStatus && (
-              <div className="text-[11px] p-2 rounded-lg bg-slate-900/90 border border-amber-400/30 text-amber-300 font-medium animate-in fade-in">
-                {renderMotionStatus}
+            {/* Live Visual Motion Rendering Feedback Panel */}
+            {isRenderingMotion && (
+              <div className="p-4 rounded-xl bg-slate-900 border border-cyan-400/40 shadow-xl space-y-3 animate-in fade-in">
+                <div className="flex items-center justify-between text-xs">
+                  <div className="flex items-center space-x-2 text-cyan-300 font-bold">
+                    <Loader2 className="w-4 h-4 animate-spin text-cyan-400" />
+                    <span>Rendering Dynamic Motion Clip...</span>
+                    <span className="text-[10px] uppercase font-mono px-1.5 py-0.5 rounded bg-cyan-950 border border-cyan-400/40 text-cyan-300 font-semibold">{motionPhase}</span>
+                  </div>
+                  <span className="font-mono text-cyan-400 font-black text-sm">{motionProgress}%</span>
+                </div>
+
+                {/* Animated Glowing Progress Bar */}
+                <div className="w-full h-2.5 bg-slate-950 rounded-full overflow-hidden p-0.5 border border-cyan-400/30">
+                  <div 
+                    className="h-full bg-gradient-to-r from-cyan-500 via-sky-400 to-amber-400 rounded-full transition-all duration-300 shadow-[0_0_12px_rgba(6,182,212,0.6)]"
+                    style={{ width: `${motionProgress}%` }}
+                  />
+                </div>
+
+                {/* Multi-Stage Visual Stepper */}
+                <div className="space-y-1.5 pt-1 text-[11px]">
+                  <div className="flex items-center justify-between text-slate-300">
+                    <span className="flex items-center gap-1.5">
+                      {motionProgress >= 15 ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> : <Loader2 className="w-3.5 h-3.5 animate-spin text-cyan-400" />}
+                      <span>1. Tactile SFX Track Synthesis (Whoosh, Pop, Slide)</span>
+                    </span>
+                    <span className={motionProgress >= 15 ? 'text-emerald-400 font-mono font-bold' : 'text-cyan-400 font-mono'}>
+                      {motionProgress >= 15 ? 'Complete ✓' : 'Running...'}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between text-slate-300">
+                    <span className="flex items-center gap-1.5">
+                      {motionProgress >= 85 ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> : motionProgress >= 15 ? <Loader2 className="w-3.5 h-3.5 animate-spin text-cyan-400" /> : <Clock className="w-3.5 h-3.5 text-slate-500" />}
+                      <span>2. Headless Chromium Kinetic Motion Canvas</span>
+                    </span>
+                    <span className={motionProgress >= 85 ? 'text-emerald-400 font-mono font-bold' : motionProgress >= 15 ? 'text-cyan-400 font-mono font-bold' : 'text-slate-500 font-mono'}>
+                      {motionProgress >= 85 ? 'Complete ✓' : motionProgress >= 15 ? `${motionProgress}%` : 'Waiting'}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between text-slate-300">
+                    <span className="flex items-center gap-1.5">
+                      {motionProgress === 100 ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> : motionProgress >= 85 ? <Loader2 className="w-3.5 h-3.5 animate-spin text-cyan-400" /> : <Clock className="w-3.5 h-3.5 text-slate-500" />}
+                      <span>3. Hardware FFmpeg Overlay & SFX Audio Mastering</span>
+                    </span>
+                    <span className={motionProgress === 100 ? 'text-emerald-400 font-mono font-bold' : motionProgress >= 85 ? 'text-cyan-400 font-mono' : 'text-slate-500 font-mono'}>
+                      {motionProgress === 100 ? 'Complete ✓' : motionProgress >= 85 ? 'Encoding...' : 'Waiting'}
+                    </span>
+                  </div>
+                </div>
+
+                {motionDetail && (
+                  <div className="text-[10px] text-cyan-300/90 font-mono bg-cyan-950/70 px-2.5 py-1 rounded border border-cyan-400/20 truncate">
+                    {motionDetail}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Completion Result Banner with Direct Player Action */}
+            {renderMotionStatus && !isRenderingMotion && (
+              <div className={`text-[11px] p-3 rounded-xl border flex items-start gap-2.5 animate-in fade-in ${
+                renderMotionStatus.startsWith('✓') 
+                  ? 'bg-emerald-950/80 border-emerald-400/40 text-emerald-200 shadow-lg' 
+                  : 'bg-red-950/80 border-red-400/40 text-red-200'
+              }`}>
+                {renderMotionStatus.startsWith('✓') ? (
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                ) : (
+                  <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+                )}
+                <div className="space-y-2 flex-1">
+                  <div className="font-semibold break-all leading-relaxed">{renderMotionStatus}</div>
+                  {renderMotionStatus.startsWith('✓') && (
+                    <div className="flex items-center gap-2 pt-1 flex-wrap">
+                      <button
+                        onClick={() => {
+                          const targetOut = `clips/${activeClip.id || 'Clip'}_Dynamic_Motion.mp4`;
+                          if (window.hclipper) window.hclipper.openPath(targetOut);
+                        }}
+                        className="px-2.5 py-1 rounded bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold flex items-center gap-1 transition-colors shadow"
+                      >
+                        <Film className="w-3 h-3" />
+                        <span>Play Video</span>
+                      </button>
+                      <button
+                        onClick={() => {
+                          const targetOut = `clips/${activeClip.id || 'Clip'}_Dynamic_Motion.mp4`;
+                          if (window.hclipper) window.hclipper.showInFolder(targetOut);
+                        }}
+                        className="px-2.5 py-1 rounded bg-white/10 hover:bg-white/20 text-white text-xs font-medium flex items-center gap-1 transition-colors border border-white/10"
+                      >
+                        <FolderOpen className="w-3 h-3" />
+                        <span>Show in Folder</span>
+                      </button>
+                      <button
+                        onClick={() => setPreviewMode('rendered')}
+                        className="px-2.5 py-1 rounded bg-cyan-400/20 hover:bg-cyan-400/30 text-cyan-300 text-xs font-semibold flex items-center gap-1 transition-colors border border-cyan-400/40"
+                      >
+                        <Eye className="w-3 h-3" />
+                        <span>View in Mockup Frame</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 
@@ -960,7 +1101,10 @@ export const SubtitlesView: React.FC<SubtitlesViewProps> = ({
                   if (!inputVid) return;
 
                   setIsRenderingMotion(true);
-                  setRenderMotionStatus('Rendering deterministic motion graphics & physical sound effects...');
+                  setMotionProgress(5);
+                  setMotionPhase('sfx');
+                  setMotionDetail('Synthesizing tactile SFX audio track (whoosh, pop, slide)...');
+                  setRenderMotionStatus(null);
 
                   const cleanHeadline = cleanSermonHeadline(activeClip.customHeadline || activeClip.hook || activeClip.title);
                   const targetOut = `clips/${activeClip.id || 'Clip'}_Dynamic_Motion.mp4`;
@@ -975,7 +1119,12 @@ export const SubtitlesView: React.FC<SubtitlesViewProps> = ({
                       '--template', 'kinetic_hook.html'
                     ]);
 
-                    if (res && res.success) {
+                    const resultEvt = res?.events?.find((e: any) => e.event === 'motion_result');
+                    const isSuccess = Boolean(res?.success && (resultEvt ? resultEvt.success : true));
+
+                    if (isSuccess) {
+                      setMotionProgress(100);
+                      setMotionPhase('completed');
                       updateActiveClip({
                         isRendered: true,
                         renderedPath: targetOut
@@ -983,9 +1132,12 @@ export const SubtitlesView: React.FC<SubtitlesViewProps> = ({
                       setPreviewMode('rendered');
                       setRenderMotionStatus(`✓ Motion design short rendered successfully -> ${targetOut}`);
                     } else {
-                      setRenderMotionStatus('Motion render finished.');
+                      const errMsg = resultEvt?.error || 'Motion render process returned an error.';
+                      setMotionPhase('error');
+                      setRenderMotionStatus(`Error rendering motion: ${errMsg}`);
                     }
                   } catch (err: any) {
+                    setMotionPhase('error');
                     setRenderMotionStatus(`Error rendering motion: ${err?.message || err}`);
                   } finally {
                     setIsRenderingMotion(false);
@@ -999,8 +1151,8 @@ export const SubtitlesView: React.FC<SubtitlesViewProps> = ({
               >
                 {isRenderingMotion ? (
                   <>
-                    <span className="w-3.5 h-3.5 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
-                    <span>Rendering Dynamic Motion Graphics...</span>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-slate-950" />
+                    <span>Rendering Dynamic Motion ({motionProgress}%)...</span>
                   </>
                 ) : (
                   <>
@@ -1214,6 +1366,57 @@ export const SubtitlesView: React.FC<SubtitlesViewProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Re-render Master Short Confirmation Modal */}
+      {showRerenderMasterConfirm && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="glass-card max-w-lg w-full p-6 rounded-2xl border-amber-400/40 space-y-4 shadow-2xl animate-in zoom-in-95 bg-slate-900/95 overflow-hidden">
+            <div className="flex items-center space-x-3 text-amber-400">
+              <div className="p-2 rounded-xl bg-amber-400/10 border border-amber-400/20 text-amber-400">
+                <AlertCircle className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-white">Re-render Master Short Confirmation</h3>
+                <span className="text-[11px] text-amber-400 font-semibold">Clip #{activeClipIndex + 1} • Overwrite Existing Master Video</span>
+              </div>
+            </div>
+
+            <div className="p-3.5 rounded-xl bg-slate-950/60 border border-white/5 space-y-2 overflow-hidden">
+              <div className="text-xs font-bold text-white line-clamp-2">
+                {activeClip.title}
+              </div>
+              <div className="text-[11px] text-slate-400 font-mono space-y-1">
+                <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider block">Subtitle Style Preset:</span>
+                <span className="text-amber-400 font-semibold">{stylePreset.toUpperCase()} (Progressive Karaoke Underlining)</span>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-300 leading-relaxed">
+              This clip has already been rendered. Re-rendering will re-encode with your latest subtitle presets, hook banner, and audio DSP settings, overwriting the master MP4 file.
+            </p>
+
+            <div className="flex items-center justify-end space-x-3 pt-2">
+              <button
+                onClick={() => setShowRerenderMasterConfirm(false)}
+                className="px-4 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-slate-300 text-xs font-semibold border border-white/10 transition-colors"
+              >
+                Cancel (Keep Existing)
+              </button>
+              <button
+                onClick={async () => {
+                  setShowRerenderMasterConfirm(false);
+                  const out = await startRenderClip(activeClipIndex, true, true);
+                  if (out) setPreviewMode('rendered');
+                }}
+                className="px-4 py-2 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-bold shadow-lg shadow-amber-500/20 transition-all flex items-center space-x-1.5"
+              >
+                <Zap className="w-3.5 h-3.5 fill-current" />
+                <span>Yes, Re-render Master Short</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

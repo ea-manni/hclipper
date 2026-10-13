@@ -324,6 +324,7 @@ def cmd_motion(args):
             emit_json("motion_result", {"success": False, "error": str(e), "output": args.output})
         else:
             print(f"Motion design rendering failed: {e}", file=sys.stderr)
+        sys.exit(1)
 def cmd_export_clip(args):
     """Renders full master short combining auto-reframe, subtitles, hook banner, and audio DSP."""
     from engine.subtitles import SubtitleEngine

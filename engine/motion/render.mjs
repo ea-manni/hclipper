@@ -138,18 +138,59 @@ async function render() {
     console.error(`FFmpeg spawn error:`, err);
   });
 
+  const cues = opts.config?.cues || [];
+  function isAnyCueActive(timeSec) {
+    if (!cues || cues.length === 0) return true;
+    for (const c of cues) {
+      const s = Math.max(0, (c.start || 0) - 0.25);
+      const e = (c.start || 0) + (c.duration || 3.8) + 0.35;
+      if (timeSec >= s && timeSec <= e) return true;
+    }
+    return false;
+  }
+
+  let blankBuffer = null;
+
   for (let i = 0; i < totalSteps; i++) {
     const t = i * dt;
-    await page.evaluate((time) => window.seek(time), t);
-    const pngBuffer = await page.screenshot({
-      type: "png",
-      omitBackground: true
-    });
+    const active = isAnyCueActive(t);
+
+    let pngBuffer;
+    if (active) {
+      await page.evaluate((time) => window.seek(time), t);
+      pngBuffer = await page.screenshot({
+        type: "png",
+        omitBackground: true
+      });
+    } else {
+      if (!blankBuffer) {
+        await page.evaluate(() => {
+          if (typeof window.seek === "function") window.seek(9999);
+        });
+        blankBuffer = await page.screenshot({
+          type: "png",
+          omitBackground: true
+        });
+      }
+      pngBuffer = blankBuffer;
+    }
+
     ffmpeg.stdin.write(pngBuffer);
 
-    if (i % (opts.fps * opts.subsample) === 0) {
+    // Emit progress event every 10 frames or at key intervals
+    if (i % 10 === 0 || i === totalSteps - 1) {
       const sec = (i * dt).toFixed(1);
-      console.log(`[Motion Studio] Progress: ${sec}s / ${duration}s (${Math.round((i / totalSteps) * 100)}%)`);
+      const pct = Math.min(85, Math.max(5, Math.round((i / totalSteps) * 85)));
+      console.log(`__HCLIPPER_JSON__${JSON.stringify({
+        event: "motion_progress",
+        phase: "canvas",
+        frame: i,
+        total_frames: totalSteps,
+        percent: pct,
+        sec: Number(sec),
+        total_sec: Number(duration.toFixed(1)),
+        detail: `Rendering motion canvas frame ${i + 1}/${totalSteps} (${sec}s / ${duration.toFixed(1)}s)...`
+      })}`);
     }
   }
 

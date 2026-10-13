@@ -144,7 +144,8 @@ class DynamicMotionPipeline:
         sfx_wav = temp_dir / "sfx_track_master.wav"
 
         # 1. Generate SFX Audio Track
-        print(f"[DynamicMotionPipeline] Synthesizing synchronized SFX audio track...")
+        print(f"[DynamicMotionPipeline] Synthesizing synchronized SFX audio track...", flush=True)
+        print(f"__HCLIPPER_JSON__{json.dumps({'event': 'motion_progress', 'phase': 'sfx', 'percent': 5, 'detail': 'Synthesizing tactile SFX audio track...'})}", flush=True)
         self.build_sfx_audio_track(cues, duration, sfx_wav)
 
         # 2. Render Headless Multi-Cue Motion Canvas
@@ -161,14 +162,33 @@ class DynamicMotionPipeline:
             "--config", json.dumps(manifest_config)
         ]
 
-        print(f"[DynamicMotionPipeline] Rendering full-duration motion canvas via headless Chromium ({template_name})...")
-        res = subprocess.run(render_cmd, cwd=str(self.motion_dir), capture_output=True, text=True)
-        if res.returncode != 0 or not overlay_mov.exists():
-            print(f"[DynamicMotionPipeline] Render error: {res.stderr}")
-            raise RuntimeError(f"Motion canvas render failed: {res.stderr}")
+        print(f"[DynamicMotionPipeline] Rendering full-duration motion canvas via headless Chromium ({template_name})...", flush=True)
+        proc = subprocess.Popen(
+            render_cmd,
+            cwd=str(self.motion_dir),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1
+        )
+
+        for line in iter(proc.stdout.readline, ''):
+            line_str = line.strip()
+            if not line_str:
+                continue
+            if "__HCLIPPER_JSON__" in line_str:
+                print(line_str, flush=True)
+            elif "Progress:" in line_str or "[Motion Studio]" in line_str:
+                print(f"[DynamicMotionPipeline] {line_str}", flush=True)
+
+        proc.stdout.close()
+        ret = proc.wait()
+        if ret != 0 or not overlay_mov.exists():
+            raise RuntimeError(f"Motion canvas render failed with exit code {ret}")
 
         # 3. Composite Final Video with Overlay and SFX Audio
-        print(f"[DynamicMotionPipeline] Compositing master video with transparent overlay and SFX...")
+        print(f"[DynamicMotionPipeline] Compositing master video with transparent overlay and SFX...", flush=True)
+        print(f"__HCLIPPER_JSON__{json.dumps({'event': 'motion_progress', 'phase': 'compositing', 'percent': 88, 'detail': 'Compositing master video with transparent overlay and SFX...'})}", flush=True)
         composite_cmd = [
             str(self.ffmpeg_bin),
             "-y",
@@ -191,6 +211,8 @@ class DynamicMotionPipeline:
         comp_res = subprocess.run(composite_cmd, capture_output=True, text=True)
         if comp_res.returncode != 0:
             raise RuntimeError(f"FFmpeg composite failed: {comp_res.stderr}")
+
+        print(f"__HCLIPPER_JSON__{json.dumps({'event': 'motion_progress', 'phase': 'completed', 'percent': 100, 'output': output_path, 'detail': 'Master dynamic motion clip rendered successfully!'})}", flush=True)
 
         # Clean temporary files
         try:

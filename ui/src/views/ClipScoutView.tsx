@@ -51,6 +51,7 @@ export const ClipScoutView: React.FC<ClipScoutViewProps> = ({
   const [isScouting, setIsScouting] = useState<boolean>(false);
   const [isBatchRendering, setIsBatchRendering] = useState<boolean>(false);
   const [rerenderConfirmIndex, setRerenderConfirmIndex] = useState<number | null>(null);
+  const [renderConfirmIndex, setRenderConfirmIndex] = useState<number | null>(null);
   const [showBatchConfirm, setShowBatchConfirm] = useState<boolean>(false);
   const [scoutError, setScoutError] = useState<string | null>(null);
 
@@ -536,7 +537,7 @@ export const ClipScoutView: React.FC<ClipScoutViewProps> = ({
                       if (clip.isRendered) {
                         setRerenderConfirmIndex(index);
                       } else {
-                        startRenderClip(index, true, false);
+                        setRenderConfirmIndex(index);
                       }
                     }}
                     disabled={reframeState.isRendering && activeClipIndex === index}
@@ -637,6 +638,59 @@ export const ClipScoutView: React.FC<ClipScoutViewProps> = ({
               >
                 <Zap className="w-3.5 h-3.5 fill-current" />
                 <span>Yes, Re-crop Raw 9:16</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Single Clip Initial Pre-render Confirmation Modal */}
+      {renderConfirmIndex !== null && clips[renderConfirmIndex] && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="glass-card max-w-lg w-full p-6 rounded-2xl border-amber-400/40 space-y-4 shadow-2xl animate-in zoom-in-95 bg-slate-900/95 overflow-hidden">
+            <div className="flex items-center space-x-3 text-amber-400">
+              <div className="p-2 rounded-xl bg-amber-400/10 border border-amber-400/20 text-amber-400">
+                <Zap className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-white">Pre-render Raw 9:16 Short</h3>
+                <span className="text-[11px] text-amber-400 font-semibold">Clip #{renderConfirmIndex + 1} • Intel QSV Hardware Encoding</span>
+              </div>
+            </div>
+
+            <div className="p-3.5 rounded-xl bg-slate-950/60 border border-white/5 space-y-2 overflow-hidden">
+              <div className="text-xs font-bold text-white line-clamp-2">
+                {clips[renderConfirmIndex].title}
+              </div>
+              <div className="text-[11px] text-slate-400 font-mono space-y-1">
+                <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider block">Duration Window:</span>
+                <span className="text-white font-semibold">
+                  {(clips[renderConfirmIndex].end - clips[renderConfirmIndex].start).toFixed(1)}s ({Math.floor(clips[renderConfirmIndex].start / 60)}:{(clips[renderConfirmIndex].start % 60).toFixed(0).padStart(2, '0')} → {Math.floor(clips[renderConfirmIndex].end / 60)}:{(clips[renderConfirmIndex].end % 60).toFixed(0).padStart(2, '0')})
+                </span>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-300 leading-relaxed">
+              This will pre-render a clean 9:16 vertical crop with YuNet face tracking on your GPU in ~5 seconds. Subtitles and hook banners are not burned yet — you can customize those in Steps 3–5.
+            </p>
+
+            <div className="flex items-center justify-end space-x-3 pt-2">
+              <button
+                onClick={() => setRenderConfirmIndex(null)}
+                className="px-4 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-slate-300 text-xs font-semibold border border-white/10 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  const idx = renderConfirmIndex;
+                  setRenderConfirmIndex(null);
+                  await startRenderClip(idx, true, false);
+                }}
+                className="px-4 py-2 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-bold shadow-lg shadow-amber-500/20 transition-all flex items-center space-x-1.5"
+              >
+                <Zap className="w-3.5 h-3.5 fill-current" />
+                <span>Start Pre-render</span>
               </button>
             </div>
           </div>
