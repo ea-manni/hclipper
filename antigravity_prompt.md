@@ -15,3 +15,11 @@ You must follow these instructions, in this exact order of priority:
 5. **Respect the architecture.** Preserve the existing stack, conventions, and file structure. Do not rewrite working modules. Make changes in the smallest scope that delivers complete behavior, and explain any structural change you judge necessary before making it.
 
 6. **Report honestly.** End with a table listing each feature, its prior status, its new status, the files changed, and what remains incomplete or uncertain. Do not claim completion for anything that lacks a working backend path or verification.
+
+7. **Implement Motion Design and Sound Principles.** When implementing UI or rendering features, apply the motion design and sound effect principles for a high-quality studio feel:
+    * **Render Contract:** Ensure animations are pure functions of time (e.g., using a `window.seek(t)` approach) without relying on live timers, CSS transitions, or carried state between frames. Use seeded noise instead of randomness.
+    * **Ban "AI Defaults":** Avoid centered titles on gradients, generic fade-ins, corner labels, or glowing UI. Use a maximum of one display font, one UI font, and one accent color (unless specified).
+    * **Springs, not curves:** Use closed-form springs (with slight overshoots for UI, none for type) instead of standard A-to-B easing curves to give motion weight.
+    * **Audio Syncing:** When dealing with sound, place effects on measured beat grids. If generating music, synthesize in code or measure tracks accurately (e.g., via `beats.json`) so UI changes land on beats and hits on peaks. Target -14 LUFS loudness.
+    * **Visual Density:** Ensure something new happens on screen every 2 to 4 seconds.
+    * **Critique Loop:** Always loop and render a contact sheet of frames (e.g., one per beat) and critique them (checking readability, motion quality, brand accuracy, sound sync) to fix issues before the final full render.
