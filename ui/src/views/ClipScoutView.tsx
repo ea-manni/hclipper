@@ -561,13 +561,13 @@ export const ClipScoutView: React.FC<ClipScoutViewProps> = ({
           <div className="flex items-center space-x-2 text-xs text-slate-400">
             <span className="font-semibold text-white">Source Video:</span>
             <span className="font-mono text-slate-300 truncate max-w-sm">
-              {sourceVideo || 'downloads/pastor_david_destiny.mp4'}
+              {sourceVideo || 'No video selected'}
             </span>
           </div>
 
           <button
             onClick={handleScoutClips}
-            disabled={isScouting}
+            disabled={isScouting || !sourceVideo}
             className="px-6 py-2.5 bg-gradient-to-r from-amber-400 via-amber-500 to-amber-600 hover:from-amber-300 hover:to-amber-500 text-slate-950 font-extrabold text-xs rounded-xl shadow-lg shadow-amber-500/20 flex items-center space-x-2 transition-all disabled:opacity-50"
           >
             <Sparkles className={`w-4 h-4 ${isScouting ? 'animate-spin' : ''}`} />
@@ -590,7 +590,7 @@ export const ClipScoutView: React.FC<ClipScoutViewProps> = ({
 
         <button
           onClick={handleBatchRenderClick}
-          disabled={isBatchRendering}
+          disabled={isBatchRendering || clips.length === 0}
           className="px-4 py-2 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-bold text-xs rounded-lg flex items-center space-x-2 shadow-md shadow-emerald-500/10 transition-all disabled:opacity-50"
         >
           <Zap className="w-3.5 h-3.5" />
@@ -600,7 +600,20 @@ export const ClipScoutView: React.FC<ClipScoutViewProps> = ({
 
       {/* Discovered Clips List */}
       <div className="space-y-3.5">
-        {clips.map((clip, index) => {
+        {clips.length === 0 ? (
+          <div className="glass-card rounded-2xl p-10 text-center border border-white/10 space-y-3">
+            <div className="w-12 h-12 rounded-2xl bg-amber-400/10 border border-amber-400/20 text-amber-400 flex items-center justify-center mx-auto">
+              <Film className="w-6 h-6" />
+            </div>
+            <h4 className="text-sm font-bold text-white">No Clips Discovered Yet</h4>
+            <p className="text-xs text-slate-400 max-w-md mx-auto">
+              {sourceVideo 
+                ? 'Source video attached. Click "⚡ Scout Top Viral Clips" above to run speech cadence heuristics and discover viral clip moments.'
+                : 'No source video loaded in this project. Ingest a video in Step 1 to begin.'}
+            </p>
+          </div>
+        ) : (
+          clips.map((clip, index) => {
           const isSelected = activeClipIndex === index;
           return (
             <div
@@ -753,23 +766,26 @@ export const ClipScoutView: React.FC<ClipScoutViewProps> = ({
               </div>
             </div>
           );
-        })}
+        })
+      )}
       </div>
 
       {/* Next Step Footer Navigation */}
-      <div className="flex items-center justify-between pt-4 border-t border-white/10">
-        <span className="text-xs text-slate-400">
-          Selected active clip: <strong className="text-white">Clip #{activeClipIndex + 1}</strong> ({clips[activeClipIndex]?.title})
-        </span>
+      {clips.length > 0 && (
+        <div className="flex items-center justify-between pt-4 border-t border-white/10">
+          <span className="text-xs text-slate-400">
+            Selected active clip: <strong className="text-white">Clip #{activeClipIndex + 1}</strong> ({clips[activeClipIndex]?.title})
+          </span>
 
-        <button
-          onClick={onNavigateToTimeline}
-          className="px-6 py-2.5 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 font-bold text-xs rounded-lg flex items-center space-x-2 shadow-lg shadow-amber-500/20"
-        >
-          <span>Proceed to Step 3: Timeline & Audio Clarity</span>
-          <ArrowRight className="w-3.5 h-3.5" />
-        </button>
-      </div>
+          <button
+            onClick={onNavigateToTimeline}
+            className="px-6 py-2.5 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 font-bold text-xs rounded-lg flex items-center space-x-2 shadow-lg shadow-amber-500/20"
+          >
+            <span>Proceed to Step 3: Timeline & Audio Clarity</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
 
       {/* Dynamic Step-by-Step API Key Setup & Offline Architecture Modal */}
       {showKeyModal && (() => {

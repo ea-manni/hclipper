@@ -302,9 +302,9 @@ def cmd_motion(args):
     out = pipeline.process_clip(
         video_path=args.input,
         output_path=args.output,
-        clip_headline=getattr(args, "headline", None) or "WHAT YOU PURSUE GOD WILL FULFILL",
-        speaker=getattr(args, "speaker", None) or "Pastor David Ogbueli",
-        topic=getattr(args, "topic", None) or "Dominion City · Destiny & Calling",
+        clip_headline=getattr(args, "headline", None) or "",
+        speaker=getattr(args, "speaker", None) or "",
+        topic=getattr(args, "topic", None) or "",
         template_name=getattr(args, "template", None) or "human_motion.html"
     )
     if args.json:

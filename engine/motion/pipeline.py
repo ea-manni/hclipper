@@ -83,9 +83,9 @@ class DynamicMotionPipeline:
         video_path: str,
         output_path: str,
         transcript_cues: Optional[List[Dict[str, Any]]] = None,
-        clip_headline: str = "WHAT YOU PURSUE GOD WILL FULFILL",
-        speaker: str = "Pastor David Ogbueli",
-        topic: str = "Dominion City · Destiny & Calling",
+        clip_headline: str = "",
+        speaker: str = "",
+        topic: str = "",
         custom_cues: Optional[List[Dict[str, Any]]] = None,
         template_name: str = "human_motion.html"
     ) -> str:

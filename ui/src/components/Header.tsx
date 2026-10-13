@@ -96,7 +96,7 @@ export const Header: React.FC<HeaderProps> = () => {
                 Active Project
               </div>
               <div className="text-xs font-bold text-white truncate leading-tight mt-0.5">
-                {activeProject?.name || 'Pastor David Ogbueli — Discover Destiny'}
+                {activeProject?.name || 'No Project Selected'}
               </div>
             </div>
             <ChevronDown className="w-3.5 h-3.5 text-slate-400 group-hover:text-amber-400 transition-colors shrink-0" />

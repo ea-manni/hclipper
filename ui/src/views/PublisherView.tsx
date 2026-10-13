@@ -499,7 +499,7 @@ export const PublisherView: React.FC = () => {
         </button>
         {projects.map((proj) => {
           const count = queue.filter(
-            (q) => q.projectId === proj.id || q.projectName === proj.name || (!q.projectId && proj.id === 'proj_pastor_david')
+            (q) => q.projectId === proj.id || q.projectName === proj.name
           ).length;
           return (
             <button
@@ -533,8 +533,7 @@ export const PublisherView: React.FC = () => {
               {queue.filter(
                 (item) =>
                   selectedProjectFilter === 'all' ||
-                  item.projectId === selectedProjectFilter ||
-                  (!item.projectId && selectedProjectFilter === 'proj_pastor_david')
+                  item.projectId === selectedProjectFilter
               ).length} Clips Visible
             </span>
           </div>
@@ -566,8 +565,7 @@ export const PublisherView: React.FC = () => {
                 .filter(
                   (item) =>
                     selectedProjectFilter === 'all' ||
-                    item.projectId === selectedProjectFilter ||
-                    (!item.projectId && selectedProjectFilter === 'proj_pastor_david')
+                    item.projectId === selectedProjectFilter
                 )
                 .map((item) => (
                   <tr key={item.id} className="hover:bg-white/[0.02] transition-colors">
@@ -576,7 +574,7 @@ export const PublisherView: React.FC = () => {
                       <div className="flex items-center space-x-2 mt-1">
                         <span className="text-[10px] text-amber-400 font-medium bg-amber-400/10 border border-amber-400/20 px-1.5 py-0.5 rounded flex items-center space-x-1">
                           <Folder className="w-2.5 h-2.5 text-amber-400 shrink-0" />
-                          <span className="truncate max-w-[200px]">{item.projectName || 'Pastor David Ogbueli — Discover Destiny'}</span>
+                          <span className="truncate max-w-[200px]">{item.projectName || 'Project Clip'}</span>
                         </span>
                         <span className="text-[10px] text-slate-600">•</span>
                         <span className="text-[10px] text-slate-500 font-mono">{item.filename}</span>

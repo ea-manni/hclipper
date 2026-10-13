@@ -117,7 +117,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </span>
           </div>
           <div className="text-xs font-bold text-white truncate mt-1">
-            {activeProject?.name || 'Pastor David Ogbueli'}
+            {activeProject?.name || 'No Project'}
           </div>
           <div className="flex items-center space-x-2 mt-1.5 text-[10px] text-slate-400">
             <span className="text-emerald-400 font-semibold">{renderedCount} rendered</span>

@@ -153,104 +153,38 @@ export interface WorkflowContextType {
   setSubtitlesState: React.Dispatch<React.SetStateAction<SubtitlesState>>;
 }
 
-const DEFAULT_CLIPS: ClipCandidate[] = [
-  {
-    id: 'Clip1_Discover_Calling',
-    start: 15.0,
-    end: 45.0,
-    score: 96,
-    title: 'Discover Your Divine Calling & Purpose',
-    hook: 'WHAT IS YOUR TRUE CALLING? 🎯',
-    reason: 'Instant rhetorical hook with strong emotional resonance.',
-    isRendered: true,
-    renderedPath: 'clips/Clip1_Discover_Calling.mp4',
-    customHeadline: 'DISCOVER YOUR TRUE PURPOSE',
-    subtitlePreset: 'tiktok_bold'
-  },
-  {
-    id: 'Clip2_Comparison_Trap',
-    start: 110.0,
-    end: 145.0,
-    score: 93,
-    title: "Stop Measuring Your Season by Someone Else's Harvest",
-    hook: 'STOP COMPARING YOUR SEASON! 🛑',
-    reason: 'High energetic vocal inflection and strong standalone quotable punchline.',
-    isRendered: true,
-    renderedPath: 'clips/Clip2_Comparison_Trap.mp4',
-    customHeadline: 'STOP COMPARING YOUR JOURNEY',
-    subtitlePreset: 'dynamic_pop'
-  },
-  {
-    id: 'Clip3_Power_Of_Habits',
-    start: 240.0,
-    end: 275.0,
-    score: 91,
-    title: 'Your Daily Habits Determine Your Future',
-    hook: 'HABITS BEAT TALENT EVERY TIME ⚡',
-    reason: 'Clear cadence climax and practical life lesson for viewers.',
-    isRendered: true,
-    renderedPath: 'clips/Clip3_Power_Of_Habits.mp4',
-    customHeadline: 'THE POWER OF DAILY HABITS',
-    subtitlePreset: 'tiktok_bold'
-  },
-  {
-    id: 'Clip4_Overcoming_Fear',
-    start: 435.0,
-    end: 480.0,
-    score: 88,
-    title: 'Overcoming The Hidden Trap of Fear',
-    hook: 'FEAR IS THE ENEMY OF YOUR CALLING 🔥',
-    reason: 'Compelling storytelling transition with direct audience call-to-action.',
-    isRendered: false,
-    customHeadline: 'OVERCOMING FEAR AND DELAY',
-    subtitlePreset: 'clean_white'
-  },
-  {
-    id: 'Clip5_Building_In_Silence',
-    start: 760.0,
-    end: 805.0,
-    score: 85,
-    title: 'Building in Silence Before the Breakthrough',
-    hook: 'BUILD IN SILENCE BEFORE THE BREAKTHROUGH 🚀',
-    reason: 'Motivational closing argument with rapid, punchy delivery.',
-    isRendered: false,
-    customHeadline: 'BUILD IN SILENCE FIRST',
-    subtitlePreset: 'tiktok_bold'
-  }
-];
-
-const SEED_PROJECT: Project = {
-  id: 'proj_pastor_david',
-  name: 'Pastor David Ogbueli — Discover Destiny & Calling',
-  description: 'Full Sunday sermon breaking down purpose, divine calling, and escaping the comparison trap.',
-  sourceVideo: 'downloads/pastor_david_destiny.mp4',
-  sourceUrl: 'https://www.youtube.com/watch?v=WG_SsnHVdDc',
-  sourceDuration: 3155,
-  createdAt: '2026-10-10T18:00:00.000Z',
-  updatedAt: '2026-10-12T16:00:00.000Z',
-  status: 'ready',
-  clips: DEFAULT_CLIPS,
+const EMPTY_PROJECT: Project = {
+  id: '',
+  name: '',
+  description: 'Custom video repurposing workspace',
+  sourceVideo: '',
+  sourceUrl: '',
+  sourceDuration: 0,
+  createdAt: new Date().toISOString(),
+  updatedAt: new Date().toISOString(),
+  status: 'draft',
+  clips: [],
   activeClipIndex: 0,
   ingestState: {
-    url: 'https://www.youtube.com/watch?v=WG_SsnHVdDc',
+    url: '',
     isDownloading: false,
-    downloadProgress: 100,
-    statusMessage: 'Source sermon loaded (52m 35s, 1080p).',
-    speedStr: '48.2 MB/s',
-    etaStr: '00:00',
+    downloadProgress: 0,
+    statusMessage: 'Ready for video input.',
+    speedStr: '',
+    etaStr: '',
     errorMessage: null
   },
   timelineState: {
-    inTime: 15.0,
-    outTime: 45.0,
-    activePlayhead: 15.0,
-    cadenceTrim: true,
+    inTime: 0,
+    outTime: 30,
+    activePlayhead: 0,
+    cadenceTrim: false,
     noiseThreshold: '-33dB',
     minSilence: 0.75,
-    vocalHighpass: true,
-    vocalDenoise: true,
+    vocalHighpass: false,
+    vocalDenoise: false,
     socialLoudness: true,
-    musicBed: true,
+    musicBed: false,
     musicVolume: 8
   },
   reframeState: {
@@ -263,21 +197,21 @@ const SEED_PROJECT: Project = {
     analysisProgress: 0,
     isRendering: false,
     renderProgress: 0,
-    renderPhase: 'completed',
-    renderedOutput: 'clips/Clip1_Discover_Calling.mp4',
+    renderPhase: 'idle',
+    renderedOutput: null,
     renderError: null
   },
   subtitlesState: {
-    headline: 'DISCOVER YOUR TRUE PURPOSE',
+    headline: '',
     stylePreset: 'tiktok_bold',
-    includeSocialPills: true,
-    includeOutro: true,
-    tiktokHandle: '@dominion_hub',
-    showTiktok: true,
-    youtubeHandle: '@TheDominionHub',
-    showYoutube: true,
-    instagramHandle: '@thedominionhub',
-    showInstagram: true
+    includeSocialPills: false,
+    includeOutro: false,
+    tiktokHandle: '',
+    showTiktok: false,
+    youtubeHandle: '',
+    showYoutube: false,
+    instagramHandle: '',
+    showInstagram: false
   }
 };
 
@@ -299,8 +233,8 @@ export const WorkflowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   });
 
   // Projects State
-  const [projects, setProjects] = useState<Project[]>([SEED_PROJECT]);
-  const [activeProjectId, setActiveProjectId] = useState<string>('proj_pastor_david');
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [activeProjectId, setActiveProjectId] = useState<string>('');
   const [showProjectModal, setShowProjectModal] = useState<boolean>(false);
   const [projectModalTab, setProjectModalTab] = useState<'list' | 'create'>('list');
   const [showSettingsModal, setShowSettingsModal] = useState<boolean>(false);
@@ -311,18 +245,16 @@ export const WorkflowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   // Active Project Data References
-  const [sourceVideo, setSourceVideoState] = useState<string>(() => {
-    return localStorage.getItem('hclipper_last_video') || SEED_PROJECT.sourceVideo;
-  });
-  const [clips, setClips] = useState<ClipCandidate[]>(SEED_PROJECT.clips);
-  const [activeClipIndex, setActiveClipIndex] = useState<number>(SEED_PROJECT.activeClipIndex);
-  const [ingestState, setIngestState] = useState<IngestState>(SEED_PROJECT.ingestState);
-  const [timelineState, setTimelineState] = useState<TimelineState>(SEED_PROJECT.timelineState);
-  const [reframeState, setReframeState] = useState<ReframeState>(SEED_PROJECT.reframeState);
-  const [subtitlesState, setSubtitlesState] = useState<SubtitlesState>(SEED_PROJECT.subtitlesState);
+  const [sourceVideo, setSourceVideoState] = useState<string>('');
+  const [clips, setClips] = useState<ClipCandidate[]>([]);
+  const [activeClipIndex, setActiveClipIndex] = useState<number>(0);
+  const [ingestState, setIngestState] = useState<IngestState>(EMPTY_PROJECT.ingestState);
+  const [timelineState, setTimelineState] = useState<TimelineState>(EMPTY_PROJECT.timelineState);
+  const [reframeState, setReframeState] = useState<ReframeState>(EMPTY_PROJECT.reframeState);
+  const [subtitlesState, setSubtitlesState] = useState<SubtitlesState>(EMPTY_PROJECT.subtitlesState);
 
   const activeProject = useMemo(() => {
-    return projects.find((p) => p.id === activeProjectId) || projects[0] || SEED_PROJECT;
+    return projects.find((p) => p.id === activeProjectId) || projects[0] || EMPTY_PROJECT;
   }, [projects, activeProjectId]);
 
   const addLog = (text: string, level: string = 'stdout') => {
@@ -345,13 +277,12 @@ export const WorkflowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setSourceVideoState(path);
     if (!path) return;
     const cleanTitle = newTitle || path.split(/[/\\]/).pop()?.replace(/\.[^.]+$/, '') || 'Media Project';
-    localStorage.setItem('hclipper_last_video', path);
     setProjects((prev) => {
       const updated = prev.map((p) => {
         if (p.id === activeProjectId) {
           return {
             ...p,
-            name: (p.id === 'proj_pastor_david' || p.name.startsWith('New Project')) && cleanTitle ? cleanTitle : p.name,
+            name: (!p.name || p.name.startsWith('New Project')) && cleanTitle ? cleanTitle : p.name,
             sourceVideo: path,
             sourceUrl: sourceUrl || p.sourceUrl,
             updatedAt: new Date().toISOString()
@@ -388,10 +319,9 @@ export const WorkflowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           applyProjectState(target);
           addLog(`Loaded ${loaded.length} project(s) from persistent storage. Active: "${target.name}"`, 'project');
         } else {
-          // Save seed project
-          if (window.hclipper?.saveProjects) {
-            window.hclipper.saveProjects([SEED_PROJECT]);
-          }
+          setProjects([]);
+          setActiveProjectId('');
+          applyProjectState(EMPTY_PROJECT);
         }
       }).catch(() => {});
     } else {
@@ -405,6 +335,10 @@ export const WorkflowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             const target = parsed.find((p: any) => p.id === savedActiveId) || parsed[0];
             setActiveProjectId(target.id);
             applyProjectState(target);
+          } else {
+            setProjects([]);
+            setActiveProjectId('');
+            applyProjectState(EMPTY_PROJECT);
           }
         } catch (e) {}
       }
@@ -427,13 +361,12 @@ export const WorkflowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   const applyProjectState = (proj: Project) => {
-    const videoToSet = proj.sourceVideo || localStorage.getItem('hclipper_last_video') || '';
+    const videoToSet = proj.sourceVideo || '';
     setSourceVideoState(videoToSet);
     setClips(proj.clips || []);
     setActiveClipIndex(proj.activeClipIndex || 0);
-    localStorage.setItem('hclipper_active_project_id', proj.id);
-    if (videoToSet) {
-      localStorage.setItem('hclipper_last_video', videoToSet);
+    if (proj.id) {
+      localStorage.setItem('hclipper_active_project_id', proj.id);
     }
     setIngestState(proj.ingestState || {
       url: proj.sourceUrl || '',
@@ -448,13 +381,13 @@ export const WorkflowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       inTime: 0,
       outTime: 30,
       activePlayhead: 0,
-      cadenceTrim: true,
+      cadenceTrim: false,
       noiseThreshold: '-33dB',
       minSilence: 0.75,
-      vocalHighpass: true,
-      vocalDenoise: true,
+      vocalHighpass: false,
+      vocalDenoise: false,
       socialLoudness: true,
-      musicBed: true,
+      musicBed: false,
       musicVolume: 8
     });
     setReframeState(proj.reframeState || {
@@ -474,14 +407,14 @@ export const WorkflowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setSubtitlesState(proj.subtitlesState || {
       headline: '',
       stylePreset: 'tiktok_bold',
-      includeSocialPills: true,
-      includeOutro: true,
-      tiktokHandle: '@dominion_hub',
-      showTiktok: true,
-      youtubeHandle: '@TheDominionHub',
-      showYoutube: true,
-      instagramHandle: '@thedominionhub',
-      showInstagram: true
+      includeSocialPills: false,
+      includeOutro: false,
+      tiktokHandle: '',
+      showTiktok: false,
+      youtubeHandle: '',
+      showYoutube: false,
+      instagramHandle: '',
+      showInstagram: false
     });
   };
 
@@ -490,21 +423,23 @@ export const WorkflowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if (!target) return;
 
     // Snapshot current project before switching
-    const currentProjectSnapshot: Project = {
-      ...activeProject,
-      sourceVideo,
-      clips,
-      activeClipIndex,
-      ingestState,
-      timelineState,
-      reframeState,
-      subtitlesState,
-      updatedAt: new Date().toISOString()
-    };
+    if (activeProject.id) {
+      const currentProjectSnapshot: Project = {
+        ...activeProject,
+        sourceVideo,
+        clips,
+        activeClipIndex,
+        ingestState,
+        timelineState,
+        reframeState,
+        subtitlesState,
+        updatedAt: new Date().toISOString()
+      };
 
-    const updated = projects.map((p) => (p.id === activeProject.id ? currentProjectSnapshot : p));
-    setProjects(updated);
-    saveProjectsToDisk(updated);
+      const updated = projects.map((p) => (p.id === activeProject.id ? currentProjectSnapshot : p));
+      setProjects(updated);
+      saveProjectsToDisk(updated);
+    }
 
     setActiveProjectId(targetId);
     applyProjectState(target);
@@ -513,17 +448,21 @@ export const WorkflowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const createProject = (name: string, newSourceVideo: string = '', newSourceUrl: string = ''): Project => {
     // 1. Snapshot current active project before switching
-    const currentProjectSnapshot: Project = {
-      ...activeProject,
-      sourceVideo,
-      clips,
-      activeClipIndex,
-      ingestState,
-      timelineState,
-      reframeState,
-      subtitlesState,
-      updatedAt: new Date().toISOString()
-    };
+    let updatedProjects = [...projects];
+    if (activeProjectId && activeProject.id) {
+      const currentProjectSnapshot: Project = {
+        ...activeProject,
+        sourceVideo,
+        clips,
+        activeClipIndex,
+        ingestState,
+        timelineState,
+        reframeState,
+        subtitlesState,
+        updatedAt: new Date().toISOString()
+      };
+      updatedProjects = projects.map((p) => (p.id === activeProject.id ? currentProjectSnapshot : p));
+    }
 
     // 2. Create clean new project
     const newProj: Project = {
@@ -550,13 +489,13 @@ export const WorkflowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         inTime: 0,
         outTime: 30,
         activePlayhead: 0,
-        cadenceTrim: true,
+        cadenceTrim: false,
         noiseThreshold: '-33dB',
         minSilence: 0.75,
-        vocalHighpass: true,
-        vocalDenoise: true,
+        vocalHighpass: false,
+        vocalDenoise: false,
         socialLoudness: true,
-        musicBed: true,
+        musicBed: false,
         musicVolume: 8
       },
       reframeState: {
@@ -576,22 +515,19 @@ export const WorkflowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       subtitlesState: {
         headline: '',
         stylePreset: 'tiktok_bold',
-        includeSocialPills: true,
-        includeOutro: true,
-        tiktokHandle: '@dominion_hub',
-        showTiktok: true,
-        youtubeHandle: '@TheDominionHub',
-        showYoutube: true,
-        instagramHandle: '@thedominionhub',
-        showInstagram: true
+        includeSocialPills: false,
+        includeOutro: false,
+        tiktokHandle: '',
+        showTiktok: false,
+        youtubeHandle: '',
+        showYoutube: false,
+        instagramHandle: '',
+        showInstagram: false
       }
     };
 
     // 3. Atomically update project list
-    const updated = [
-      ...projects.map((p) => (p.id === activeProject.id ? currentProjectSnapshot : p)),
-      newProj
-    ];
+    const updated = [...updatedProjects, newProj];
     setProjects(updated);
     saveProjectsToDisk(updated);
 
