@@ -132,87 +132,104 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({ isOpen, initialTab =
 
         {/* Modal Body */}
         {activeTab === 'list' ? (
-          <div className="flex-1 overflow-y-auto space-y-3 pr-1 py-1">
-            {projects.map((proj) => {
-              const isActive = proj.id === activeProjectId;
-              const renderedCount = proj.clips?.filter((c) => c.isRendered).length || 0;
-              const totalCount = proj.clips?.length || 0;
+          projects.length === 0 ? (
+            <div className="flex-1 flex flex-col items-center justify-center p-8 text-center space-y-3">
+              <div className="w-12 h-12 rounded-xl bg-amber-400/10 border border-amber-400/20 flex items-center justify-center text-amber-400 shadow-md">
+                <Folder className="w-6 h-6" />
+              </div>
+              <div>
+                <h4 className="text-sm font-bold text-white">No Workspaces Found</h4>
+                <p className="text-xs text-slate-400 mt-0.5">Create a new workspace to organize your videos and clips.</p>
+              </div>
+              <button
+                onClick={() => setModalTab('create')}
+                className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 font-bold text-xs flex items-center space-x-1.5 shadow-md shadow-amber-500/20"
+              >
+                <Plus className="w-4 h-4" />
+                <span>+ Create New Project</span>
+              </button>
+            </div>
+          ) : (
+            <div className="flex-1 overflow-y-auto space-y-3 pr-1 py-1">
+              {projects.map((proj) => {
+                const isActive = proj.id === activeProjectId;
+                const renderedCount = proj.clips?.filter((c) => c.isRendered).length || 0;
+                const totalCount = proj.clips?.length || 0;
 
-              return (
-                <div
-                  key={proj.id}
-                  className={`p-4 rounded-xl border transition-all ${
-                    isActive 
-                      ? 'bg-amber-500/10 border-amber-500/40 shadow-lg shadow-amber-500/5' 
-                      : 'bg-white/[0.02] hover:bg-white/[0.04] border-white/10 hover:border-white/20'
-                  }`}
-                >
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center space-x-2.5">
-                        <Folder className={`w-4 h-4 shrink-0 ${isActive ? 'text-amber-400' : 'text-slate-400'}`} />
-                        <h3 className="text-sm font-bold text-white truncate">{proj.name}</h3>
-                        {isActive && (
-                          <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-amber-400/20 text-amber-300 border border-amber-400/30">
-                            Active Project
-                          </span>
+                return (
+                  <div
+                    key={proj.id}
+                    className={`p-4 rounded-xl border transition-all ${
+                      isActive 
+                        ? 'bg-amber-500/10 border-amber-500/40 shadow-lg shadow-amber-500/5' 
+                        : 'bg-white/[0.02] hover:bg-white/[0.04] border-white/10 hover:border-white/20'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center space-x-2.5">
+                          <Folder className={`w-4 h-4 shrink-0 ${isActive ? 'text-amber-400' : 'text-slate-400'}`} />
+                          <h3 className="text-sm font-bold text-white truncate">{proj.name}</h3>
+                          {isActive && (
+                            <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-amber-400/20 text-amber-300 border border-amber-400/30">
+                              Active Project
+                            </span>
+                          )}
+                        </div>
+
+                        {proj.description && (
+                          <p className="text-xs text-slate-400 mt-1 line-clamp-1">{proj.description}</p>
                         )}
-                      </div>
 
-                      {proj.description && (
-                        <p className="text-xs text-slate-400 mt-1 line-clamp-1">{proj.description}</p>
-                      )}
-
-                      <div className="flex flex-wrap items-center gap-3 mt-2.5 text-[11px] text-slate-400">
-                        <span className="flex items-center space-x-1 font-mono text-slate-300">
-                          <Film className="w-3.5 h-3.5 text-amber-400" />
-                          <span className="truncate max-w-[220px]">
-                            {proj.sourceVideo ? proj.sourceVideo.split(/\\|\//).pop() : 'No source video yet'}
+                        <div className="flex flex-wrap items-center gap-3 mt-2.5 text-[11px] text-slate-400">
+                          <span className="flex items-center space-x-1 font-mono text-slate-300">
+                            <Film className="w-3.5 h-3.5 text-amber-400" />
+                            <span className="truncate max-w-[220px]">
+                              {proj.sourceVideo ? proj.sourceVideo.split(/\\|\//).pop() : 'No source video yet'}
+                            </span>
                           </span>
-                        </span>
 
-                        <span className="flex items-center space-x-1">
-                          <Layers className="w-3.5 h-3.5 text-sky-400" />
-                          <span>{totalCount} clips scouted ({renderedCount} rendered)</span>
-                        </span>
+                          <span className="flex items-center space-x-1">
+                            <Layers className="w-3.5 h-3.5 text-sky-400" />
+                            <span>{totalCount} clips scouted ({renderedCount} rendered)</span>
+                          </span>
 
-                        <span className="flex items-center space-x-1 text-slate-500">
-                          <Calendar className="w-3 h-3" />
-                          <span>{new Date(proj.updatedAt || proj.createdAt).toLocaleDateString()}</span>
-                        </span>
+                          <span className="flex items-center space-x-1 text-slate-500">
+                            <Calendar className="w-3 h-3" />
+                            <span>{new Date(proj.updatedAt || proj.createdAt).toLocaleDateString()}</span>
+                          </span>
+                        </div>
                       </div>
-                    </div>
 
-                    {/* Actions */}
-                    <div className="flex items-center space-x-1.5 shrink-0">
-                      {!isActive ? (
+                      {/* Actions */}
+                      <div className="flex items-center space-x-1.5 shrink-0">
+                        {!isActive ? (
+                          <button
+                            onClick={() => handleSelectAndClose(proj.id)}
+                            className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs flex items-center space-x-1 shadow-md shadow-amber-500/20 transition-transform active:scale-95"
+                          >
+                            <span>Switch to Project</span>
+                            <ArrowRight className="w-3.5 h-3.5" />
+                          </button>
+                        ) : (
+                          <button
+                            onClick={onClose}
+                            className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/15 text-white font-semibold text-xs flex items-center space-x-1"
+                          >
+                            <Check className="w-3.5 h-3.5 text-emerald-400" />
+                            <span>Working Now</span>
+                          </button>
+                        )}
+
                         <button
-                          onClick={() => handleSelectAndClose(proj.id)}
-                          className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs flex items-center space-x-1 shadow-md shadow-amber-500/20 transition-transform active:scale-95"
+                          onClick={() => duplicateProject(proj.id)}
+                          className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white"
+                          title="Duplicate Project"
                         >
-                          <span>Switch to Project</span>
-                          <ArrowRight className="w-3.5 h-3.5" />
+                          <Copy className="w-3.5 h-3.5" />
                         </button>
-                      ) : (
-                        <button
-                          onClick={onClose}
-                          className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/15 text-white font-semibold text-xs flex items-center space-x-1"
-                        >
-                          <Check className="w-3.5 h-3.5 text-emerald-400" />
-                          <span>Working Now</span>
-                        </button>
-                      )}
 
-                      <button
-                        onClick={() => duplicateProject(proj.id)}
-                        className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white"
-                        title="Duplicate Project"
-                      >
-                        <Copy className="w-3.5 h-3.5" />
-                      </button>
-
-                      {projects.length > 1 && (
-                        confirmDeleteId === proj.id ? (
+                        {confirmDeleteId === proj.id ? (
                           <div className="flex items-center space-x-1 bg-red-950/60 p-1 rounded-lg border border-red-500/40">
                             <span className="text-[10px] text-red-300 font-bold px-1">Delete?</span>
                             <button
@@ -234,19 +251,19 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({ isOpen, initialTab =
                         ) : (
                           <button
                             onClick={() => setConfirmDeleteId(proj.id)}
-                            className="p-1.5 rounded-lg bg-white/5 hover:bg-red-500/20 text-slate-400 hover:text-red-400"
+                            className="p-1.5 rounded-lg bg-white/5 hover:bg-red-500/20 text-slate-400 hover:text-red-400 transition-colors"
                             title="Delete Project"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
-                        )
-                      )}
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          )
         ) : (
           /* Create New Project Form */
           <form onSubmit={handleCreateNew} className="space-y-4 py-2">

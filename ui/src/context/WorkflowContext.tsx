@@ -653,18 +653,27 @@ export const WorkflowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   const deleteProject = (projectId: string) => {
-    if (projects.length <= 1) {
-      addLog('Cannot delete the last remaining project.', 'warn');
-      return;
-    }
-    const remaining = projects.filter((p) => p.id !== projectId);
-    setProjects(remaining);
-    saveProjectsToDisk(remaining);
-    if (activeProjectId === projectId) {
-      setActiveProjectId(remaining[0].id);
-      applyProjectState(remaining[0]);
-    }
-    addLog('Project deleted successfully.', 'info');
+    setProjects((prev) => {
+      const remaining = prev.filter((p) => p.id !== projectId);
+      saveProjectsToDisk(remaining);
+
+      if (remaining.length > 0) {
+        if (activeProjectId === projectId) {
+          const nextActive = remaining[0];
+          setActiveProjectId(nextActive.id);
+          applyProjectState(nextActive);
+          addLog(`Switched to active workspace "${nextActive.name}" after deletion.`, 'project');
+        }
+      } else {
+        // All workspaces deleted: reset active project state
+        setActiveProjectId('');
+        localStorage.removeItem('hclipper_active_project_id');
+        applyProjectState(EMPTY_PROJECT);
+        addLog('All workspaces deleted. Studio reset to clean state.', 'project');
+      }
+      return remaining;
+    });
+    addLog(`✓ Workspace deleted successfully.`, 'info');
   };
 
   const duplicateProject = (projectId: string) => {

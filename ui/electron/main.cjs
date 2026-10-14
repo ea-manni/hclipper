@@ -465,12 +465,12 @@ ipcMain.handle('hclipper:save-queue', async (event, items) => {
 // IPC Handler: Read Projects from projects.json
 ipcMain.handle('hclipper:read-projects', async () => {
   const { rootProjects, userProjects } = getPersistentProjectsPaths();
-  // 1. Try reading rootProjects first if non-empty
+  // 1. Try reading rootProjects first
   if (fs.existsSync(rootProjects)) {
     try {
       const data = fs.readFileSync(rootProjects, 'utf8');
       const parsed = JSON.parse(data);
-      if (Array.isArray(parsed) && parsed.length > 0) {
+      if (Array.isArray(parsed)) {
         try {
           fs.mkdirSync(path.dirname(userProjects), { recursive: true });
           fs.writeFileSync(userProjects, data, 'utf8');
@@ -485,7 +485,7 @@ ipcMain.handle('hclipper:read-projects', async () => {
     try {
       const data = fs.readFileSync(userProjects, 'utf8');
       const parsed = JSON.parse(data);
-      if (Array.isArray(parsed) && parsed.length > 0) {
+      if (Array.isArray(parsed)) {
         try {
           fs.writeFileSync(rootProjects, data, 'utf8');
         } catch (e) {}

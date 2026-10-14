@@ -10,9 +10,10 @@ import {
   ArrowRight, 
   Upload, 
   CheckCircle2,
-  Sparkles
+  Sparkles,
+  AlertTriangle
 } from 'lucide-react';
-import { useWorkflow } from '../context/WorkflowContext';
+import { type Project, useWorkflow } from '../context/WorkflowContext';
 
 export const ProjectsView: React.FC = () => {
   const { 
@@ -28,7 +29,7 @@ export const ProjectsView: React.FC = () => {
   const [newProjectName, setNewProjectName] = useState('');
   const [newSourceUrl, setNewSourceUrl] = useState('');
   const [newSourceVideo, setNewSourceVideo] = useState('');
-  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [projectToDelete, setProjectToDelete] = useState<Project | null>(null);
   const [showCreateCard, setShowCreateCard] = useState<boolean>(false);
 
   const handlePickLocalFile = async () => {
@@ -183,138 +184,206 @@ export const ProjectsView: React.FC = () => {
         </form>
       )}
 
-      {/* Projects Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {projects.map((proj) => {
-          const isActive = proj.id === activeProjectId;
-          const renderedCount = proj.clips?.filter((c) => c.isRendered).length || 0;
-          const totalClips = proj.clips?.length || 0;
-
-          return (
-            <div
-              key={proj.id}
-              className={`p-5 rounded-2xl border transition-all flex flex-col justify-between space-y-4 ${
-                isActive
-                  ? 'bg-amber-500/[0.08] border-amber-500/40 shadow-xl shadow-amber-500/5 ring-1 ring-amber-400/20'
-                  : 'bg-white/[0.02] hover:bg-white/[0.04] border-white/10 hover:border-white/20'
-              }`}
+      {/* Projects Grid or Empty State */}
+      {projects.length === 0 ? (
+        <div className="glass-card rounded-2xl p-12 text-center border-dashed border-white/10 space-y-5 max-w-lg mx-auto bg-[#0e121c]/80 my-8">
+          <div className="w-16 h-16 rounded-2xl bg-amber-400/10 border border-amber-400/20 flex items-center justify-center mx-auto text-amber-400 shadow-xl shadow-amber-500/10">
+            <Folder className="w-8 h-8" />
+          </div>
+          <div className="space-y-1.5">
+            <h3 className="text-lg font-bold text-white">No Workspaces Found</h3>
+            <p className="text-xs text-slate-400 max-w-sm mx-auto leading-relaxed">
+              All workspaces have been deleted. Create a fresh project or launch a quick blank workspace to begin repurposing videos.
+            </p>
+          </div>
+          <div className="flex items-center justify-center space-x-3 pt-2">
+            <button
+              onClick={() => handleCreateAndOpen()}
+              className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-slate-200 border border-white/10 text-xs font-semibold flex items-center space-x-1.5 transition-colors"
             >
-              <div className="space-y-3">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex items-center space-x-2.5 min-w-0">
-                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
-                      isActive ? 'bg-amber-400/20 text-amber-300 border border-amber-400/30' : 'bg-white/5 text-slate-400'
-                    }`}>
-                      <Folder className="w-4 h-4" />
-                    </div>
-                    <div className="min-w-0">
-                      <h3 className="text-sm font-bold text-white truncate">{proj.name}</h3>
-                      <div className="flex items-center space-x-2 mt-0.5">
-                        {isActive && (
-                          <span className="text-[9px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-amber-400/20 text-amber-300 border border-amber-400/30">
-                            Active Workspace
+              <Plus className="w-3.5 h-3.5 text-amber-400" />
+              <span>+ Quick Blank Project</span>
+            </button>
+            <button
+              onClick={() => setShowCreateCard(true)}
+              className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 font-bold text-xs flex items-center space-x-1.5 shadow-lg shadow-amber-500/20"
+            >
+              <Plus className="w-4 h-4" />
+              <span>New Custom Project</span>
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {projects.map((proj) => {
+            const isActive = proj.id === activeProjectId;
+            const renderedCount = proj.clips?.filter((c) => c.isRendered).length || 0;
+            const totalClips = proj.clips?.length || 0;
+
+            return (
+              <div
+                key={proj.id}
+                className={`p-5 rounded-2xl border transition-all flex flex-col justify-between space-y-4 ${
+                  isActive
+                    ? 'bg-amber-500/[0.08] border-amber-500/40 shadow-xl shadow-amber-500/5 ring-1 ring-amber-400/20'
+                    : 'bg-white/[0.02] hover:bg-white/[0.04] border-white/10 hover:border-white/20'
+                }`}
+              >
+                <div className="space-y-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center space-x-2.5 min-w-0">
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
+                        isActive ? 'bg-amber-400/20 text-amber-300 border border-amber-400/30' : 'bg-white/5 text-slate-400'
+                      }`}>
+                        <Folder className="w-4 h-4" />
+                      </div>
+                      <div className="min-w-0">
+                        <h3 className="text-sm font-bold text-white truncate">{proj.name}</h3>
+                        <div className="flex items-center space-x-2 mt-0.5">
+                          {isActive && (
+                            <span className="text-[9px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-amber-400/20 text-amber-300 border border-amber-400/30">
+                              Active Workspace
+                            </span>
+                          )}
+                          <span className="text-[10px] text-slate-500 flex items-center space-x-1">
+                            <Calendar className="w-2.5 h-2.5" />
+                            <span>{new Date(proj.updatedAt || proj.createdAt).toLocaleDateString()}</span>
                           </span>
-                        )}
-                        <span className="text-[10px] text-slate-500 flex items-center space-x-1">
-                          <Calendar className="w-2.5 h-2.5" />
-                          <span>{new Date(proj.updatedAt || proj.createdAt).toLocaleDateString()}</span>
-                        </span>
+                        </div>
                       </div>
                     </div>
+
+                    <div className="flex items-center space-x-1 shrink-0">
+                      <button
+                        onClick={() => duplicateProject(proj.id)}
+                        className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white transition-colors"
+                        title="Duplicate Workspace"
+                      >
+                        <Copy className="w-3.5 h-3.5" />
+                      </button>
+
+                      <button
+                        onClick={() => setProjectToDelete(proj)}
+                        className="p-1.5 rounded-lg bg-white/5 hover:bg-red-500/20 text-slate-400 hover:text-red-400 transition-colors"
+                        title="Delete Workspace"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
 
-                  <div className="flex items-center space-x-1 shrink-0">
-                    <button
-                      onClick={() => duplicateProject(proj.id)}
-                      className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white transition-colors"
-                      title="Duplicate Workspace"
-                    >
-                      <Copy className="w-3.5 h-3.5" />
-                    </button>
+                  {proj.description && (
+                    <p className="text-xs text-slate-400 line-clamp-2 leading-relaxed">
+                      {proj.description}
+                    </p>
+                  )}
 
-                    {projects.length > 1 && (
-                      confirmDeleteId === proj.id ? (
-                        <div className="flex items-center space-x-1 bg-red-950/60 p-1 rounded-lg border border-red-500/40">
-                          <span className="text-[9px] text-red-300 font-bold px-1">Delete?</span>
-                          <button
-                            onClick={() => {
-                              deleteProject(proj.id);
-                              setConfirmDeleteId(null);
-                            }}
-                            className="px-1.5 py-0.5 bg-red-600 hover:bg-red-500 text-white rounded text-[9px] font-bold"
-                          >
-                            Yes
-                          </button>
-                          <button
-                            onClick={() => setConfirmDeleteId(null)}
-                            className="px-1.5 py-0.5 bg-slate-800 text-slate-300 rounded text-[9px]"
-                          >
-                            No
-                          </button>
-                        </div>
-                      ) : (
-                        <button
-                          onClick={() => setConfirmDeleteId(proj.id)}
-                          className="p-1.5 rounded-lg bg-white/5 hover:bg-red-500/20 text-slate-400 hover:text-red-400 transition-colors"
-                          title="Delete Workspace"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      )
-                    )}
+                  <div className="bg-black/30 rounded-xl p-2.5 border border-white/5 space-y-1.5 text-[11px] text-slate-300">
+                    <div className="flex items-center space-x-2 truncate">
+                      <Film className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                      <span className="text-slate-400">Media:</span>
+                      <span className="font-mono text-white truncate">
+                        {proj.sourceVideo ? proj.sourceVideo.split(/\\|\//).pop() : 'No source video attached yet'}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between text-[11px] pt-1 border-t border-white/5">
+                      <span className="flex items-center space-x-1 text-sky-400">
+                        <Layers className="w-3 h-3" />
+                        <span>{totalClips} Clips Scouted</span>
+                      </span>
+                      <span className="flex items-center space-x-1 text-emerald-400">
+                        <CheckCircle2 className="w-3 h-3" />
+                        <span>{renderedCount} Rendered Master Shorts</span>
+                      </span>
+                    </div>
                   </div>
                 </div>
 
-                {proj.description && (
-                  <p className="text-xs text-slate-400 line-clamp-2 leading-relaxed">
-                    {proj.description}
-                  </p>
-                )}
+                {/* Card Footer Actions */}
+                <div className="pt-2 border-t border-white/5 flex items-center justify-between">
+                  <span className="text-[10px] text-slate-500 font-mono">
+                    ID: {proj.id.slice(0, 14)}
+                  </span>
 
-                <div className="bg-black/30 rounded-xl p-2.5 border border-white/5 space-y-1.5 text-[11px] text-slate-300">
-                  <div className="flex items-center space-x-2 truncate">
-                    <Film className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                    <span className="text-slate-400">Media:</span>
-                    <span className="font-mono text-white truncate">
-                      {proj.sourceVideo ? proj.sourceVideo.split(/\\|\//).pop() : 'No source video attached yet'}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center justify-between text-[11px] pt-1 border-t border-white/5">
-                    <span className="flex items-center space-x-1 text-sky-400">
-                      <Layers className="w-3 h-3" />
-                      <span>{totalClips} Clips Scouted</span>
-                    </span>
-                    <span className="flex items-center space-x-1 text-emerald-400">
-                      <CheckCircle2 className="w-3 h-3" />
-                      <span>{renderedCount} Rendered Master Shorts</span>
-                    </span>
-                  </div>
+                  <button
+                    onClick={() => handleOpenWorkspace(proj.id)}
+                    className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center space-x-1.5 shadow-md transition-all active:scale-95 ${
+                      isActive
+                        ? 'bg-amber-400 hover:bg-amber-300 text-slate-950 shadow-amber-500/20'
+                        : 'bg-white/10 hover:bg-white/15 text-white'
+                    }`}
+                  >
+                    <span>{isActive ? 'Continue in Workspace' : 'Switch & Open'}</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </button>
                 </div>
               </div>
+            );
+          })}
+        </div>
+      )}
 
-              {/* Card Footer Actions */}
-              <div className="pt-2 border-t border-white/5 flex items-center justify-between">
-                <span className="text-[10px] text-slate-500 font-mono">
-                  ID: {proj.id.slice(0, 14)}
+      {/* Delete Workspace Confirmation Modal */}
+      {projectToDelete && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="glass-card max-w-md w-full p-6 rounded-2xl border-red-500/30 space-y-4 shadow-2xl animate-in zoom-in-95 bg-slate-900/95 overflow-hidden">
+            <div className="flex items-center space-x-3 text-red-400">
+              <div className="p-2.5 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-white">Delete Workspace?</h3>
+                <span className="text-[11px] text-red-400 font-semibold font-mono">
+                  ID: {projectToDelete.id}
                 </span>
-
-                <button
-                  onClick={() => handleOpenWorkspace(proj.id)}
-                  className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center space-x-1.5 shadow-md transition-all active:scale-95 ${
-                    isActive
-                      ? 'bg-amber-400 hover:bg-amber-300 text-slate-950 shadow-amber-500/20'
-                      : 'bg-white/10 hover:bg-white/15 text-white'
-                  }`}
-                >
-                  <span>{isActive ? 'Continue in Workspace' : 'Switch & Open'}</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </button>
               </div>
             </div>
-          );
-        })}
-      </div>
+
+            <div className="p-3.5 rounded-xl bg-slate-950/60 border border-white/5 space-y-2">
+              <div className="text-sm font-bold text-white line-clamp-2">
+                {projectToDelete.name}
+              </div>
+              <div className="text-[11px] text-slate-400 font-mono space-y-0.5">
+                <span className="text-slate-500 block text-[10px] uppercase font-bold">Source Media:</span>
+                <span className="truncate block text-slate-300">
+                  {projectToDelete.sourceVideo ? projectToDelete.sourceVideo.split(/\\|\//).pop() : 'None'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-[11px] text-slate-400 pt-1 border-t border-white/5">
+                <span>{projectToDelete.clips?.length || 0} scouted clip(s)</span>
+                <span>{projectToDelete.clips?.filter(c => c.isRendered).length || 0} rendered short(s)</span>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-300 leading-relaxed">
+              Are you sure you want to delete this workspace? This will remove all scouted clips, transcript cues, auto-reframe markers, and project settings from Studio.
+            </p>
+
+            <div className="flex items-center justify-end space-x-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setProjectToDelete(null)}
+                className="px-4 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-slate-300 text-xs font-semibold border border-white/10 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  deleteProject(projectToDelete.id);
+                  setProjectToDelete(null);
+                }}
+                className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-500 text-white text-xs font-bold shadow-lg shadow-red-500/20 transition-all flex items-center space-x-1.5 active:scale-95"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Yes, Delete Workspace</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
+
