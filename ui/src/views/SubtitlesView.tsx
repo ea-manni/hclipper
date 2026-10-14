@@ -1109,15 +1109,25 @@ export const SubtitlesView: React.FC<SubtitlesViewProps> = ({
                   const cleanHeadline = cleanSermonHeadline(activeClip.customHeadline || activeClip.hook || activeClip.title);
                   const targetOut = `clips/${activeClip.id || 'Clip'}_Dynamic_Motion.mp4`;
 
+                  const motionArgs = [
+                    inputVid,
+                    targetOut,
+                    '--headline', cleanHeadline,
+                    '--speaker', speakerName,
+                    '--topic', speakerOrg || cleanHeadline,
+                    '--template', 'kinetic_hook.html',
+                    '--preset', subtitlesState.stylePreset || activeClip.subtitlePreset || 'tiktok_bold'
+                  ];
+
+                  if (activeClip.transcriptCues && activeClip.transcriptCues.length > 0) {
+                    motionArgs.push('--text-cues', JSON.stringify(activeClip.transcriptCues));
+                  }
+                  if (subtitlesState.includeSubtitles === false) {
+                    motionArgs.push('--no-subs');
+                  }
+
                   try {
-                    const res = await window.hclipper.runEngine('motion', [
-                      inputVid,
-                      targetOut,
-                      '--headline', cleanHeadline,
-                      '--speaker', speakerName,
-                      '--topic', speakerOrg || cleanHeadline,
-                      '--template', 'kinetic_hook.html'
-                    ]);
+                    const res = await window.hclipper.runEngine('motion', motionArgs);
 
                     const resultEvt = res?.events?.find((e: any) => e.event === 'motion_result');
                     const isSuccess = Boolean(res?.success && (resultEvt ? resultEvt.success : true));
@@ -1131,6 +1141,27 @@ export const SubtitlesView: React.FC<SubtitlesViewProps> = ({
                       });
                       setPreviewMode('rendered');
                       setRenderMotionStatus(`✓ Motion design short rendered successfully -> ${targetOut}`);
+
+                      if (window.hclipper?.readQueue && window.hclipper?.saveQueue) {
+                        try {
+                          const curQueue = (await window.hclipper.readQueue()) || [];
+                          const itemIdx = curQueue.findIndex((q: any) => q.filename === `${activeClip.id || 'Clip'}_Dynamic_Motion.mp4`);
+                          const motionItem = {
+                            id: `${activeClip.id || 'Clip'}_dynamic`,
+                            projectId: activeProject.id,
+                            projectName: activeProject.name,
+                            title: `${activeClip.title || 'Clip'} (Dynamic Motion)`,
+                            filename: `${activeClip.id || 'Clip'}_Dynamic_Motion.mp4`,
+                            file_path: targetOut,
+                            duration: `${Math.round(activeClip.end - activeClip.start)}s`,
+                            caption: cleanHeadline,
+                            status: { youtube: 'pending', tiktok_ng: 'pending', tiktok_us: 'pending', instagram: 'pending' }
+                          };
+                          if (itemIdx >= 0) curQueue[itemIdx] = motionItem;
+                          else curQueue.push(motionItem);
+                          await window.hclipper.saveQueue(curQueue);
+                        } catch (e) {}
+                      }
                     } else {
                       const errMsg = resultEvt?.error || 'Motion render process returned an error.';
                       setMotionPhase('error');

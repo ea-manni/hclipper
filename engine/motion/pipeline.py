@@ -87,14 +87,15 @@ class DynamicMotionPipeline:
         speaker: str = "",
         topic: str = "",
         custom_cues: Optional[List[Dict[str, Any]]] = None,
-        template_name: str = "human_motion.html"
+        template_name: str = "human_motion.html",
+        subtitle_ass_path: Optional[str] = None
     ) -> str:
         """
         Executes full multi-cue dynamic motion synthesis:
         1. Analyzes transcript cues to dispatch bespoke assets.
         2. Renders deterministic transparent motion overlay via headless Chromium.
         3. Generates synchronized SFX track.
-        4. Blends video + overlay + dialogue + SFX into final output.
+        4. Blends video + overlay + dialogue + SFX + optional subtitles into final output.
         """
         if not os.path.exists(video_path):
             raise FileNotFoundError(f"Source video not found: {video_path}")
@@ -186,30 +187,58 @@ class DynamicMotionPipeline:
         if ret != 0 or not overlay_mov.exists():
             raise RuntimeError(f"Motion canvas render failed with exit code {ret}")
 
-        # 3. Composite Final Video with Overlay and SFX Audio
+        # 3. Composite Final Video with Overlay, Subtitles, and SFX Audio
         print(f"[DynamicMotionPipeline] Compositing master video with transparent overlay and SFX...", flush=True)
         print(f"__HCLIPPER_JSON__{json.dumps({'event': 'motion_progress', 'phase': 'compositing', 'percent': 88, 'detail': 'Compositing master video with transparent overlay and SFX...'})}", flush=True)
-        composite_cmd = [
-            str(self.ffmpeg_bin),
-            "-y",
-            "-i", video_path,
-            "-i", str(overlay_mov),
-            "-i", str(sfx_wav),
-            "-filter_complex",
-            "[0:v][1:v]overlay=0:0:eof_action=pass[outv];"
-            "[0:a][2:a]amix=inputs=2:duration=first:dropout_transition=2[outa]",
-            "-map", "[outv]",
-            "-map", "[outa]",
-            "-c:v", "libx264",
-            "-crf", "18",
-            "-preset", "fast",
-            "-c:a", "aac",
-            "-b:a", "192k",
-            output_path
+        
+        filter_parts = [
+            "[0:v][1:v]overlay=0:0:eof_action=pass[v_motion]"
         ]
+        next_v = "[v_motion]"
 
-        comp_res = subprocess.run(composite_cmd, capture_output=True, text=True)
-        if comp_res.returncode != 0:
+        if subtitle_ass_path and os.path.exists(subtitle_ass_path):
+            from engine import PROJECT_ROOT
+            fonts_dir = PROJECT_ROOT / "assets" / "fonts"
+            norm_ass = str(Path(subtitle_ass_path).resolve()).replace("\\", "/").replace(":", "\\:")
+            norm_fonts = str(fonts_dir.resolve()).replace("\\", "/").replace(":", "\\:")
+            filter_parts.append(f"{next_v}ass='{norm_ass}':fontsdir='{norm_fonts}'[v_subs]")
+            next_v = "[v_subs]"
+
+        filter_parts.append("[0:a][2:a]amix=inputs=2:duration=first:dropout_transition=2[outa]")
+        full_filter = ";".join(filter_parts)
+
+        # Hardware acceleration check (Intel QSV -> libx264)
+        encoders = ["h264_qsv", "libx264"]
+        success = False
+
+        for enc in encoders:
+            v_args = ["-c:v", enc]
+            if enc == "h264_qsv":
+                v_args.extend(["-global_quality", "22"])
+            else:
+                v_args.extend(["-crf", "18", "-preset", "fast"])
+
+            composite_cmd = [
+                str(self.ffmpeg_bin),
+                "-y",
+                "-i", video_path,
+                "-i", str(overlay_mov),
+                "-i", str(sfx_wav),
+                "-filter_complex", full_filter,
+                "-map", next_v,
+                "-map", "[outa]",
+                *v_args,
+                "-c:a", "aac",
+                "-b:a", "192k",
+                output_path
+            ]
+
+            comp_res = subprocess.run(composite_cmd, capture_output=True, text=True)
+            if comp_res.returncode == 0 and os.path.exists(output_path) and os.path.getsize(output_path) > 5000:
+                success = True
+                break
+
+        if not success:
             raise RuntimeError(f"FFmpeg composite failed: {comp_res.stderr}")
 
         print(f"__HCLIPPER_JSON__{json.dumps({'event': 'motion_progress', 'phase': 'completed', 'percent': 100, 'output': output_path, 'detail': 'Master dynamic motion clip rendered successfully!'})}", flush=True)

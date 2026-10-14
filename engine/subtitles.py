@@ -182,9 +182,18 @@ class SubtitleEngine:
 
         dialogues = []
 
+        # Check whether cues are relative to clip (start near 0) or absolute to source video
+        is_already_relative = False
+        if cues and clip_start_offset > 0.5:
+            first_cue_start = cues[0].get("start", 0.0)
+            if first_cue_start < clip_start_offset:
+                is_already_relative = True
+
+        effective_offset = 0.0 if is_already_relative else clip_start_offset
+
         for cue in cues:
-            start = cue.get("start", 0.0) - clip_start_offset
-            end = cue.get("end", 0.0) - clip_start_offset
+            start = cue.get("start", 0.0) - effective_offset
+            end = cue.get("end", 0.0) - effective_offset
 
             if start < 0.0 and end < 0.2:
                 continue
@@ -219,8 +228,8 @@ class SubtitleEngine:
                 for i in range(chunk_len):
                     if has_word_ts:
                         w_obj = cue_words[word_idx]
-                        w_start = max(rel_s, w_obj.get("start", rel_s + word_idx * time_per_word) - clip_start_offset)
-                        w_end = min(rel_e, w_obj.get("end", w_start + time_per_word) - clip_start_offset)
+                        w_start = max(rel_s, w_obj.get("start", rel_s + word_idx * time_per_word) - effective_offset)
+                        w_end = min(rel_e, w_obj.get("end", w_start + time_per_word) - effective_offset)
                     else:
                         w_start = rel_s + word_idx * time_per_word
                         w_end = rel_s + (word_idx + 1) * time_per_word
@@ -275,11 +284,12 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         height: int = 1920,
         banner_top: int = 160,
         banner_height: int = 210,
-        bg_opacity: int = 190
+        bg_opacity: int = 190,
+        social_pill_text: Optional[str] = None
     ) -> str:
         """
         Draws a modern frosted glass header banner with high-contrast
-        bold typography and user-selected visual theme.
+        bold typography, user-selected visual theme, and optional social handle badge.
         """
         img = Image.new("RGBA", (width, height), (0, 0, 0, 0))
 
@@ -355,6 +365,27 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             # Primary headline text
             draw.text((x, y), line, font=font, fill=text_fill)
 
+        # Bottom Social Pill Badge if specified
+        if social_pill_text and social_pill_text.strip():
+            pill_str = social_pill_text.strip()
+            pill_font = ImageFont.truetype(font_file, 34)
+            pill_bbox = draw.textbbox((0, 0), pill_str, font=pill_font)
+            pill_text_w = pill_bbox[2] - pill_bbox[0]
+            pill_w = pill_text_w + 64
+            pill_h = 58
+            pill_x = (width - pill_w) // 2
+            pill_y = height - 260
+
+            pill_layer = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+            pbd = ImageDraw.Draw(pill_layer)
+            # Rounded frosted glass pill
+            pbd.rounded_rectangle([pill_x, pill_y, pill_x + pill_w, pill_y + pill_h], radius=29, fill=(8, 12, 20, 220), outline=top_border, width=2)
+            img = Image.alpha_composite(img, pill_layer)
+
+            draw = ImageDraw.Draw(img)
+            # Text inside pill
+            draw.text((pill_x + 32, pill_y + 11), pill_str, font=pill_font, fill=(240, 245, 255, 255))
+
         Path(output_png).parent.mkdir(parents=True, exist_ok=True)
         img.save(output_png)
         return str(Path(output_png).resolve())
@@ -393,11 +424,11 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             inputs.extend(["-i", str(banner_resolved)])
 
             if banner_duration == "first_3s":
-                overlay_clause = "overlay=0:0:enable='lte(t,3.0)':eof_action=pass"
+                overlay_clause = "overlay=0:0:enable='lte(t,3.0)':eof_action=repeat"
             elif banner_duration == "first_5s":
-                overlay_clause = "overlay=0:0:enable='lte(t,5.0)':eof_action=pass"
+                overlay_clause = "overlay=0:0:enable='lte(t,5.0)':eof_action=repeat"
             else:  # full_clip
-                overlay_clause = "overlay=0:0:eof_action=pass"
+                overlay_clause = "overlay=0:0:eof_action=repeat"
 
             filter_parts.append(f"{next_v}[1:v]{overlay_clause}[v_banner]")
             next_v = "[v_banner]"

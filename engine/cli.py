@@ -305,16 +305,62 @@ def cmd_session_status(args):
 
 def cmd_motion(args):
     from engine.motion.pipeline import DynamicMotionPipeline
+    from engine.subtitles import SubtitleEngine
+    import tempfile
     try:
         pipeline = DynamicMotionPipeline()
+        sub = SubtitleEngine()
+
+        # Check for transcript cues to burn synchronized subtitles into dynamic motion clip
+        ass_path = None
+        cues = []
+        if getattr(args, "text_cues", None):
+            try:
+                cues = json.loads(args.text_cues)
+            except Exception:
+                pass
+
+        if not cues and getattr(args, "vtt", None) and os.path.exists(args.vtt):
+            cues = sub.parse_vtt_file(args.vtt)
+
+        if not cues:
+            v_path = Path(args.input)
+            for ext in [".en.vtt", ".vtt", ".en.srt", ".srt"]:
+                cand = v_path.with_suffix(ext)
+                if cand.exists():
+                    cues = sub.parse_vtt_file(str(cand))
+                    break
+                cand2 = v_path.parent / f"{v_path.stem}{ext}"
+                if cand2.exists():
+                    cues = sub.parse_vtt_file(str(cand2))
+                    break
+
+        temp_ass = None
+        if cues and not getattr(args, "no_subs", False):
+            temp_ass = Path(tempfile.gettempdir()) / f"hclipper_motion_{Path(args.output).stem}.ass"
+            sub.generate_ass(
+                cues,
+                str(temp_ass),
+                style_preset=getattr(args, "preset", "tiktok_bold")
+            )
+            ass_path = str(temp_ass)
+
         out = pipeline.process_clip(
             video_path=args.input,
             output_path=args.output,
             clip_headline=getattr(args, "headline", None) or "",
             speaker=getattr(args, "speaker", None) or "",
             topic=getattr(args, "topic", None) or "",
-            template_name=getattr(args, "template", None) or "kinetic_hook.html"
+            template_name=getattr(args, "template", None) or "kinetic_hook.html",
+            subtitle_ass_path=ass_path
         )
+
+        if temp_ass and temp_ass.exists():
+            try:
+                temp_ass.unlink()
+            except Exception:
+                pass
+
         if args.json:
             emit_json("motion_result", {"success": True, "output": out})
         else:
@@ -455,7 +501,8 @@ def cmd_export_clip(args):
                 str(banner_file),
                 banner_style=getattr(args, "banner_style", "frosted_gold"),
                 width=out_w,
-                height=out_h
+                height=out_h,
+                social_pill_text=getattr(args, "social_handle", None)
             )
             banner_path = str(banner_file)
 
@@ -639,6 +686,10 @@ def main():
     p_mo.add_argument("--speaker", help="Speaker name")
     p_mo.add_argument("--topic", help="Topic or sermon title")
     p_mo.add_argument("--template", default="kinetic_hook.html", help="Motion template name")
+    p_mo.add_argument("--vtt", help="Path to WebVTT/SRT file")
+    p_mo.add_argument("--text-cues", help="JSON encoded transcript cues")
+    p_mo.add_argument("--preset", default="tiktok_bold", help="Subtitle animation style preset")
+    p_mo.add_argument("--no-subs", action="store_true", help="Omit subtitles")
     p_mo.set_defaults(func=cmd_motion)
 
     # Master Short Export (Full pipeline: reframe + subtitles + hook banner + audio DSP)
@@ -654,6 +705,7 @@ def main():
     p_ec.add_argument("--banner-style", default="frosted_gold", choices=["frosted_gold", "cyber_neon", "clean_minimal", "viral_warning", "kinetic_spring"], help="Banner visual style")
     p_ec.add_argument("--banner-duration", default="first_5s", choices=["first_3s", "first_5s", "full_clip"], help="Banner on-screen duration")
     p_ec.add_argument("--no-banner", action="store_true", help="Omit top hook banner")
+    p_ec.add_argument("--social-handle", help="Social handle text for bottom badge")
     p_ec.add_argument("--preset", default="tiktok_bold", choices=["tiktok_bold", "dynamic_pop", "clean_white"], help="Subtitle animation style preset")
     p_ec.add_argument("--no-subs", action="store_true", help="Omit subtitles")
     p_ec.add_argument("--vtt", help="Path to WebVTT/SRT file")

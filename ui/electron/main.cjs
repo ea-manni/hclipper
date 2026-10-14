@@ -389,20 +389,10 @@ ipcMain.handle('hclipper:cancel-job', async (event, jobId) => {
 });
 
 // Persistent File Helpers
-function getPersistentProjectsPath() {
-  const userProjects = path.join(app.getPath('userData'), 'projects.json');
-  if (fs.existsSync(userProjects)) return userProjects;
+function getPersistentProjectsPaths() {
   const rootProjects = path.join(PROJECT_ROOT, 'projects.json');
-  if (fs.existsSync(rootProjects)) {
-    try {
-      fs.mkdirSync(app.getPath('userData'), { recursive: true });
-      fs.copyFileSync(rootProjects, userProjects);
-      return userProjects;
-    } catch (e) {
-      return rootProjects;
-    }
-  }
-  return userProjects;
+  const userProjects = path.join(app.getPath('userData'), 'projects.json');
+  return { rootProjects, userProjects };
 }
 
 function getPersistentQueuePaths() {
@@ -414,18 +404,28 @@ function getPersistentQueuePaths() {
 // IPC Handler: Read Clips Queue directly from clips_queue.json
 ipcMain.handle('hclipper:read-queue', async () => {
   const { rootQueue, userQueue } = getPersistentQueuePaths();
+  const filterValidItems = (items) => {
+    if (!Array.isArray(items)) return [];
+    return items.filter((it) => {
+      const fp = (it.file_path || '').replace(/\\/g, '/').toLowerCase();
+      if (fp.includes('/scratch/') || fp.includes('scratch/')) return false;
+      const absPath = path.isAbsolute(it.file_path) ? it.file_path : path.join(PROJECT_ROOT, it.file_path);
+      return fs.existsSync(absPath);
+    });
+  };
+
   // Check root queue first (which Python updates)
   if (fs.existsSync(rootQueue)) {
     try {
       const data = fs.readFileSync(rootQueue, 'utf8');
       const items = JSON.parse(data);
-      if (Array.isArray(items) && items.length > 0) {
-        try {
-          fs.mkdirSync(path.dirname(userQueue), { recursive: true });
-          fs.writeFileSync(userQueue, data, 'utf8');
-        } catch (e) {}
-        return items;
-      }
+      const valid = filterValidItems(items);
+      try {
+        fs.mkdirSync(path.dirname(userQueue), { recursive: true });
+        fs.writeFileSync(userQueue, JSON.stringify(valid, null, 2), 'utf8');
+        fs.writeFileSync(rootQueue, JSON.stringify(valid, null, 2), 'utf8');
+      } catch (e) {}
+      return valid;
     } catch (e) {}
   }
   // Fallback to userQueue
@@ -433,12 +433,11 @@ ipcMain.handle('hclipper:read-queue', async () => {
     try {
       const data = fs.readFileSync(userQueue, 'utf8');
       const items = JSON.parse(data);
-      if (Array.isArray(items) && items.length > 0) {
-        try {
-          fs.writeFileSync(rootQueue, data, 'utf8');
-        } catch (e) {}
-        return items;
-      }
+      const valid = filterValidItems(items);
+      try {
+        fs.writeFileSync(rootQueue, JSON.stringify(valid, null, 2), 'utf8');
+      } catch (e) {}
+      return valid;
     } catch (e) {}
   }
   return [];
@@ -465,24 +464,52 @@ ipcMain.handle('hclipper:save-queue', async (event, items) => {
 
 // IPC Handler: Read Projects from projects.json
 ipcMain.handle('hclipper:read-projects', async () => {
-  const projectsPath = getPersistentProjectsPath();
-  if (fs.existsSync(projectsPath)) {
+  const { rootProjects, userProjects } = getPersistentProjectsPaths();
+  // 1. Try reading rootProjects first if non-empty
+  if (fs.existsSync(rootProjects)) {
     try {
-      const data = fs.readFileSync(projectsPath, 'utf8');
-      return JSON.parse(data);
-    } catch (e) {
-      return null;
-    }
+      const data = fs.readFileSync(rootProjects, 'utf8');
+      const parsed = JSON.parse(data);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        try {
+          fs.mkdirSync(path.dirname(userProjects), { recursive: true });
+          fs.writeFileSync(userProjects, data, 'utf8');
+        } catch (e) {}
+        return parsed;
+      }
+    } catch (e) {}
   }
-  return null;
+
+  // 2. Fallback to userProjects
+  if (fs.existsSync(userProjects)) {
+    try {
+      const data = fs.readFileSync(userProjects, 'utf8');
+      const parsed = JSON.parse(data);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        try {
+          fs.writeFileSync(rootProjects, data, 'utf8');
+        } catch (e) {}
+        return parsed;
+      }
+    } catch (e) {}
+  }
+
+  return [];
 });
 
 // IPC Handler: Save Projects to projects.json
 ipcMain.handle('hclipper:save-projects', async (event, projects) => {
-  const projectsPath = getPersistentProjectsPath();
+  const { rootProjects, userProjects } = getPersistentProjectsPaths();
   try {
-    fs.mkdirSync(path.dirname(projectsPath), { recursive: true });
-    fs.writeFileSync(projectsPath, JSON.stringify(projects, null, 2), 'utf8');
+    const jsonStr = JSON.stringify(projects, null, 2);
+    try {
+      fs.mkdirSync(path.dirname(rootProjects), { recursive: true });
+      fs.writeFileSync(rootProjects, jsonStr, 'utf8');
+    } catch (e) {}
+    try {
+      fs.mkdirSync(path.dirname(userProjects), { recursive: true });
+      fs.writeFileSync(userProjects, jsonStr, 'utf8');
+    } catch (e) {}
     return true;
   } catch (e) {
     return false;

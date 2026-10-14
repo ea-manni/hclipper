@@ -178,18 +178,25 @@
     const badgeText = document.getElementById("badgeText");
     const clipTimestamp = document.getElementById("clipTimestamp");
 
-    // Initialize headline words
-    badgeText.textContent = window.CONFIG.badge;
-    clipTimestamp.textContent = window.CONFIG.speaker;
+    window.initStage = function() {
+      const cfg = window.CONFIG;
+      if (badgeText) badgeText.textContent = cfg.badge || "KEY INSIGHT";
+      if (clipTimestamp) clipTimestamp.textContent = cfg.speaker || "";
 
-    const words = window.CONFIG.headline.split(" ");
-    headlineEl.innerHTML = words.map((w, idx) => {
-      const isHigh = window.CONFIG.highlightWords.includes(w.replace(/[^A-Z]/g, ""));
-      const highClass = isHigh ? (window.CONFIG.theme === "gold" ? "gold-highlight" : "highlight") : "";
-      return `<span class="word ${highClass}" data-index="${idx}">${w}</span>`;
-    }).join(" ");
+      const rawHeadline = (cfg.headline || "").trim();
+      const words = rawHeadline ? rawHeadline.split(/\s+/) : ["SERMON", "HIGHLIGHT"];
+      const highlightWords = (cfg.highlightWords && cfg.highlightWords.length) ? cfg.highlightWords : [words[0] || ""];
 
-    const wordEls = document.querySelectorAll(".word");
+      headlineEl.innerHTML = words.map((w, idx) => {
+        const isHigh = highlightWords.includes(w.replace(/[^A-Z0-9]/gi, "").toUpperCase());
+        const highClass = isHigh ? (cfg.theme === "gold" ? "gold-highlight" : "highlight") : "";
+        return `<span class="word ${highClass}" data-index="${idx}">${w}</span>`;
+      }).join(" ");
+
+      window.wordEls = document.querySelectorAll(".word");
+    };
+
+    window.initStage();
 
     /**
      * Pure Mathematical Deterministic Seek Function
@@ -215,8 +222,9 @@
       // 2. Staggered Word Kinetic Elastic Pops
       const baseDelay = 0.12;
       const staggerDelay = 0.045;
+      const elements = window.wordEls || document.querySelectorAll(".word");
 
-      wordEls.forEach((el, i) => {
+      elements.forEach((el, i) => {
         const wordStart = baseDelay + i * staggerDelay;
         const dt = t - wordStart;
 

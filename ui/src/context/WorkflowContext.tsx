@@ -309,22 +309,75 @@ export const WorkflowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if (!path) return;
     const cleanTitle = newTitle || path.split(/[/\\]/).pop()?.replace(/\.[^.]+$/, '') || 'Media Project';
     setProjects((prev) => {
-      const updated = prev.map((p) => {
-        if (p.id === activeProjectId) {
-          return {
-            ...p,
-            name: (!p.name || p.name.startsWith('New Project')) && cleanTitle ? cleanTitle : p.name,
-            sourceVideo: path,
-            sourceUrl: sourceUrl || p.sourceUrl,
-            updatedAt: new Date().toISOString()
-          };
-        }
-        return p;
-      });
+      const exists = prev.find((p) => p.id === activeProjectId);
+      let updated: Project[];
+      if (exists) {
+        updated = prev.map((p) => {
+          if (p.id === activeProjectId) {
+            return {
+              ...p,
+              name: (!p.name || p.name.startsWith('New Project')) && cleanTitle ? cleanTitle : p.name,
+              sourceVideo: path,
+              sourceUrl: sourceUrl || p.sourceUrl,
+              updatedAt: new Date().toISOString()
+            };
+          }
+          return p;
+        });
+      } else {
+        const newProjId = `proj_${Date.now()}`;
+        const newProj: Project = {
+          id: newProjId,
+          name: cleanTitle,
+          description: 'Auto-created video repurposing workspace',
+          sourceVideo: path,
+          sourceUrl: sourceUrl || '',
+          sourceDuration: 0,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          status: 'draft',
+          clips: [],
+          activeClipIndex: 0,
+          ingestState: EMPTY_PROJECT.ingestState,
+          timelineState: EMPTY_PROJECT.timelineState,
+          reframeState: EMPTY_PROJECT.reframeState,
+          subtitlesState: EMPTY_PROJECT.subtitlesState
+        };
+        updated = [newProj, ...prev];
+        setActiveProjectId(newProjId);
+        localStorage.setItem('hclipper_active_project_id', newProjId);
+      }
       saveProjectsToDisk(updated);
       return updated;
     });
   };
+
+  // Automatic Debounced Project Sync to Disk whenever state changes
+  useEffect(() => {
+    if (!activeProjectId) return;
+    const timer = setTimeout(() => {
+      setProjects((prev) => {
+        const idx = prev.findIndex((p) => p.id === activeProjectId);
+        if (idx === -1) return prev;
+        const cur = prev[idx];
+        const updatedProj: Project = {
+          ...cur,
+          sourceVideo: sourceVideo || cur.sourceVideo,
+          clips: clips.length > 0 ? clips : cur.clips,
+          activeClipIndex,
+          timelineState,
+          reframeState,
+          subtitlesState,
+          updatedAt: new Date().toISOString()
+        };
+        const up = [...prev];
+        up[idx] = updatedProj;
+        saveProjectsToDisk(up);
+        return up;
+      });
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [sourceVideo, clips, activeClipIndex, timelineState, reframeState, subtitlesState, activeProjectId]);
 
   // Load Settings and Projects on start
   useEffect(() => {
@@ -912,6 +965,16 @@ export const WorkflowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           args.push('--text-cues', JSON.stringify(clip.transcriptCues));
         }
 
+        const socialHandleText = [
+          subtitlesState.tiktokHandle?.trim() ? `@${subtitlesState.tiktokHandle.trim().replace(/^@/, '')}` : null,
+          subtitlesState.youtubeHandle?.trim() ? `@${subtitlesState.youtubeHandle.trim().replace(/^@/, '')}` : null,
+          subtitlesState.instagramHandle?.trim() ? `@${subtitlesState.instagramHandle.trim().replace(/^@/, '')}` : null,
+        ].filter(Boolean).join(' • ');
+
+        if (subtitlesState.includeSocialPills && socialHandleText) {
+          args.push('--social-handle', socialHandleText);
+        }
+
         res = await window.hclipper.runEngine('export-clip', args);
       } else {
         res = await window.hclipper.runEngine('reframe', [
@@ -933,6 +996,26 @@ export const WorkflowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           }
           return up;
         });
+
+        if (activeProjectId) {
+          setProjects((prev) => {
+            const pIdx = prev.findIndex((p) => p.id === activeProjectId);
+            if (pIdx >= 0) {
+              const cur = prev[pIdx];
+              const curClips = [...(cur.clips || [])];
+              if (curClips[idx]) {
+                curClips[idx] = { ...curClips[idx], isRendered: true, renderedPath: targetOut };
+              }
+              const upProj = { ...cur, clips: curClips, updatedAt: new Date().toISOString() };
+              const updatedProjects = [...prev];
+              updatedProjects[pIdx] = upProj;
+              saveProjectsToDisk(updatedProjects);
+              return updatedProjects;
+            }
+            return prev;
+          });
+        }
+
         setReframeState((prev) => ({
           ...prev,
           isRendering: false,

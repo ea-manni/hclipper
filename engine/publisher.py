@@ -64,6 +64,8 @@ class QueueManager:
                         if isinstance(data, list):
                             for item in data:
                                 fpath = item.get("file_path", "")
+                                if "scratch" in fpath.replace("\\", "/").lower():
+                                    continue
                                 full_path = Path(fpath) if Path(fpath).is_absolute() else (PROJECT_ROOT / fpath)
                                 if full_path.exists() and item not in loaded_items:
                                     loaded_items.append(item)
@@ -75,6 +77,7 @@ class QueueManager:
         self.items = loaded_items
         # Automatically scan clips directory for real rendered files
         self.scan_clips_directory()
+        self.save()
         return self.items
 
     def save(self):
