@@ -315,10 +315,18 @@ def cmd_motion(args):
         ass_path = None
         cues = []
         if getattr(args, "text_cues", None):
-            try:
-                cues = json.loads(args.text_cues)
-            except Exception:
-                pass
+            raw_cues = str(args.text_cues).strip()
+            if os.path.isfile(raw_cues):
+                try:
+                    with open(raw_cues, "r", encoding="utf-8") as f:
+                        cues = json.load(f)
+                except Exception as e:
+                    print(f"[cmd_motion] Failed to parse cues file {raw_cues}: {e}", flush=True)
+            else:
+                try:
+                    cues = json.loads(raw_cues)
+                except Exception:
+                    pass
 
         if not cues and getattr(args, "vtt", None) and os.path.exists(args.vtt):
             cues = sub.parse_vtt_file(args.vtt)
@@ -457,10 +465,18 @@ def cmd_export_clip(args):
             on_progress({"phase": "subtitles", "percent": 65})
             cues = []
             if getattr(args, "text_cues", None):
-                try:
-                    cues = json.loads(args.text_cues)
-                except Exception:
-                    pass
+                raw_cues = str(args.text_cues).strip()
+                if os.path.isfile(raw_cues):
+                    try:
+                        with open(raw_cues, "r", encoding="utf-8") as f:
+                            cues = json.load(f)
+                    except Exception as e:
+                        print(f"[cmd_export_clip] Failed to parse cues file {raw_cues}: {e}", flush=True)
+                else:
+                    try:
+                        cues = json.loads(raw_cues)
+                    except Exception:
+                        pass
 
             if not cues and getattr(args, "vtt", None) and os.path.exists(args.vtt):
                 cues = sub.parse_vtt_file(args.vtt)

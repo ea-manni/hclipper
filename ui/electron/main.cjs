@@ -2,6 +2,7 @@ const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
 const path = require('path');
 const { spawn } = require('child_process');
 const fs = require('fs');
+const os = require('os');
 
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
 const PROJECT_ROOT = app.isPackaged 
@@ -257,18 +258,35 @@ ipcMain.handle('hclipper:run-engine', (event, { command, args = [], jobId = null
       childEnv.PATH = `${extraPaths.join(path.delimiter)}${path.delimiter}${childEnv.PATH || ''}`;
     }
 
+    // Protect complex JSON arguments on Windows command-line
+    const tempFilesToClean = [];
+    const processedArgs = [...args];
+    for (let i = 0; i < processedArgs.length; i++) {
+      if (processedArgs[i] === '--text-cues' && i + 1 < processedArgs.length) {
+        const val = processedArgs[i + 1];
+        if (typeof val === 'string' && (val.trim().startsWith('[') || val.trim().startsWith('{'))) {
+          try {
+            const tmpFile = path.join(os.tmpdir(), `hclipper_cues_${Date.now()}_${Math.random().toString(36).substring(2, 6)}.json`);
+            fs.writeFileSync(tmpFile, val, 'utf8');
+            processedArgs[i + 1] = tmpFile;
+            tempFilesToClean.push(tmpFile);
+          } catch (e) {}
+        }
+      }
+    }
+
     const currentJobId = jobId || `job_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     const bundledEngineExe = path.join(PROJECT_ROOT, 'bin', 'hclipper-engine.exe');
 
     let child;
     if (fs.existsSync(bundledEngineExe)) {
-      child = spawn(bundledEngineExe, [command, ...args, '--json'], {
+      child = spawn(bundledEngineExe, [command, ...processedArgs, '--json'], {
         cwd: PROJECT_ROOT,
         env: childEnv,
         shell: false
       });
     } else {
-      const cliArgs = ['-m', 'engine.cli', command, ...args, '--json'];
+      const cliArgs = ['-m', 'engine.cli', command, ...processedArgs, '--json'];
       child = spawn(pythonExe, cliArgs, {
         cwd: PROJECT_ROOT,
         env: childEnv,
@@ -277,6 +295,12 @@ ipcMain.handle('hclipper:run-engine', (event, { command, args = [], jobId = null
     }
 
     activeJobs.set(currentJobId, child);
+
+    const cleanupTempFiles = () => {
+      tempFilesToClean.forEach((f) => {
+        try { if (fs.existsSync(f)) fs.unlinkSync(f); } catch (e) {}
+      });
+    };
 
     let rawOutput = '';
     let parsedEvents = [];
@@ -334,6 +358,7 @@ ipcMain.handle('hclipper:run-engine', (event, { command, args = [], jobId = null
     });
 
     child.on('close', (code) => {
+      cleanupTempFiles();
       activeJobs.delete(currentJobId);
       if (code === 0) {
         resolve({ success: true, jobId: currentJobId, events: parsedEvents, output: rawOutput });
@@ -350,6 +375,7 @@ ipcMain.handle('hclipper:run-engine', (event, { command, args = [], jobId = null
     });
 
     child.on('error', (err) => {
+      cleanupTempFiles();
       activeJobs.delete(currentJobId);
       if (mainWindow) {
         mainWindow.webContents.send('hclipper:engine-log', {
