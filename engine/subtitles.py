@@ -24,7 +24,7 @@ class SubtitleEngine:
     karaoke word highlights, and header hook banners.
     """
 
-    def __init__(self, font_name: str = "Segoe UI Black"):
+    def __init__(self, font_name: str = "Segoe UI"):
         self.font_name = font_name
         self.font_path = FONTS_DIR / "SegoeUI-Black.ttf"
         if not self.font_path.exists():
@@ -161,22 +161,22 @@ class SubtitleEngine:
         if preset == "dynamic_pop":
             active_color = highlight_color or "&H00FFFF00&"  # Electric Neon Cyan (BGR)
             style_primary = "&H00FFFFFF&"
-            font_size = 54
-            margin_v = 730
+            font_size = 56
+            margin_v = 750
             outline = 5
             shadow = 2
         elif preset == "clean_white":
-            active_color = highlight_color or "&H00FFFFFF&"
-            style_primary = "&H00DDDDDD&"
-            font_size = 50
-            margin_v = 740
+            active_color = highlight_color or "&H0000D4FF&"  # Soft gold highlight
+            style_primary = "&H00FFFFFF&"
+            font_size = 52
+            margin_v = 750
             outline = 4
-            shadow = 1
+            shadow = 2
         else:  # tiktok_bold
             active_color = highlight_color or "&H0000D4FF&"  # Vibrant Gold (BGR)
             style_primary = "&H00FFFFFF&"
-            font_size = 52
-            margin_v = 740
+            font_size = 54
+            margin_v = 750
             outline = 5
             shadow = 2
 
@@ -191,23 +191,45 @@ class SubtitleEngine:
 
         effective_offset = 0.0 if is_already_relative else clip_start_offset
 
-        for cue in cues:
-            start = cue.get("start", 0.0) - effective_offset
-            end = cue.get("end", 0.0) - effective_offset
+        # 1. Clean and normalize cue timestamps
+        cleaned_cues = []
+        for c in sorted(cues, key=lambda x: float(x.get("start", 0.0))):
+            s = float(c.get("start", 0.0)) - effective_offset
+            e = float(c.get("end", s + 2.0)) - effective_offset
+            txt = c.get("text", "").replace('>>', '').strip()
+            txt = re.sub(r'\[.*?\]|\(.*?\)', '', txt).strip()
 
-            if start < 0.0 and end < 0.2:
+            if not txt:
                 continue
-            if clip_duration and start >= clip_duration:
+            if s < 0.0 and e < 0.15:
+                continue
+            if clip_duration and s >= clip_duration:
                 continue
 
-            rel_s = max(0.0, start)
-            rel_e = min(clip_duration, end) if clip_duration else end
+            rel_s = max(0.0, s)
+            rel_e = min(clip_duration, e) if clip_duration else e
+            if rel_e <= rel_s + 0.1:
+                rel_e = rel_s + 1.2
 
-            txt = cue.get("text", "").replace('>>', '').strip()
-            txt = re.sub(r'\[.*?\]', '', txt).strip()
+            cleaned_cues.append({
+                **c,
+                "clean_start": rel_s,
+                "clean_end": rel_e,
+                "clean_text": txt
+            })
 
-            if not txt or rel_e <= rel_s + 0.15:
-                continue
+        # 2. Prevent overlapping/lagging cues: clamp end to next cue's start
+        for idx in range(len(cleaned_cues)):
+            if idx + 1 < len(cleaned_cues):
+                next_start = cleaned_cues[idx + 1]["clean_start"]
+                if next_start > cleaned_cues[idx]["clean_start"]:
+                    cleaned_cues[idx]["clean_end"] = min(cleaned_cues[idx]["clean_end"], next_start)
+
+        # 3. Generate progressive word-by-word dialogue lines
+        for cue in cleaned_cues:
+            rel_s = cue["clean_start"]
+            rel_e = cue["clean_end"]
+            txt = cue["clean_text"]
 
             raw_words = [w for w in txt.upper().split() if w]
             if not raw_words:
@@ -218,7 +240,7 @@ class SubtitleEngine:
 
             chunk_size = 4
             word_chunks = [raw_words[i:i + chunk_size] for i in range(0, len(raw_words), chunk_size)]
-            
+
             total_duration = max(0.2, rel_e - rel_s)
             time_per_word = total_duration / len(raw_words)
 
@@ -241,11 +263,11 @@ class SubtitleEngine:
                     for ci, cw in enumerate(chunk):
                         if ci == i:
                             if preset == "dynamic_pop":
-                                phrase_parts.append(f"{{\\c{active_color}}}{{\\u1}}{{\\fscx112\\fscy112}}{cw}{{\\fscx100\\fscy100}}{{\\u0}}{{\\c{style_primary}}}")
+                                phrase_parts.append(f"{{\\c{active_color}}}{{\\u1}}{{\\fscx114\\fscy114}}{cw}{{\\fscx100\\fscy100}}{{\\u0}}{{\\c{style_primary}}}")
                             elif preset == "clean_white":
-                                phrase_parts.append(f"{{\\c{active_color}}}{{\\u1}}{cw}{{\\u0}}{{\\c{style_primary}}}")
+                                phrase_parts.append(f"{{\\c{active_color}}}{{\\u1}}{{\\fscx108\\fscy108}}{cw}{{\\fscx100\\fscy100}}{{\\u0}}{{\\c{style_primary}}}")
                             else:  # tiktok_bold
-                                phrase_parts.append(f"{{\\c{active_color}}}{{\\u1}}{cw}{{\\u0}}{{\\c{style_primary}}}")
+                                phrase_parts.append(f"{{\\c{active_color}}}{{\\u1}}{{\\fscx112\\fscy112}}{cw}{{\\fscx100\\fscy100}}{{\\u0}}{{\\c{style_primary}}}")
                         else:
                             phrase_parts.append(cw)
 

@@ -153,6 +153,10 @@ class DynamicMotionPipeline:
         canvas_html = self.templates_dir / template_name
         render_script = self.motion_dir / "render.mjs"
 
+        config_file = temp_dir / "manifest_config.json"
+        with open(config_file, "w", encoding="utf-8") as cf:
+            json.dump(manifest_config, cf, ensure_ascii=False)
+
         render_cmd = [
             "node",
             str(render_script),
@@ -160,7 +164,7 @@ class DynamicMotionPipeline:
             "--output", str(overlay_mov),
             "--fps", "30",
             "--subsample", "1",
-            "--config", json.dumps(manifest_config)
+            "--config", str(config_file)
         ]
 
         print(f"[DynamicMotionPipeline] Rendering full-duration motion canvas via headless Chromium ({template_name})...", flush=True)

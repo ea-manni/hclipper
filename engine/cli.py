@@ -353,13 +353,19 @@ def cmd_motion(args):
             )
             ass_path = str(temp_ass)
 
+        speaker_val = getattr(args, "speaker", None) or ""
+        speaker_val = re.sub(r'\[.*?\]|\(.*?\)', '', speaker_val).strip()
+        topic_val = getattr(args, "topic", None) or ""
+        topic_val = re.sub(r'\[.*?\]|\(.*?\)', '', topic_val).strip()
+
         out = pipeline.process_clip(
             video_path=args.input,
             output_path=args.output,
+            transcript_cues=cues,
             clip_headline=getattr(args, "headline", None) or "",
-            speaker=getattr(args, "speaker", None) or "",
-            topic=getattr(args, "topic", None) or "",
-            template_name=getattr(args, "template", None) or "kinetic_hook.html",
+            speaker=speaker_val,
+            topic=topic_val,
+            template_name=getattr(args, "template", None) or "motion_canvas.html",
             subtitle_ass_path=ass_path
         )
 

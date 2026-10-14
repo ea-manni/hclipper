@@ -19,7 +19,9 @@ import {
   Trash2,
   Clock,
   Eye,
-  AlertCircle
+  AlertCircle,
+  User,
+  Tag
 } from 'lucide-react';
 import { YoutubeIcon, TikTokIcon, InstagramIcon } from '../components/Icons';
 import { useWorkflow } from '../context/WorkflowContext';
@@ -48,18 +50,40 @@ export const SubtitlesView: React.FC<SubtitlesViewProps> = ({
     startBatchRenderAll
   } = useWorkflow();
 
-  // Derive speaker name and organization dynamically from the active project
-  const projectName = activeProject?.name || '';
-  const speakerName = (() => {
-    const nameMatch = projectName.match(/(?:Pastor|Dr\.?|Rev\.?|Bishop|Apostle|Prophet|Minister|Elder)\s+([^—–|\-]+)/i);
-    if (nameMatch) return nameMatch[0].trim();
-    const before = projectName.split(/[—–|\-]/)[0].trim();
-    return before || 'Speaker';
-  })();
-  const speakerOrg = (() => {
-    const afterDash = projectName.split(/[—–|]/)[1];
-    return afterDash?.trim()?.split(/[·,]/)[0]?.trim() || '';
-  })();
+  // Clean speaker and topic derivation with automatic ID stripping
+  const cleanSpeaker = (raw: string) => {
+    return raw
+      .replace(/\[[^\]]*\]/g, '') // remove bracketed IDs like [4_Uetxw16pE]
+      .replace(/\([^)]*\)/g, '')   // remove parenthetical info
+      .replace(/[—–|\/\\_#]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  };
+
+  const defaultSpeaker = useMemo(() => {
+    const pName = activeProject?.name || '';
+    const nameMatch = pName.match(/(?:Pastor|Dr\.?|Rev\.?|Bishop|Apostle|Prophet|Minister|Elder)\s+[^—–|\-\[\]]+/i);
+    if (nameMatch) return cleanSpeaker(nameMatch[0]);
+    const before = pName.split(/[—–|\-]/)[0];
+    return cleanSpeaker(before) || 'Pastor Bankie Olusina';
+  }, [activeProject?.name]);
+
+  const defaultTopic = useMemo(() => {
+    const pName = activeProject?.name || '';
+    const parts = pName.split(/[—–|｜]/).map(p => cleanSpeaker(p)).filter(Boolean);
+    return parts[0] || 'Value Keys For Right Decisions';
+  }, [activeProject?.name]);
+
+  const [customSpeaker, setCustomSpeaker] = useState(defaultSpeaker);
+  const [customTopic, setCustomTopic] = useState(defaultTopic);
+
+  useEffect(() => {
+    setCustomSpeaker(defaultSpeaker);
+  }, [defaultSpeaker]);
+
+  useEffect(() => {
+    setCustomTopic(defaultTopic);
+  }, [defaultTopic]);
 
   const {
     headline,
@@ -297,6 +321,149 @@ export const SubtitlesView: React.FC<SubtitlesViewProps> = ({
       end: 2.5
     };
   }, [activeClip.transcriptCues, activeClip.customHeadline, activeClip.title, activeClip.hook, activeClip.start, activeClip.end, videoCurrentTime]);
+
+  // Dynamic Semantic Motion Cue Detection based on actual speech cues
+  const detectedMotionCues = useMemo(() => {
+    const list: Array<{
+      id: string;
+      type: string;
+      icon: string;
+      label: string;
+      timeRange: string;
+      sfx: string;
+      detail: string;
+      badgeColor: string;
+    }> = [];
+
+    const clipDur = Math.max(10, (activeClip.end || 30) - (activeClip.start || 0));
+
+    // 1. Kinetic Hook Intro (0.0s - 3.5s)
+    list.push({
+      id: 'cue_hook',
+      type: 'kinetic_hook',
+      icon: '🎯',
+      label: 'Kinetic Hook Typography',
+      timeRange: '0.0s - 3.5s',
+      sfx: 'Whoosh Swish',
+      detail: cleanSermonHeadline(headline || activeClip.customHeadline || activeClip.hook || activeClip.title),
+      badgeColor: 'border-amber-500/40 bg-amber-950/60 text-amber-300'
+    });
+
+    // 2. Speaker Badge Lower-Third (4.0s - 7.5s)
+    list.push({
+      id: 'cue_speaker',
+      type: 'lower_third',
+      icon: '👤',
+      label: `Speaker: ${customSpeaker}`,
+      timeRange: '4.0s - 7.5s',
+      sfx: 'Acoustic Slide',
+      detail: customTopic,
+      badgeColor: 'border-cyan-500/40 bg-cyan-950/60 text-cyan-300'
+    });
+
+    // 3. Scan transcript cues for semantic triggers
+    const transcript = activeClip.transcriptCues || [];
+    let lastTime = 7.5;
+
+    for (let i = 0; i < transcript.length; i++) {
+      const c = transcript[i];
+      const s = typeof c.start === 'number' ? c.start : 0;
+      const txt = c.text || '';
+      if (s - lastTime < 3.0) continue;
+
+      // Scripture / Wisdom detection
+      if (/\b(scripture|bible|proverb|psalm|god|lord|verse|solomon|matthew|john|romans|commandment)\b/i.test(txt)) {
+        list.push({
+          id: `cue_scripture_${i}`,
+          type: 'scripture_plaque',
+          icon: '📖',
+          label: 'Scripture / Wisdom Plaque',
+          timeRange: `${s.toFixed(1)}s - ${(s + 3.8).toFixed(1)}s`,
+          sfx: 'Harmonic Chime',
+          detail: `"${txt.slice(0, 48)}..."`,
+          badgeColor: 'border-purple-500/40 bg-purple-950/60 text-purple-300'
+        });
+        lastTime = s + 3.8;
+        continue;
+      }
+
+      // Money / Currency / Value detection
+      if (/\b(money|wealth|salary|dollar|naira|paid|cash|profit|50 houses|rollsroyce|\$|₦|£|€)\b/i.test(txt)) {
+        list.push({
+          id: `cue_money_${i}`,
+          type: 'currency_badge',
+          icon: '💰',
+          label: 'Value & Wealth Callout',
+          timeRange: `${s.toFixed(1)}s - ${(s + 3.0).toFixed(1)}s`,
+          sfx: 'Kaching Ring',
+          detail: `Highlight: ${txt.slice(0, 36)}`,
+          badgeColor: 'border-emerald-500/40 bg-emerald-950/60 text-emerald-300'
+        });
+        lastTime = s + 3.0;
+        continue;
+      }
+
+      // Warning / Danger / Trap detection
+      if (/\b(warning|danger|trap|mistake|stop|never|beware|leanness|sickness)\b/i.test(txt)) {
+        list.push({
+          id: `cue_warning_${i}`,
+          type: 'warning_stamp',
+          icon: '⚠️',
+          label: 'High-Impact Warning Stamp',
+          timeRange: `${s.toFixed(1)}s - ${(s + 3.0).toFixed(1)}s`,
+          sfx: 'Vinyl Scratch',
+          detail: txt.toUpperCase().slice(0, 36),
+          badgeColor: 'border-rose-500/40 bg-rose-950/60 text-rose-300'
+        });
+        lastTime = s + 3.0;
+        continue;
+      }
+
+      // Chat / DM / Quote detection
+      if (/\b(said to me|told me|replied|dm|message|texted)\b/i.test(txt)) {
+        list.push({
+          id: `cue_chat_${i}`,
+          type: 'chat_bubble',
+          icon: '💬',
+          label: 'Simulated Dialogue Bubble',
+          timeRange: `${s.toFixed(1)}s - ${(s + 3.2).toFixed(1)}s`,
+          sfx: 'Tactile Pop',
+          detail: `"${txt.slice(0, 40)}..."`,
+          badgeColor: 'border-sky-500/40 bg-sky-950/60 text-sky-300'
+        });
+        lastTime = s + 3.2;
+        continue;
+      }
+    }
+
+    // 4. Karaoke Subtitles
+    list.push({
+      id: 'cue_subs',
+      type: 'karaoke_subs',
+      icon: '⚡',
+      label: `Progressive Subtitles (${stylePreset === 'dynamic_pop' ? 'Electric Cyan' : stylePreset === 'clean_white' ? 'Clean White' : 'TikTok Gold'})`,
+      timeRange: '0.0s - End',
+      sfx: 'Karaoke Sync',
+      detail: 'Progressive word-by-word karaoke with safe-zone positioning',
+      badgeColor: 'border-emerald-500/40 bg-emerald-950/60 text-emerald-300'
+    });
+
+    // 5. Outro Call to Action
+    if (clipDur >= 18) {
+      list.push({
+        id: 'cue_outro',
+        type: 'outro_cta',
+        icon: '🚀',
+        label: 'Outro Engagement CTA',
+        timeRange: `${(clipDur - 4.0).toFixed(1)}s - ${clipDur.toFixed(1)}s`,
+        sfx: 'Warm Chime',
+        detail: 'Follow for more divine insights',
+        badgeColor: 'border-amber-500/40 bg-amber-950/60 text-amber-300'
+      });
+    }
+
+    return list;
+  }, [activeClip.transcriptCues, activeClip.start, activeClip.end, headline, activeClip.customHeadline, activeClip.hook, activeClip.title, customSpeaker, customTopic, stylePreset]);
 
   // Hook banner visibility window
   const isHookVisible = enableHookBanner && (
@@ -941,7 +1108,7 @@ export const SubtitlesView: React.FC<SubtitlesViewProps> = ({
               <div className="flex items-center space-x-2">
                 <span className="text-[10px] text-cyan-300 bg-cyan-400/10 px-2 py-0.5 rounded border border-cyan-400/30 font-semibold flex items-center gap-1">
                   <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-ping inline-block" />
-                  3 Active Cues
+                  {detectedMotionCues.length} Active Cues
                 </span>
               </div>
             </div>
@@ -950,35 +1117,57 @@ export const SubtitlesView: React.FC<SubtitlesViewProps> = ({
               Synthesizes physical spring physics typography, responsive lower-third speaker identifiers, and synchronized tactile sound effects directly onto the reframed vertical short.
             </p>
 
+            {/* Editable Speaker & Topic Config */}
+            <div className="grid grid-cols-2 gap-2.5 p-3 rounded-lg bg-slate-900/90 border border-cyan-400/20 text-xs">
+              <div>
+                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1 flex items-center gap-1">
+                  <User className="w-3 h-3 text-cyan-400" />
+                  Speaker Name
+                </label>
+                <input
+                  type="text"
+                  value={customSpeaker}
+                  onChange={(e) => setCustomSpeaker(e.target.value)}
+                  placeholder="e.g. Pastor Bankie Olusina"
+                  className="w-full bg-slate-950 border border-white/10 rounded px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-cyan-400"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1 flex items-center gap-1">
+                  <Tag className="w-3 h-3 text-cyan-400" />
+                  Sermon Topic / Org
+                </label>
+                <input
+                  type="text"
+                  value={customTopic}
+                  onChange={(e) => setCustomTopic(e.target.value)}
+                  placeholder="e.g. Value Keys For Right Decisions"
+                  className="w-full bg-slate-950 border border-white/10 rounded px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-cyan-400"
+                />
+              </div>
+            </div>
+
             <div className="space-y-2 pt-1 border-t border-white/10">
-              <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                Active Visual Motion Layers:
+              <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center justify-between">
+                <span>Active Visual Motion Layers:</span>
+                <span className="text-[10px] text-cyan-400/80 font-mono">Dynamic AI Speech Analysis</span>
               </div>
               
-              <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
-                <div className="flex items-center justify-between p-2 rounded-lg bg-slate-900/80 border border-white/5 text-xs">
-                  <div className="flex items-center gap-2">
-                    <span className="text-amber-400 font-bold">🎯 0.0s - 3.8s</span>
-                    <span className="text-white font-semibold">Kinetic Hook Typography (Auto-fades to uncover face)</span>
+              <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1">
+                {detectedMotionCues.map((cue) => (
+                  <div key={cue.id} className="flex items-center justify-between p-2 rounded-lg bg-slate-900/80 border border-white/5 text-xs">
+                    <div className="flex items-center gap-2 overflow-hidden mr-2">
+                      <span className="font-bold text-amber-400 shrink-0 font-mono text-[11px]">{cue.timeRange}</span>
+                      <span className="text-white font-semibold truncate flex items-center gap-1">
+                        <span>{cue.icon}</span>
+                        <span className="truncate">{cue.label}</span>
+                      </span>
+                    </div>
+                    <span className={`text-[10px] px-2 py-0.5 rounded border shrink-0 ${cue.badgeColor}`}>
+                      SFX: {cue.sfx}
+                    </span>
                   </div>
-                  <span className="text-[10px] bg-amber-950 text-amber-300 px-2 py-0.5 rounded border border-amber-500/30">SFX: Whoosh Swish</span>
-                </div>
-
-                <div className="flex items-center justify-between p-2 rounded-lg bg-slate-900/80 border border-white/5 text-xs">
-                  <div className="flex items-center gap-2">
-                    <span className="text-cyan-400 font-bold">👤 4.0s - 7.5s</span>
-                    <span className="text-white font-semibold">Speaker Badge: {speakerName}</span>
-                  </div>
-                  <span className="text-[10px] bg-cyan-950 text-cyan-300 px-2 py-0.5 rounded border border-cyan-500/30">SFX: Acoustic Slide</span>
-                </div>
-
-                <div className="flex items-center justify-between p-2 rounded-lg bg-slate-900/80 border border-white/5 text-xs">
-                  <div className="flex items-center gap-2">
-                    <span className="text-emerald-400 font-bold">⚡ 0.0s - End</span>
-                    <span className="text-white font-semibold">Karaoke Dialogue: Progressive Underlined Subtitles</span>
-                  </div>
-                  <span className="text-[10px] bg-emerald-950 text-emerald-300 px-2 py-0.5 rounded border border-emerald-500/30">Karaoke Engine</span>
-                </div>
+                ))}
               </div>
             </div>
 
@@ -1113,9 +1302,9 @@ export const SubtitlesView: React.FC<SubtitlesViewProps> = ({
                     inputVid,
                     targetOut,
                     '--headline', cleanHeadline,
-                    '--speaker', speakerName,
-                    '--topic', speakerOrg || cleanHeadline,
-                    '--template', 'kinetic_hook.html',
+                    '--speaker', customSpeaker,
+                    '--topic', customTopic,
+                    '--template', 'motion_canvas.html',
                     '--preset', subtitlesState.stylePreset || activeClip.subtitlePreset || 'tiktok_bold'
                   ];
 

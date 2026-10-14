@@ -31,7 +31,14 @@ function parseArgs() {
     else if (args[i] === "--subsample") options.subsample = parseInt(args[++i], 10);
     else if (args[i] === "--width") options.width = parseInt(args[++i], 10);
     else if (args[i] === "--height") options.height = parseInt(args[++i], 10);
-    else if (args[i] === "--config") options.config = JSON.parse(args[++i]);
+    else if (args[i] === "--config") {
+      const cfgArg = args[++i];
+      if (fs.existsSync(cfgArg)) {
+        options.config = JSON.parse(fs.readFileSync(cfgArg, "utf-8"));
+      } else {
+        options.config = JSON.parse(cfgArg);
+      }
+    }
     else if (args[i] === "--no-alpha") options.alpha = false;
   }
   return options;
