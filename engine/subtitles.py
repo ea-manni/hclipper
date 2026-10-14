@@ -434,11 +434,242 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         img.save(output_png)
         return str(Path(output_png).resolve())
 
+    def generate_live_overlay_manifest(
+        self,
+        cues: List[Dict[str, Any]],
+        clip_duration: Optional[float],
+        output_dir: str,
+        style_preset: str = "tiktok_bold",
+        clip_start_offset: float = 0.0,
+        width: int = 1080,
+        height: int = 1920
+    ) -> str:
+        """
+        Generates pixel-identical Live Design subtitle frames (with rounded pill badge,
+        subtle glow borders, active word underline accent, and soft text drop shadow)
+        and outputs an FFmpeg concat demuxer manifest.txt.
+        """
+        out_p = Path(output_dir)
+        out_p.mkdir(parents=True, exist_ok=True)
+
+        font_file = str(self.font_path) if self.font_path.exists() else "C:/Windows/Fonts/segoeuib.ttf"
+        font_size = 56
+        font = ImageFont.truetype(font_file, font_size)
+
+        empty_frame = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+        empty_path = out_p / "empty.png"
+        empty_frame.save(empty_path, compress_level=1)
+
+        is_already_relative = False
+        if cues and clip_start_offset > 0.5:
+            first_cue_start = cues[0].get("start", 0.0)
+            if first_cue_start < clip_start_offset:
+                is_already_relative = True
+
+        effective_offset = 0.0 if is_already_relative else clip_start_offset
+
+        # 1. Clean cues
+        clean_cues = []
+        for c in sorted(cues, key=lambda x: float(x.get("start", 0.0))):
+            s = float(c.get("start", 0.0)) - effective_offset
+            e = float(c.get("end", s + 2.0)) - effective_offset
+            txt = c.get("text", "").replace(">>", "").strip()
+            txt = re.sub(r'\[.*?\]|\(.*?\)', '', txt).strip()
+
+            if not txt:
+                continue
+            if s < 0.0 and e < 0.15:
+                continue
+            if clip_duration and s >= clip_duration:
+                continue
+
+            rel_s = max(0.0, s)
+            rel_e = min(clip_duration, e) if clip_duration else e
+            if rel_e <= rel_s + 0.1:
+                rel_e = rel_s + 1.2
+
+            clean_cues.append({
+                "clean_start": rel_s,
+                "clean_end": rel_e,
+                "clean_text": txt,
+                "words": c.get("words")
+            })
+
+        # 2. Prevent overlapping cues
+        for idx in range(len(clean_cues) - 1):
+            if clean_cues[idx]["clean_end"] > clean_cues[idx + 1]["clean_start"]:
+                clean_cues[idx]["clean_end"] = max(clean_cues[idx]["clean_start"] + 0.2, clean_cues[idx + 1]["clean_start"])
+
+        # Preset styling matching Live Design in SubtitlesView.tsx
+        preset = (style_preset or "tiktok_bold").lower()
+        if preset == "dynamic_pop":
+            active_text = (103, 232, 249, 255)      # text-cyan-300
+            active_border = (34, 211, 238, 255)    # border-cyan-400
+            active_bg = (8, 47, 73, 245)           # bg-cyan-950/95
+            glow_c1 = (6, 182, 212, 45)
+            glow_c2 = (6, 182, 212, 95)
+        elif preset == "clean_white":
+            active_text = (252, 211, 77, 255)     # text-amber-300
+            active_border = (252, 211, 77, 255)
+            active_bg = None
+            glow_c1 = None
+            glow_c2 = None
+        else:  # tiktok_bold
+            active_text = (251, 191, 36, 255)     # text-amber-400
+            active_border = (245, 158, 11, 200)   # ring-amber-400/50
+            active_bg = (10, 10, 10, 220)          # bg-black/85
+            glow_c1 = (245, 158, 11, 40)
+            glow_c2 = (245, 158, 11, 85)
+
+        white_text = (255, 255, 255, 255)
+        shadow_color = (0, 0, 0, 220)
+
+        word_gap = 18
+        line_height = 80
+        max_line_width = 860
+        center_y = 1060
+
+        dummy_draw = ImageDraw.Draw(empty_frame)
+        timeline_events = []
+        frame_counter = 0
+
+        for cue in clean_cues:
+            words = [w.strip() for w in cue["clean_text"].upper().split() if w.strip()]
+            if not words:
+                continue
+
+            c_start = cue["clean_start"]
+            c_end = cue["clean_end"]
+            dur = max(0.15, c_end - c_start)
+            num_words = len(words)
+            time_per_word = dur / num_words
+
+            cue_words = cue.get("words", [])
+            has_word_ts = isinstance(cue_words, list) and len(cue_words) == num_words
+
+            # Wrap words into lines
+            lines = []
+            cur_line = []
+            cur_w = 0
+            for w in words:
+                bbox = dummy_draw.textbbox((0, 0), w, font=font)
+                w_len = (bbox[2] - bbox[0]) + 28
+                if cur_w + w_len + word_gap > max_line_width and cur_line:
+                    lines.append(cur_line)
+                    cur_line = [w]
+                    cur_w = w_len
+                else:
+                    cur_line.append(w)
+                    cur_w += w_len + word_gap
+            if cur_line:
+                lines.append(cur_line)
+
+            total_block_h = len(lines) * line_height
+            block_start_y = center_y - (total_block_h // 2)
+
+            for active_idx in range(num_words):
+                if has_word_ts:
+                    w_obj = cue_words[active_idx]
+                    w_s = max(c_start, float(w_obj.get("start", c_start + active_idx * time_per_word)) - effective_offset)
+                    w_e = min(c_end, float(w_obj.get("end", w_s + time_per_word)) - effective_offset)
+                else:
+                    w_s = c_start + (active_idx * time_per_word)
+                    w_e = c_start + ((active_idx + 1) * time_per_word)
+                if active_idx == num_words - 1:
+                    w_e = c_end
+
+                if w_e <= w_s:
+                    w_e = w_s + 0.1
+
+                img = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+                draw = ImageDraw.Draw(img)
+
+                flat_w_idx = 0
+                for l_idx, line_words in enumerate(lines):
+                    word_measurements = []
+                    for w in line_words:
+                        bbox = draw.textbbox((0, 0), w, font=font)
+                        w_w = bbox[2] - bbox[0]
+                        is_act = (flat_w_idx + len(word_measurements) == active_idx)
+                        if is_act and active_bg:
+                            w_w += 28
+                        word_measurements.append(w_w)
+
+                    total_w = sum(word_measurements) + (len(line_words) - 1) * word_gap
+                    start_x = (width - total_w) // 2
+                    y = block_start_y + l_idx * line_height
+
+                    cur_x = start_x
+                    for w_pos, w in enumerate(line_words):
+                        is_active = (flat_w_idx == active_idx)
+                        w_w = word_measurements[w_pos]
+
+                        if is_active:
+                            if active_bg:
+                                pill_x0 = cur_x
+                                pill_y0 = y - 6
+                                pill_x1 = cur_x + w_w
+                                pill_y1 = y + font_size + 4
+
+                                if glow_c1:
+                                    draw.rounded_rectangle([pill_x0 - 4, pill_y0 - 4, pill_x1 + 4, pill_y1 + 4], radius=14, outline=glow_c1, width=3)
+                                if glow_c2:
+                                    draw.rounded_rectangle([pill_x0 - 2, pill_y0 - 2, pill_x1 + 2, pill_y1 + 2], radius=12, outline=glow_c2, width=2)
+
+                                draw.rounded_rectangle([pill_x0, pill_y0, pill_x1, pill_y1], radius=10, fill=active_bg, outline=active_border, width=2)
+                                draw.rectangle([pill_x0 + 8, pill_y1 - 5, pill_x1 - 8, pill_y1 - 1], fill=active_border)
+                                draw.text((cur_x + 14, y), w, font=font, fill=active_text)
+                            else:
+                                draw.rectangle([cur_x + 2, y + font_size + 2, cur_x + w_w - 2, y + font_size + 6], fill=active_border)
+                                draw.text((cur_x, y), w, font=font, fill=active_text)
+                        else:
+                            draw.text((cur_x + 2, y + 3), w, font=font, fill=shadow_color)
+                            draw.text((cur_x, y), w, font=font, fill=white_text)
+
+                        cur_x += w_w + word_gap
+                        flat_w_idx += 1
+
+                frame_filename = f"f_{frame_counter:04d}.png"
+                frame_path = out_p / frame_filename
+                img.save(frame_path, compress_level=1)
+                timeline_events.append((w_s, w_e, frame_filename))
+                frame_counter += 1
+
+        manifest_path = out_p / "manifest.txt"
+        current_time = 0.0
+        manifest_lines = ["ffconcat version 1.0\n"]
+
+        for ev_start, ev_end, ev_file in timeline_events:
+            gap = ev_start - current_time
+            if gap > 0.05:
+                manifest_lines.append(f"file '{empty_path.name}'\n")
+                manifest_lines.append(f"duration {gap:.3f}\n")
+                current_time = ev_start
+
+            dur = ev_end - ev_start
+            if dur > 0.02:
+                manifest_lines.append(f"file '{ev_file}'\n")
+                manifest_lines.append(f"duration {dur:.3f}\n")
+                current_time = ev_end
+
+        if clip_duration and clip_duration > current_time:
+            gap = clip_duration - current_time
+            manifest_lines.append(f"file '{empty_path.name}'\n")
+            manifest_lines.append(f"duration {gap:.3f}\n")
+
+        manifest_lines.append(f"file '{empty_path.name}'\n")
+
+        with open(manifest_path, "w", encoding="utf-8") as f:
+            f.writelines(manifest_lines)
+
+        return str(manifest_path.resolve())
+
     def burn_subtitles_and_branding(
         self,
         video_path: str,
         output_path: str,
         ass_path: Optional[str] = None,
+        subtitle_manifest: Optional[str] = None,
         banner_png: Optional[str] = None,
         banner_duration: str = "first_5s",
         audio_dsp_options: Optional[Dict[str, Any]] = None,
@@ -446,9 +677,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None
     ) -> bool:
         """
-        Composites styled ASS animated subtitles, frosted hook banner overlay,
-        and broadcast audio DSP (highpass + denoise + -14 LUFS loudness)
-        onto a vertical short video using hardware-accelerated FFmpeg.
+        Composites styled Live Design subtitle overlays (or ASS subtitles),
+        frosted hook banner overlay, and broadcast audio DSP onto a vertical short video.
         """
         ffmpeg_bin = shutil.which("ffmpeg") or "ffmpeg"
         src_vid = Path(video_path).resolve()
@@ -461,6 +691,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         inputs = ["-i", str(src_vid)]
         filter_parts = []
         next_v = "[0:v]"
+        input_idx = 1
 
         # 1. Hook Banner Overlay Filter
         if banner_png and Path(banner_png).exists():
@@ -474,11 +705,17 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             else:  # full_clip
                 overlay_clause = "overlay=0:0:eof_action=repeat"
 
-            filter_parts.append(f"{next_v}[1:v]{overlay_clause}[v_banner]")
+            filter_parts.append(f"{next_v}[{input_idx}:v]{overlay_clause}[v_banner]")
             next_v = "[v_banner]"
+            input_idx += 1
 
-        # 2. ASS Subtitles Burn-in Filter
-        if ass_path and Path(ass_path).exists():
+        # 2. Live Design Subtitle Overlay Filter (Pixel-identical to Live Design preview)
+        if subtitle_manifest and Path(subtitle_manifest).exists():
+            inputs.extend(["-f", "concat", "-safe", "0", "-i", str(Path(subtitle_manifest).resolve())])
+            filter_parts.append(f"{next_v}[{input_idx}:v]overlay=0:0[v_sub]")
+            next_v = "[v_sub]"
+            input_idx += 1
+        elif ass_path and Path(ass_path).exists():
             ass_resolved = Path(ass_path).resolve()
             # Escape path for FFmpeg filter argument
             norm_ass = str(ass_resolved).replace("\\", "/").replace(":", "\\:")

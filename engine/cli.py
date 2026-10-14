@@ -512,10 +512,28 @@ def cmd_export_clip(args):
                 except Exception as e:
                     print(f"[cmd_export_clip] Whisper auto-sync note: {e}", flush=True)
 
+            overlay_manifest = None
             if cues:
-                ass_file = temp_dir / "clip_subtitles.ass"
                 clip_offset = 0.0 if clip_is_whisper else (float(start_time) if start_time is not None else 0.0)
                 clip_dur = (float(end_time) - float(start_time)) if (start_time is not None and end_time is not None) else None
+
+                # Generate Pixel-Identical Live Design Overlay Manifest
+                try:
+                    live_subs_dir = temp_dir / "live_subs"
+                    overlay_manifest = sub.generate_live_overlay_manifest(
+                        cues,
+                        clip_duration=clip_dur,
+                        output_dir=str(live_subs_dir),
+                        style_preset=getattr(args, "preset", "tiktok_bold"),
+                        clip_start_offset=clip_offset,
+                        width=out_w,
+                        height=out_h
+                    )
+                except Exception as e:
+                    print(f"[cmd_export_clip] Live overlay generation error ({e}), falling back to ASS", flush=True)
+
+                # Fallback ASS subtitles
+                ass_file = temp_dir / "clip_subtitles.ass"
                 sub.generate_ass(
                     cues,
                     str(ass_file),
@@ -554,6 +572,7 @@ def cmd_export_clip(args):
             str(reframed_temp),
             output_video,
             ass_path=ass_path,
+            subtitle_manifest=overlay_manifest,
             banner_png=banner_path,
             banner_duration=getattr(args, "banner_duration", "first_5s"),
             audio_dsp_options=audio_dsp_opts,
