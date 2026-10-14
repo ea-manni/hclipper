@@ -15,5 +15,5 @@ playwright>=1.40.0
 playwright-stealth>=1.0.0
 instagrapi>=2.0.0
 
-# Optional Audio/AI Acceleration (CTranslate2 / Whisper)
-# faster-whisper>=1.0.0
+# Audio/AI Transcription Engine (CTranslate2 / Whisper)
+faster-whisper>=1.0.0

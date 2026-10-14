@@ -121,6 +121,7 @@ export const SubtitlesView: React.FC<SubtitlesViewProps> = ({
   const [motionDetail, setMotionDetail] = useState('');
   const [renderMotionStatus, setRenderMotionStatus] = useState<string | null>(null);
   const [showRerenderMasterConfirm, setShowRerenderMasterConfirm] = useState(false);
+  const [isTranscribingWhisper, setIsTranscribingWhisper] = useState(false);
   const [previewMode, setPreviewMode] = useState<'design' | 'rendered'>(
     activeClip.isRendered ? 'rendered' : 'design'
   );
@@ -524,6 +525,30 @@ export const SubtitlesView: React.FC<SubtitlesViewProps> = ({
     updateActiveClip({ transcriptCues: newCues });
   };
 
+  const handleTranscribeWithWhisper = async () => {
+    if (!window.hclipper) return;
+    const targetVid = activeClip.renderedPath || (activeClip.id ? `clips/${activeClip.id}.mp4` : null) || sourceVideo;
+    if (!targetVid) return;
+
+    setIsTranscribingWhisper(true);
+    try {
+      const tempAss = `scratch/whisper_${activeClip.id || 'clip'}.ass`;
+      const res = await window.hclipper.runEngine('subtitles', [
+        targetVid,
+        tempAss,
+        '--preset', subtitlesState.stylePreset || activeClip.subtitlePreset || 'tiktok_bold'
+      ]);
+      const evt = res?.events?.find((e: any) => e.event === 'subtitles_result');
+      if (evt && evt.cues && evt.cues.length > 0) {
+        updateActiveClip({ transcriptCues: evt.cues });
+      }
+    } catch (e) {
+      console.error('Whisper transcription error:', e);
+    } finally {
+      setIsTranscribingWhisper(false);
+    }
+  };
+
   const handleSeekToCue = (startSec: number) => {
     if (videoRef.current) {
       videoRef.current.currentTime = startSec;
@@ -851,6 +876,24 @@ export const SubtitlesView: React.FC<SubtitlesViewProps> = ({
                 Spoken Transcript Cues (Click to Edit)
               </span>
               <div className="flex items-center space-x-2">
+                <button
+                  disabled={isTranscribingWhisper}
+                  onClick={handleTranscribeWithWhisper}
+                  className="px-2.5 py-1 bg-cyan-400/10 hover:bg-cyan-400/20 text-cyan-300 border border-cyan-400/30 text-[10px] font-semibold rounded flex items-center gap-1 transition-colors disabled:opacity-50"
+                  title="Transcribe speech with frame-perfect word timestamps using local faster-whisper"
+                >
+                  {isTranscribingWhisper ? (
+                    <>
+                      <Loader2 className="w-3 h-3 animate-spin text-cyan-400" />
+                      <span>Transcribing...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Zap className="w-3 h-3 text-cyan-400" />
+                      <span>Whisper AI Sync</span>
+                    </>
+                  )}
+                </button>
                 <button
                   onClick={handlePopulateDefaultCues}
                   className="px-2.5 py-1 bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10 text-[10px] font-semibold rounded transition-colors"

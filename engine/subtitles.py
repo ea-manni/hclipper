@@ -14,9 +14,10 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple, Callable
 import shutil
 
+import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
-from engine import FONTS_DIR, BRANDING_DIR, HARDWARE_ENCODER
+from engine import FONTS_DIR, BRANDING_DIR, HARDWARE_ENCODER, BIN_DIR
 
 class SubtitleEngine:
     """
@@ -105,7 +106,8 @@ class SubtitleEngine:
     def transcribe_with_whisper(
         self,
         audio_or_video: str,
-        model_size: str = "base"
+        model_size: str = "base",
+        language: Optional[str] = "en",
     ) -> List[Dict[str, Any]]:
         """
         Transcribes speech using faster-whisper if available.
@@ -119,8 +121,33 @@ class SubtitleEngine:
                 "or supply a pre-extracted .vtt/.srt subtitle file."
             )
 
+        # Decode audio directly via local FFmpeg to avoid PyAV open() version incompatibilities
+        ffmpeg_bin = BIN_DIR / "ffmpeg.exe" if (BIN_DIR / "ffmpeg.exe").exists() else Path("ffmpeg")
+        cmd = [
+            str(ffmpeg_bin),
+            "-nostdin",
+            "-threads", "0",
+            "-i", str(audio_or_video),
+            "-f", "s16le",
+            "-ac", "1",
+            "-acodec", "pcm_s16le",
+            "-ar", "16000",
+            "-"
+        ]
+        try:
+            raw_audio = subprocess.check_output(cmd, stderr=subprocess.DEVNULL)
+            audio_array = np.frombuffer(raw_audio, np.int16).flatten().astype(np.float32) / 32768.0
+        except Exception as e:
+            print(f"[SubtitleEngine] Warning: FFmpeg audio decode failed ({e}), falling back to direct path", flush=True)
+            audio_array = str(audio_or_video)
+
         model = WhisperModel(model_size, device="cpu", compute_type="int8")
-        segments, _ = model.transcribe(str(audio_or_video), word_timestamps=True)
+        segments, _ = model.transcribe(
+            audio_array,
+            word_timestamps=True,
+            language=language,
+            vad_filter=True,
+        )
 
         cues = []
         for segment in segments:
@@ -161,24 +188,24 @@ class SubtitleEngine:
         if preset == "dynamic_pop":
             active_color = highlight_color or "&H00FFFF00&"  # Electric Neon Cyan (BGR)
             style_primary = "&H00FFFFFF&"
-            font_size = 56
+            font_size = 60
             margin_v = 750
-            outline = 5
-            shadow = 2
+            outline = 1
+            shadow = 3
         elif preset == "clean_white":
-            active_color = highlight_color or "&H0000D4FF&"  # Soft gold highlight
+            active_color = highlight_color or "&H0024BFFB&"  # Soft gold highlight
             style_primary = "&H00FFFFFF&"
-            font_size = 52
+            font_size = 58
             margin_v = 750
-            outline = 4
-            shadow = 2
-        else:  # tiktok_bold
-            active_color = highlight_color or "&H0000D4FF&"  # Vibrant Gold (BGR)
+            outline = 1
+            shadow = 3
+        else:  # tiktok_bold (Live Design Style)
+            active_color = highlight_color or "&H0024BFFB&"  # Amber Gold (#FBBF24 / BGR: &H0024BFFB&)
             style_primary = "&H00FFFFFF&"
-            font_size = 54
+            font_size = 60
             margin_v = 750
-            outline = 5
-            shadow = 2
+            outline = 1
+            shadow = 3
 
         dialogues = []
 
@@ -262,16 +289,11 @@ class SubtitleEngine:
                     phrase_parts = []
                     for ci, cw in enumerate(chunk):
                         if ci == i:
-                            if preset == "dynamic_pop":
-                                phrase_parts.append(f"{{\\c{active_color}}}{{\\u1}}{{\\fscx114\\fscy114}}{cw}{{\\fscx100\\fscy100}}{{\\u0}}{{\\c{style_primary}}}")
-                            elif preset == "clean_white":
-                                phrase_parts.append(f"{{\\c{active_color}}}{{\\u1}}{{\\fscx108\\fscy108}}{cw}{{\\fscx100\\fscy100}}{{\\u0}}{{\\c{style_primary}}}")
-                            else:  # tiktok_bold
-                                phrase_parts.append(f"{{\\c{active_color}}}{{\\u1}}{{\\fscx112\\fscy112}}{cw}{{\\fscx100\\fscy100}}{{\\u0}}{{\\c{style_primary}}}")
+                            phrase_parts.append(f"{{\\c{active_color}}}{{\\u1}}{{\\fscx108\\fscy108}}{cw}{{\\fscx100\\fscy100}}{{\\u0}}{{\\c{style_primary}}}")
                         else:
                             phrase_parts.append(cw)
 
-                    formatted_line = " ".join(phrase_parts)
+                    formatted_line = "{\\blur2.5}" + " ".join(phrase_parts)
                     dialogues.append(
                         f"Dialogue: 0,{self._sec_to_ass(w_start)},{self._sec_to_ass(w_end)},Default,,0,0,0,,{formatted_line}"
                     )
@@ -285,7 +307,7 @@ PlayResY: 1920
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Default,{self.font_name},{font_size},{style_primary},{active_color},&H00000000,&H80000000,-1,0,0,0,100,100,1,0,1,{outline},{shadow},2,60,60,{margin_v},1
+Style: Default,{self.font_name},{font_size},{style_primary},{active_color},&H00000000,&H00000000,-1,0,0,0,100,100,0,0,1,{outline},{shadow},2,60,60,{margin_v},1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text

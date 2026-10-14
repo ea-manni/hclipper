@@ -192,7 +192,7 @@ def cmd_subtitles(args):
 
     ass_path = sub.generate_ass(cues, args.output, style_preset=args.preset)
     if args.json:
-        emit_json("subtitles_result", {"ass_file": ass_path, "cues_count": len(cues)})
+        emit_json("subtitles_result", {"ass_file": ass_path, "cues_count": len(cues), "cues": cues})
     else:
         print(f"Generated ASS subtitles at {ass_path} ({len(cues)} cues)")
 
@@ -499,9 +499,22 @@ def cmd_export_clip(args):
                         cues = sub.parse_vtt_file(str(cand2))
                         break
 
+            # If cues are missing or lack word-level timestamps, transcribe reframed_temp with faster-whisper
+            has_word_timestamps = any(isinstance(c.get("words"), list) and len(c.get("words")) > 0 for c in cues)
+            clip_is_whisper = False
+            if not cues or not has_word_timestamps:
+                try:
+                    print("[cmd_export_clip] Generating frame-perfect word timestamps with faster-whisper...", flush=True)
+                    whisper_cues = sub.transcribe_with_whisper(str(reframed_temp), language="en")
+                    if whisper_cues:
+                        cues = whisper_cues
+                        clip_is_whisper = True
+                except Exception as e:
+                    print(f"[cmd_export_clip] Whisper auto-sync note: {e}", flush=True)
+
             if cues:
                 ass_file = temp_dir / "clip_subtitles.ass"
-                clip_offset = float(start_time) if start_time is not None else 0.0
+                clip_offset = 0.0 if clip_is_whisper else (float(start_time) if start_time is not None else 0.0)
                 clip_dur = (float(end_time) - float(start_time)) if (start_time is not None and end_time is not None) else None
                 sub.generate_ass(
                     cues,
