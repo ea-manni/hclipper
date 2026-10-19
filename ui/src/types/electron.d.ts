@@ -9,6 +9,8 @@ export interface HclipperAPI {
     events?: any[];
     code?: number;
     output?: string;
+    error?: string;
+    stderr?: string;
   }>;
   cancelJob: (jobId: string) => Promise<boolean>;
   readQueue: () => Promise<any[]>;

@@ -8,6 +8,7 @@ media processing pipeline headless. Supports JSON-RPC stdout output for Electron
 
 import sys
 import os
+import re
 import json
 import argparse
 from pathlib import Path
@@ -69,7 +70,7 @@ def cmd_download(args):
     try:
         result = downloader.download(
             args.url,
-            download_subs=not args.no_subs,
+            download_subs=getattr(args, "with_subs", False),
             cookies_from_browser=getattr(args, "cookies_from_browser", None),
             cookiefile=getattr(args, "cookies", None),
             progress_callback=on_progress
@@ -98,11 +99,15 @@ def cmd_trim(args):
     trimmer = TimelineTrimmer()
     if args.cadence:
         print("Executing cadence-preserving silence trimming...")
+        start_t = getattr(args, "start", None)
+        end_t = getattr(args, "end", None)
         res = trimmer.cadence_silence_trim(
             args.input,
             args.output,
             noise_threshold=args.threshold,
-            min_silence=args.min_silence
+            min_silence=args.min_silence,
+            start_sec=float(start_t) if start_t is not None else None,
+            end_sec=float(end_t) if end_t is not None else None
         )
         if args.json:
             emit_json("trim_result", res)
@@ -275,25 +280,32 @@ def cmd_login(args):
             print(f"Login failed: {e}")
 
 def cmd_highlights(args):
-    from engine.highlight_detector import HighlightScout
-    scout = HighlightScout(provider=args.provider, api_key=args.api_key, model=args.model)
-    transcript_text = ""
-    if args.input and os.path.exists(args.input):
-        with open(args.input, "r", encoding="utf-8", errors="replace") as f:
-            transcript_text = f.read()
-    elif args.text:
-        transcript_text = args.text
+    try:
+        from engine.highlight_detector import HighlightScout
+        scout = HighlightScout(provider=args.provider, api_key=args.api_key, model=args.model)
+        transcript_text = ""
+        if args.input and os.path.exists(args.input):
+            with open(args.input, "r", encoding="utf-8", errors="replace") as f:
+                transcript_text = f.read()
+        elif args.text:
+            transcript_text = args.text
 
-    clips = scout.analyze_transcript(
-        transcript_text=transcript_text,
-        video_path=getattr(args, "video", None),
-        count=getattr(args, "count", 5),
-        duration=getattr(args, "duration", "standard")
-    )
-    if args.json:
-        emit_json("highlights_result", {"clips": clips})
-    else:
-        print(json.dumps(clips, indent=2))
+        clips = scout.analyze_transcript(
+            transcript_text=transcript_text,
+            video_path=getattr(args, "video", None),
+            count=getattr(args, "count", 5),
+            duration=getattr(args, "duration", "standard")
+        )
+        if args.json:
+            emit_json("highlights_result", {"clips": clips})
+        else:
+            print(json.dumps(clips, indent=2))
+    except Exception as e:
+        if args.json:
+            emit_json("highlights_result", {"clips": [], "error": str(e)})
+        else:
+            print(f"Highlight scouting error: {e}", file=sys.stderr)
+        sys.exit(1)
 
 def cmd_session_status(args):
     publisher = SocialPublisher()
@@ -306,10 +318,15 @@ def cmd_session_status(args):
 def cmd_motion(args):
     from engine.motion.pipeline import DynamicMotionPipeline
     from engine.subtitles import SubtitleEngine
+    from engine.reframe import AutoReframer
     import tempfile
     try:
         pipeline = DynamicMotionPipeline()
         sub = SubtitleEngine()
+        reframer = AutoReframer()
+
+        input_video = reframer._resolve_video_path(args.input)
+        output_video = reframer._resolve_output_path(args.output)
 
         # Check for transcript cues to burn synchronized subtitles into dynamic motion clip
         ass_path = None
@@ -358,14 +375,30 @@ def cmd_motion(args):
         topic_val = getattr(args, "topic", None) or ""
         topic_val = re.sub(r'\[.*?\]|\(.*?\)', '', topic_val).strip()
 
+        custom_cues = None
+        if getattr(args, "custom_cues", None):
+            raw_cc = str(args.custom_cues).strip()
+            if os.path.isfile(raw_cc):
+                try:
+                    with open(raw_cc, "r", encoding="utf-8") as f:
+                        custom_cues = json.load(f)
+                except Exception as e:
+                    print(f"[cmd_motion] Failed to parse custom_cues file {raw_cc}: {e}", flush=True)
+            else:
+                try:
+                    custom_cues = json.loads(raw_cc)
+                except Exception:
+                    pass
+
         out = pipeline.process_clip(
-            video_path=args.input,
-            output_path=args.output,
+            video_path=input_video,
+            output_path=output_video,
             transcript_cues=cues,
             clip_headline=getattr(args, "headline", None) or "",
             speaker=speaker_val,
             topic=topic_val,
-            template_name=getattr(args, "template", None) or "motion_canvas.html",
+            custom_cues=custom_cues,
+            template_name=getattr(args, "template", None) or "collage_motion.html",
             subtitle_ass_path=ass_path
         )
 
@@ -465,6 +498,8 @@ def cmd_export_clip(args):
             progress_callback=lambda p: on_progress({"phase": "reframing", "percent": 25.0 + (p.get("percent", 0.0) * 0.35)})
         )
 
+        actual_clip_dur = trimmer.get_duration(str(reframed_temp))
+
         # 3. Generate Subtitles ASS file
         ass_path = None
         if not getattr(args, "no_subs", False):
@@ -499,10 +534,11 @@ def cmd_export_clip(args):
                         cues = sub.parse_vtt_file(str(cand2))
                         break
 
-            # If cues are missing or lack word-level timestamps, transcribe reframed_temp with faster-whisper
+            # If cues are missing, lack word timestamps, or cadence trimming altered the speech timing,
+            # transcribe reframed_temp with faster-whisper to guarantee frame-perfect word-level sync.
             has_word_timestamps = any(isinstance(c.get("words"), list) and len(c.get("words")) > 0 for c in cues)
             clip_is_whisper = False
-            if not cues or not has_word_timestamps:
+            if getattr(args, "cadence", False) or not cues or not has_word_timestamps:
                 try:
                     print("[cmd_export_clip] Generating frame-perfect word timestamps with faster-whisper...", flush=True)
                     whisper_cues = sub.transcribe_with_whisper(str(reframed_temp), language="en")
@@ -514,8 +550,8 @@ def cmd_export_clip(args):
 
             overlay_manifest = None
             if cues:
-                clip_offset = 0.0 if clip_is_whisper else (float(start_time) if start_time is not None else 0.0)
-                clip_dur = (float(end_time) - float(start_time)) if (start_time is not None and end_time is not None) else None
+                clip_offset = 0.0 if (clip_is_whisper or getattr(args, "cadence", False)) else (float(start_time) if start_time is not None else 0.0)
+                clip_dur = actual_clip_dur if (actual_clip_dur and actual_clip_dur > 0) else ((float(end_time) - float(start_time)) if (start_time is not None and end_time is not None) else None)
 
                 # Generate Pixel-Identical Live Design Overlay Manifest
                 try:
@@ -543,10 +579,13 @@ def cmd_export_clip(args):
                 )
                 ass_path = str(ass_file)
 
-        # 4. Generate Hook Banner PNG
+        # 4. Generate Hook Banner / Social Pill PNG
         banner_path = None
         headline = getattr(args, "headline", "")
-        if not getattr(args, "no_banner", False) and headline:
+        social_handle = getattr(args, "social_handle", None)
+        social_platforms = getattr(args, "social_platforms", "tiktok,instagram,youtube")
+        social_handles_json = getattr(args, "social_handles_json", None)
+        if not getattr(args, "no_banner", False) and (headline or social_handle or social_handles_json):
             on_progress({"phase": "banner", "percent": 75})
             banner_file = temp_dir / "hook_banner.png"
             sub.create_hook_banner(
@@ -555,7 +594,9 @@ def cmd_export_clip(args):
                 banner_style=getattr(args, "banner_style", "frosted_gold"),
                 width=out_w,
                 height=out_h,
-                social_pill_text=getattr(args, "social_handle", None)
+                social_pill_text=social_handle,
+                social_platforms=social_platforms,
+                social_handles_json=social_handles_json
             )
             banner_path = str(banner_file)
 
@@ -590,7 +631,7 @@ def cmd_export_clip(args):
                 "filename": file_name,
                 "title": clean_title,
                 "caption": f"{clean_title}\\n\\n#Shorts #Reels #TikTok",
-                "duration": f"{round(float(end_time) - float(start_time))}s" if (start_time is not None and end_time is not None) else "30s",
+                "duration": f"{round(actual_clip_dur)}s" if actual_clip_dur > 0 else (f"{round(float(end_time) - float(start_time))}s" if (start_time is not None and end_time is not None) else "30s"),
                 "status": {
                     "youtube": "pending",
                     "instagram": "pending",
@@ -742,6 +783,7 @@ def main():
     p_mo.add_argument("--template", default="kinetic_hook.html", help="Motion template name")
     p_mo.add_argument("--vtt", help="Path to WebVTT/SRT file")
     p_mo.add_argument("--text-cues", help="JSON encoded transcript cues")
+    p_mo.add_argument("--custom-cues", help="JSON encoded custom motion cues (HyperFrames + Collage)")
     p_mo.add_argument("--preset", default="tiktok_bold", help="Subtitle animation style preset")
     p_mo.add_argument("--no-subs", action="store_true", help="Omit subtitles")
     p_mo.set_defaults(func=cmd_motion)
@@ -760,6 +802,8 @@ def main():
     p_ec.add_argument("--banner-duration", default="first_5s", choices=["first_3s", "first_5s", "full_clip"], help="Banner on-screen duration")
     p_ec.add_argument("--no-banner", action="store_true", help="Omit top hook banner")
     p_ec.add_argument("--social-handle", help="Social handle text for bottom badge")
+    p_ec.add_argument("--social-platforms", default="tiktok,instagram,youtube", help="Comma-separated platform icons to render (e.g. tiktok,instagram,youtube)")
+    p_ec.add_argument("--social-handles-json", help="JSON encoded structured social handle capsules")
     p_ec.add_argument("--preset", default="tiktok_bold", choices=["tiktok_bold", "dynamic_pop", "clean_white"], help="Subtitle animation style preset")
     p_ec.add_argument("--no-subs", action="store_true", help="Omit subtitles")
     p_ec.add_argument("--vtt", help="Path to WebVTT/SRT file")

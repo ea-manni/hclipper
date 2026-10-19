@@ -253,7 +253,13 @@ ipcMain.handle('hclipper:run-engine', (event, { command, args = [], jobId = null
 
     const pythonDir = path.dirname(pythonExe);
     const pythonScripts = path.join(pythonDir, 'Scripts');
-    const extraPaths = [binDir, pythonDir, pythonScripts].filter(p => fs.existsSync(p));
+    const nodeDirs = [
+      'C:\\Program Files\\nodejs',
+      'C:\\Program Files (x86)\\nodejs',
+      path.join(os.homedir(), 'AppData', 'Roaming', 'npm'),
+      path.dirname(process.execPath)
+    ];
+    const extraPaths = [binDir, pythonDir, pythonScripts, ...nodeDirs].filter(p => fs.existsSync(p));
     if (extraPaths.length > 0) {
       childEnv.PATH = `${extraPaths.join(path.delimiter)}${path.delimiter}${childEnv.PATH || ''}`;
     }
@@ -262,7 +268,7 @@ ipcMain.handle('hclipper:run-engine', (event, { command, args = [], jobId = null
     const tempFilesToClean = [];
     const processedArgs = [...args];
     for (let i = 0; i < processedArgs.length; i++) {
-      if (processedArgs[i] === '--text-cues' && i + 1 < processedArgs.length) {
+      if ((processedArgs[i] === '--text-cues' || processedArgs[i] === '--custom-cues') && i + 1 < processedArgs.length) {
         const val = processedArgs[i + 1];
         if (typeof val === 'string' && (val.trim().startsWith('[') || val.trim().startsWith('{'))) {
           try {
@@ -304,46 +310,56 @@ ipcMain.handle('hclipper:run-engine', (event, { command, args = [], jobId = null
 
     let rawOutput = '';
     let parsedEvents = [];
+    let stdoutBuffer = '';
+
+    const handleStdoutLine = (line) => {
+      const trimmed = line.trim();
+      if (!trimmed) return;
+
+      if (trimmed.includes('__HCLIPPER_JSON__')) {
+        try {
+          const jsonPart = trimmed.split('__HCLIPPER_JSON__')[1].trim();
+          const parsed = JSON.parse(jsonPart);
+          parsedEvents.push(parsed);
+          if (mainWindow) {
+            mainWindow.webContents.send('hclipper:engine-event', {
+              jobId: currentJobId,
+              command,
+              ...parsed
+            });
+          }
+        } catch (e) {
+          console.error('[main.cjs] JSON parse error in event:', e.message);
+        }
+      } else {
+        // Stream raw stdout lines (yt-dlp, ffmpeg, engine logs) to renderer
+        if (mainWindow) {
+          mainWindow.webContents.send('hclipper:engine-log', {
+            jobId: currentJobId,
+            level: 'stdout',
+            text: trimmed
+          });
+        }
+      }
+    };
 
     child.stdout.on('data', (data) => {
       const text = data.toString();
       rawOutput += text;
+      stdoutBuffer += text;
 
-      const lines = text.split('\n');
+      const lines = stdoutBuffer.split(/\r?\n/);
+      stdoutBuffer = lines.pop() || '';
+
       for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed) continue;
-
-        if (trimmed.includes('__HCLIPPER_JSON__')) {
-          try {
-            const jsonPart = trimmed.split('__HCLIPPER_JSON__')[1].trim();
-            const parsed = JSON.parse(jsonPart);
-            parsedEvents.push(parsed);
-            if (mainWindow) {
-              mainWindow.webContents.send('hclipper:engine-event', {
-                jobId: currentJobId,
-                command,
-                ...parsed
-              });
-            }
-          } catch (e) {
-            // Ignore parse error
-          }
-        } else {
-          // Stream raw stdout lines (yt-dlp, ffmpeg, engine logs) to renderer
-          if (mainWindow) {
-            mainWindow.webContents.send('hclipper:engine-log', {
-              jobId: currentJobId,
-              level: 'stdout',
-              text: trimmed
-            });
-          }
-        }
+        handleStdoutLine(line);
       }
     });
 
+    let rawStderr = '';
     child.stderr.on('data', (data) => {
       const errText = data.toString();
+      rawStderr += errText;
       const lines = errText.split('\n');
       for (const line of lines) {
         const trimmed = line.trim();
@@ -358,6 +374,10 @@ ipcMain.handle('hclipper:run-engine', (event, { command, args = [], jobId = null
     });
 
     child.on('close', (code) => {
+      if (stdoutBuffer && stdoutBuffer.trim()) {
+        handleStdoutLine(stdoutBuffer.trim());
+        stdoutBuffer = '';
+      }
       cleanupTempFiles();
       activeJobs.delete(currentJobId);
       if (code === 0) {
@@ -370,7 +390,10 @@ ipcMain.handle('hclipper:run-engine', (event, { command, args = [], jobId = null
             text: `Process finished with exit code ${code}`
           });
         }
-        resolve({ success: false, jobId: currentJobId, code, output: rawOutput });
+        const errEvent = parsedEvents.find(e => e.event === 'error' || e.error || (e.event === 'motion_result' && e.error) || (e.event === 'highlights_result' && e.error));
+        const stderrLastLine = rawStderr.trim().split(/\r?\n/).filter(Boolean).pop();
+        const errorMsg = errEvent?.error || errEvent?.detail || stderrLastLine || `Engine process finished with exit code ${code}`;
+        resolve({ success: false, jobId: currentJobId, code, error: errorMsg, events: parsedEvents, output: rawOutput });
       }
     });
 
@@ -600,19 +623,16 @@ ipcMain.handle('hclipper:resolve-media-url', async (event, rawPath) => {
     return rawPath;
   }
 
-  const workspaceRoot = 'C:\\Users\\Ebunoluwa\\Desktop\\hclipper';
+  const workspaceRoot = PROJECT_ROOT;
   const defaultVideos = path.join(app.getPath('videos'), 'hclipper');
   
   const candidates = [
     rawPath,
     path.isAbsolute(rawPath) ? rawPath : path.join(PROJECT_ROOT, rawPath),
-    path.isAbsolute(rawPath) ? rawPath : path.join(workspaceRoot, rawPath),
     path.isAbsolute(rawPath) ? rawPath : path.join(process.cwd(), rawPath),
     path.join(PROJECT_ROOT, 'clips', path.basename(rawPath)),
-    path.join(workspaceRoot, 'clips', path.basename(rawPath)),
     path.join(defaultVideos, 'clips', path.basename(rawPath)),
     path.join(PROJECT_ROOT, 'downloads', path.basename(rawPath)),
-    path.join(workspaceRoot, 'downloads', path.basename(rawPath)),
     path.join(defaultVideos, 'downloads', path.basename(rawPath))
   ];
 

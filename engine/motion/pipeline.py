@@ -10,6 +10,7 @@ import os
 import sys
 import json
 import wave
+import shutil
 import subprocess
 import numpy as np
 from pathlib import Path
@@ -33,6 +34,23 @@ class DynamicMotionPipeline:
         self.ffmpeg_bin = BIN_DIR / "ffmpeg.exe"
         if not self.ffmpeg_bin.exists():
             self.ffmpeg_bin = Path("ffmpeg")
+
+    def _resolve_node_binary(self) -> str:
+        found = shutil.which("node") or shutil.which("node.exe")
+        if found and os.path.exists(found):
+            return str(found)
+        candidates = [
+            r"C:\Program Files\nodejs\node.exe",
+            r"C:\Program Files (x86)\nodejs\node.exe",
+            os.path.expandvars(r"%LOCALAPPDATA%\Programs\node\node.exe"),
+            os.path.expandvars(r"%APPDATA%\Roaming\nvm\current\node.exe"),
+            os.path.expandvars(r"%APPDATA%\npm\node.cmd"),
+            r"C:\ProgramData\chocolatey\bin\node.exe",
+        ]
+        for c in candidates:
+            if os.path.isfile(c):
+                return c
+        return "node"
 
     def build_sfx_audio_track(self, cues: List[Dict[str, Any]], total_duration: float, output_wav: Path):
         """
@@ -87,7 +105,7 @@ class DynamicMotionPipeline:
         speaker: str = "",
         topic: str = "",
         custom_cues: Optional[List[Dict[str, Any]]] = None,
-        template_name: str = "human_motion.html",
+        template_name: str = "collage_motion.html",
         subtitle_ass_path: Optional[str] = None
     ) -> str:
         """
@@ -116,7 +134,22 @@ class DynamicMotionPipeline:
 
         # Generate or use provided cues dynamically
         if custom_cues:
-            cues = custom_cues
+            cues = []
+            for idx, raw_c in enumerate(custom_cues):
+                c = dict(raw_c)
+                if "start" not in c and "time_offset" in c:
+                    c["start"] = float(c["time_offset"])
+                if "start" not in c:
+                    c["start"] = float(idx * 5.0)
+                if "duration" not in c:
+                    c["duration"] = 3.8
+                if "id" not in c:
+                    c["id"] = f"cue_{idx + 1}"
+                if "type" not in c and "element" in c:
+                    c["type"] = c["element"]
+                if "element" not in c and "type" in c:
+                    c["element"] = c["type"]
+                cues.append(c)
         else:
             cues = self.detector.detect_cues(transcript_cues or [], clip_duration=duration)
             for c in cues:
@@ -132,7 +165,7 @@ class DynamicMotionPipeline:
 
         print(f"[DynamicMotionPipeline] Scheduled {len(cues)} bespoke motion events for {duration:.1f}s clip:")
         for idx, c in enumerate(cues):
-            print(f"  #{idx + 1} @ {c['start']:.1f}s - {c['type']} [SFX: {c.get('sfx')} @ {c.get('sfx_time', c['start']):.1f}s]")
+            print(f"  #{idx + 1} @ {c['start']:.1f}s - {c.get('type') or c.get('element')} [SFX: {c.get('sfx')} @ {c.get('sfx_time', c['start']):.1f}s]")
 
         manifest_config = {
             "duration": duration,
@@ -157,8 +190,9 @@ class DynamicMotionPipeline:
         with open(config_file, "w", encoding="utf-8") as cf:
             json.dump(manifest_config, cf, ensure_ascii=False)
 
+        node_bin = self._resolve_node_binary()
         render_cmd = [
-            "node",
+            node_bin,
             str(render_script),
             "--html", str(canvas_html),
             "--output", str(overlay_mov),
@@ -231,6 +265,7 @@ class DynamicMotionPipeline:
                 "-filter_complex", full_filter,
                 "-map", next_v,
                 "-map", "[outa]",
+                "-shortest",
                 *v_args,
                 "-c:a", "aac",
                 "-b:a", "192k",

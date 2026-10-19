@@ -189,6 +189,86 @@ def generate_whoosh():
     samples = (0.7 * noise + 0.3 * sweep) * envelope
     write_wav(SFX_DIR / "whoosh.wav", samples, sr)
 
+def generate_fast_whip_whoosh():
+    """Generates a high-velocity aerodynamic whip-whoosh for kinetic hook entrances."""
+    sr = 44100
+    duration = 0.22
+    t = np.linspace(0, duration, int(sr * duration), False)
+    noise = np.random.uniform(-1, 1, len(t))
+    envelope = np.sin(np.pi * (t / duration)) ** 3.5
+    sweep_freq = 950 * np.exp(-t * 9.0) + 180
+    sweep = np.sin(2 * np.pi * np.cumsum(sweep_freq) / sr)
+    samples = (0.75 * noise + 0.25 * sweep) * envelope
+    write_wav(SFX_DIR / "fast_whip_whoosh.wav", samples, sr)
+
+def generate_paper_tear():
+    """Generates a crisp, sharp paper/parchment tear for collage card reveals."""
+    sr = 44100
+    duration = 0.30
+    t = np.linspace(0, duration, int(sr * duration), False)
+    # Dual-stage tearing friction envelope
+    env = 0.7 * np.exp(-((t - 0.06) ** 2) / 0.0012) + 0.9 * np.exp(-((t - 0.16) ** 2) / 0.0022)
+    noise = np.random.uniform(-1, 1, len(t))
+    grain = np.sin(2 * np.pi * 3800 * t + np.random.uniform(-0.6, 0.6, len(t))) * 0.35
+    samples = (noise * 0.75 + grain) * env
+    write_wav(SFX_DIR / "paper_tear.wav", samples, sr)
+
+def generate_camera_shutter():
+    """Generates a crisp DSLR dual-blade click + mirror slap for polaroids and freeze-frames."""
+    sr = 44100
+    duration = 0.24
+    t = np.linspace(0, duration, int(sr * duration), False)
+    blade1 = np.sin(2 * np.pi * 3400 * t) * np.exp(-t * 260)
+    blade2 = np.sin(2 * np.pi * 2800 * (t - 0.06)) * np.exp(-(t - 0.06) * 180) * (t >= 0.06)
+    mirror = np.sin(2 * np.pi * 420 * (t - 0.11)) * np.exp(-(t - 0.11) * 45) * (t >= 0.11) * 0.45
+    noise = np.random.uniform(-0.5, 0.5, len(t)) * (np.exp(-t * 160) + np.exp(-(t - 0.06) * 140) * (t >= 0.06))
+    samples = blade1 * 0.4 + blade2 * 0.4 + mirror + noise * 0.2
+    write_wav(SFX_DIR / "camera_shutter.wav", samples, sr)
+
+def generate_stamp_thump():
+    """Generates a heavy rubber stamp dull impact with wooden housing resonance."""
+    sr = 44100
+    duration = 0.32
+    t = np.linspace(0, duration, int(sr * duration), False)
+    # Dull rubber impact
+    thud = np.sin(2 * np.pi * 110 * t) * np.exp(-t * 28)
+    # Wood handle resonance
+    wood = np.sin(2 * np.pi * 480 * t) * np.exp(-t * 60) * 0.4
+    # Friction burst
+    noise = np.random.uniform(-0.6, 0.6, len(t)) * np.exp(-t * 110) * 0.3
+    samples = thud * 0.6 + wood + noise
+    write_wav(SFX_DIR / "stamp_thump.wav", samples, sr)
+
+def generate_pencil_scribble():
+    """Generates a textured tactile pencil/graphite scribble on heavy cardstock."""
+    sr = 44100
+    duration = 0.28
+    t = np.linspace(0, duration, int(sr * duration), False)
+    # Triple-stroke friction envelope
+    env = (
+        0.75 * np.exp(-((t - 0.05) ** 2) / 0.0008) +
+        0.85 * np.exp(-((t - 0.13) ** 2) / 0.0009) +
+        0.90 * np.exp(-((t - 0.21) ** 2) / 0.0010)
+    )
+    noise = np.random.uniform(-1, 1, len(t))
+    tip_resonance = np.sin(2 * np.pi * 3200 * t) * 0.25
+    samples = (noise * 0.8 + tip_resonance) * env
+    write_wav(SFX_DIR / "pencil_scribble.wav", samples, sr)
+
+def generate_marker_squeak():
+    """Generates a fluorescent chisel-tip highlighter squeak with friction sweep."""
+    sr = 44100
+    duration = 0.22
+    t = np.linspace(0, duration, int(sr * duration), False)
+    # Friction resonance with chirp modulation
+    chirp = 1900 + 700 * np.sin(2 * np.pi * 14 * t)
+    phase = 2 * np.pi * np.cumsum(chirp) / sr
+    tone = np.sin(phase) * 0.45
+    noise = np.random.uniform(-0.5, 0.5, len(t)) * 0.3
+    envelope = np.sin(np.pi * (t / duration)) ** 1.8
+    samples = (tone + noise) * envelope
+    write_wav(SFX_DIR / "marker_squeak.wav", samples, sr)
+
 def ensure_sfx_library():
     """Builds all procedural sound effects."""
     generators = {
@@ -197,11 +277,15 @@ def ensure_sfx_library():
         "keyboard_click.wav": generate_keyboard_click,
         "keyboard_thock.wav": generate_keyboard_thock,
         "paper_slide.wav": generate_paper_slide,
+        "paper_tear.wav": generate_paper_tear,
+        "camera_shutter.wav": generate_camera_shutter,
+        "stamp_thump.wav": generate_stamp_thump,
         "warm_chime.wav": generate_warm_chime,
         "sub_thud.wav": generate_sub_thud,
         "red_scratch.wav": generate_red_scratch,
         "pop.wav": generate_bubble_pop,
         "whoosh.wav": generate_whoosh,
+        "fast_whip_whoosh.wav": generate_fast_whip_whoosh,
     }
     for filename, gen_fn in generators.items():
         gen_fn()
@@ -210,4 +294,5 @@ def ensure_sfx_library():
 if __name__ == "__main__":
     ensure_sfx_library()
     print(f"Generated comprehensive tactile SFX library in: {SFX_DIR}")
+
 

@@ -8,6 +8,8 @@ physics (deadzone damping + exponential smoothing).
 """
 
 import os
+import re
+import json
 import time
 import shutil
 import subprocess
@@ -47,8 +49,6 @@ class AutoReframer:
             Path.home() / "Videos" / "hclipper" / "downloads",
             Path.home() / "Videos" / "hclipper" / "clips",
             Path.home() / "Downloads",
-            Path("C:/Users/Ebunoluwa/Desktop/hclipper/downloads"),
-            Path("C:/Users/Ebunoluwa/Desktop/hclipper/clips"),
         ]
 
         # 1. Exact relative or filename check in candidate directories
@@ -58,7 +58,31 @@ class AutoReframer:
             if (d / resolved.name).exists():
                 return str((d / resolved.name).resolve())
 
-        # 2. Check for Master_Reframed_9_16.mp4
+        # 2. Check clips_queue.json for known clip file path
+        queue_file = PROJECT_ROOT / "clips_queue.json"
+        if queue_file.exists():
+            try:
+                with open(queue_file, "r", encoding="utf-8") as qf:
+                    items = json.load(qf)
+                    for item in items:
+                        if item.get("id") == resolved.stem or item.get("filename") == resolved.name:
+                            fp = item.get("file_path") or str(PROJECT_ROOT / "clips" / item.get("filename", ""))
+                            if os.path.exists(fp):
+                                return str(Path(fp).resolve())
+            except Exception:
+                pass
+
+        # 3. Check prefix match in clips/ (e.g. Clip1_... matches Clip1_KNOWING_THE_BIBLE_IS_NOT_PROOF_OF_SALVATION.mp4)
+        prefix_match = re.match(r'^(Clip\d+)_', resolved.stem, re.IGNORECASE)
+        if prefix_match:
+            prefix = prefix_match.group(1).lower()
+            clips_dir = PROJECT_ROOT / "clips"
+            if clips_dir.exists():
+                for f in sorted(clips_dir.glob("*.mp4")):
+                    if f.stem.lower().startswith(prefix + "_") and not f.stem.endswith("_Dynamic_Motion"):
+                        return str(f.resolve())
+
+        # 4. Check for Master_Reframed_9_16.mp4
         for d in candidate_dirs:
             master = d / "Master_Reframed_9_16.mp4"
             if master.exists():
@@ -328,6 +352,7 @@ class AutoReframer:
                 *vcodec_args,
                 "-c:a", "aac",
                 "-b:a", "192k",
+                "-shortest",
                 "-progress", "pipe:1",
                 str(final_out_str)
             ]

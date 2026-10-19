@@ -53,3 +53,4 @@ bin/
 *.zip
 *.tar.gz
 *.blockmap
+graphify-out/

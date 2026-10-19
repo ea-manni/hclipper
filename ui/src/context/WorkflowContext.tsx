@@ -56,6 +56,17 @@ export interface SubtitlesState {
   hookBannerDuration?: 'first_3s' | 'first_5s' | 'full_clip';
 }
 
+export interface MotionSuggestion {
+  id: string;
+  time_offset: number;
+  style: 'hyperframes' | 'collage';
+  element: 'kinetic_hook' | 'torn_paper_stat' | 'polaroid_card' | 'highlighter_swatch' | 'rubber_stamp' | 'chat_bubble' | 'wisdom_plaque' | 'brand_badge' | string;
+  text: string;
+  sfx: string;
+  position?: 'upper-center' | 'floating-right' | 'floating-left' | 'lower-third' | 'center' | string;
+  rationale?: string;
+}
+
 export interface ClipCandidate {
   id: string;
   start: number;
@@ -66,12 +77,14 @@ export interface ClipCandidate {
   reason: string;
   isRendered?: boolean;
   renderedPath?: string;
+  rawPlatePath?: string;
   customHeadline?: string;
   hookBannerPreset?: 'frosted_gold' | 'cyber_neon' | 'clean_minimal' | 'viral_warning' | 'kinetic_spring';
   subtitlePreset?: 'tiktok_bold' | 'dynamic_pop' | 'clean_white';
   durationAdvisory?: string;
   storyArc?: 'complete_story' | 'punchy_takeaway' | 'extended_narrative' | string;
   transcriptCues?: { start: number; end: number; text: string }[];
+  motionSuggestions?: MotionSuggestion[];
 }
 
 export interface Project {
@@ -882,7 +895,9 @@ export const WorkflowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       .replace(/_+/g, '_')
       .replace(/^_|_$/g, '')
       .substring(0, 50);
-    const outFilename = `Clip${idx + 1}_${cleanHeadline || 'Highlight'}.mp4`;
+    const outFilename = fullMaster 
+      ? `Clip${idx + 1}_${cleanHeadline || 'Highlight'}.mp4`
+      : `Clip${idx + 1}_${cleanHeadline || 'Highlight'}_raw916.mp4`;
     const clipsDir = settings.clipsDir || 'clips';
     const targetOut = `${clipsDir}/${outFilename}`;
 
@@ -974,14 +989,32 @@ export const WorkflowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           args.push('--text-cues', JSON.stringify(clip.transcriptCues));
         }
 
-        const socialHandleText = [
-          subtitlesState.tiktokHandle?.trim() ? `@${subtitlesState.tiktokHandle.trim().replace(/^@/, '')}` : null,
-          subtitlesState.youtubeHandle?.trim() ? `@${subtitlesState.youtubeHandle.trim().replace(/^@/, '')}` : null,
-          subtitlesState.instagramHandle?.trim() ? `@${subtitlesState.instagramHandle.trim().replace(/^@/, '')}` : null,
-        ].filter(Boolean).join(' • ');
+        const handleItems: { handle: string; platforms: string[] }[] = [];
+        if (subtitlesState.tiktokHandle?.trim()) {
+          handleItems.push({ handle: subtitlesState.tiktokHandle.trim().replace(/^@/, ''), platforms: ['tiktok'] });
+        }
+        if (subtitlesState.instagramHandle?.trim()) {
+          handleItems.push({ handle: subtitlesState.instagramHandle.trim().replace(/^@/, ''), platforms: ['instagram'] });
+        }
+        if (subtitlesState.youtubeHandle?.trim()) {
+          handleItems.push({ handle: subtitlesState.youtubeHandle.trim().replace(/^@/, ''), platforms: ['youtube'] });
+        }
 
-        if (subtitlesState.includeSocialPills && socialHandleText) {
-          args.push('--social-handle', socialHandleText);
+        const groupedHandles: { [handle: string]: string[] } = {};
+        handleItems.forEach((h) => {
+          if (!groupedHandles[h.handle]) groupedHandles[h.handle] = [];
+          groupedHandles[h.handle].push(...h.platforms);
+        });
+
+        const capsulesJson = Object.entries(groupedHandles).map(([handle, plats]) => ({
+          handle: `@${handle}`,
+          platforms: plats
+        }));
+
+        if (subtitlesState.includeSocialPills && capsulesJson.length > 0) {
+          args.push('--social-handles-json', JSON.stringify(capsulesJson));
+          const uniqueNames = capsulesJson.map(c => c.handle);
+          args.push('--social-handle', uniqueNames.join(' • '));
         }
 
         res = await window.hclipper.runEngine('export-clip', args);
@@ -1001,7 +1034,12 @@ export const WorkflowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         setClips((prev) => {
           const up = [...prev];
           if (up[idx]) {
-            up[idx] = { ...up[idx], isRendered: true, renderedPath: targetOut };
+            up[idx] = { 
+              ...up[idx], 
+              isRendered: true, 
+              renderedPath: targetOut,
+              rawPlatePath: fullMaster ? up[idx].rawPlatePath : targetOut
+            };
           }
           return up;
         });
@@ -1013,7 +1051,12 @@ export const WorkflowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
               const cur = prev[pIdx];
               const curClips = [...(cur.clips || [])];
               if (curClips[idx]) {
-                curClips[idx] = { ...curClips[idx], isRendered: true, renderedPath: targetOut };
+                curClips[idx] = { 
+                  ...curClips[idx], 
+                  isRendered: true, 
+                  renderedPath: targetOut,
+                  rawPlatePath: fullMaster ? curClips[idx].rawPlatePath : targetOut
+                };
               }
               const upProj = { ...cur, clips: curClips, updatedAt: new Date().toISOString() };
               const updatedProjects = [...prev];

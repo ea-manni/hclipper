@@ -11,7 +11,7 @@ import re
 import html
 import subprocess
 from pathlib import Path
-from typing import List, Dict, Any, Optional, Tuple, Callable
+from typing import List, Dict, Any, Optional, Tuple, Callable, Union
 import shutil
 
 import numpy as np
@@ -150,6 +150,7 @@ class SubtitleEngine:
         )
 
         cues = []
+        last_log = 0.0
         for segment in segments:
             cues.append({
                 "start": segment.start,
@@ -160,6 +161,11 @@ class SubtitleEngine:
                     for w in (segment.words or [])
                 ]
             })
+            if segment.end - last_log >= 30.0:
+                mins = int(segment.end // 60)
+                secs = int(segment.end % 60)
+                print(f"[transcribe] Whisper transcribed audio up to {mins:02d}:{secs:02d}...", flush=True)
+                last_log = segment.end
         return cues
 
     @staticmethod
@@ -329,106 +335,218 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         banner_top: int = 160,
         banner_height: int = 210,
         bg_opacity: int = 190,
-        social_pill_text: Optional[str] = None
+        social_pill_text: Optional[str] = None,
+        social_platforms: Optional[Union[List[str], str]] = None,
+        social_handles_json: Optional[Union[str, List[Dict[str, Any]]]] = None
     ) -> str:
         """
         Draws a modern frosted glass header banner with high-contrast
-        bold typography, user-selected visual theme, and optional social handle badge.
+        bold typography, user-selected visual theme, and official platform social pill badge
+        with crisp vector logos (TikTok, Instagram, YouTube) matching the Live Design.
         """
         img = Image.new("RGBA", (width, height), (0, 0, 0, 0))
-
-        # Determine theme colors
-        style = (banner_style or "frosted_gold").lower()
-        if style == "cyber_neon":
-            bg_fill = (6, 11, 24, min(bg_opacity + 20, 255))
-            top_border = (6, 182, 212, 255)       # Cyan
-            bottom_border = (168, 85, 247, 220)    # Purple
-            text_fill = (103, 232, 249, 255)       # Electric cyan
-            shadow_fill = (0, 0, 0, 220)
-        elif style == "clean_minimal":
-            bg_fill = (20, 24, 33, 175)
-            top_border = (255, 255, 255, 120)     # Clean white
-            bottom_border = (255, 255, 255, 60)
-            text_fill = (255, 255, 255, 255)       # Pure white
-            shadow_fill = (0, 0, 0, 180)
-        elif style == "viral_warning":
-            bg_fill = (245, 190, 11, 245)          # Warning yellow
-            top_border = (251, 191, 36, 255)
-            bottom_border = (180, 83, 9, 255)
-            text_fill = (15, 23, 42, 255)          # Pure dark text
-            shadow_fill = (255, 255, 255, 60)
-        else:  # frosted_gold
-            bg_fill = (10, 12, 16, bg_opacity)
-            top_border = (212, 175, 55, 200)      # Gold
-            bottom_border = (212, 175, 55, 140)
-            text_fill = (245, 200, 66, 255)       # Gold
-            shadow_fill = (0, 0, 0, 200)
-
-        # Frosted banner background
-        banner_box = [0, banner_top, width, banner_top + banner_height]
-        banner_layer = Image.new("RGBA", (width, height), (0, 0, 0, 0))
-        bd = ImageDraw.Draw(banner_layer)
-        bd.rectangle(banner_box, fill=bg_fill)
-
-        # Accent top and bottom borders
-        bd.line([(0, banner_top), (width, banner_top)], fill=top_border, width=3)
-        bd.line([(0, banner_top + banner_height), (width, banner_top + banner_height)], fill=bottom_border, width=2)
-        img = Image.alpha_composite(img, banner_layer)
-
-        # Text rendering
-        draw = ImageDraw.Draw(img)
         font_file = str(self.font_path) if self.font_path.exists() else "C:/Windows/Fonts/segoeuib.ttf"
-        font = ImageFont.truetype(font_file, 56)
 
-        headline = headline_text.upper().strip()
-        # Wrap words to max 2 lines
-        words = headline.split()
-        lines = []
-        cur = []
-        for w in words:
-            if len(" ".join(cur + [w])) > 24 and cur:
-                lines.append(" ".join(cur))
-                cur = [w]
-            else:
-                cur.append(w)
-        if cur:
-            lines.append(" ".join(cur))
+        # 1. Render Top Header Banner if headline_text is non-empty
+        headline = (headline_text or "").upper().strip()
+        if headline:
+            style = (banner_style or "frosted_gold").lower()
+            if style == "cyber_neon":
+                bg_fill = (6, 11, 24, min(bg_opacity + 20, 255))
+                top_border = (6, 182, 212, 255)       # Cyan
+                bottom_border = (168, 85, 247, 220)    # Purple
+                text_fill = (103, 232, 249, 255)       # Electric cyan
+                shadow_fill = (0, 0, 0, 220)
+            elif style == "clean_minimal":
+                bg_fill = (20, 24, 33, 175)
+                top_border = (255, 255, 255, 120)     # Clean white
+                bottom_border = (255, 255, 255, 60)
+                text_fill = (255, 255, 255, 255)       # Pure white
+                shadow_fill = (0, 0, 0, 180)
+            elif style == "viral_warning":
+                bg_fill = (245, 190, 11, 245)          # Warning yellow
+                top_border = (251, 191, 36, 255)
+                bottom_border = (180, 83, 9, 255)
+                text_fill = (15, 23, 42, 255)          # Pure dark text
+                shadow_fill = (255, 255, 255, 60)
+            else:  # frosted_gold
+                bg_fill = (10, 12, 16, bg_opacity)
+                top_border = (212, 175, 55, 200)      # Gold
+                bottom_border = (212, 175, 55, 140)
+                text_fill = (245, 200, 66, 255)       # Gold
+                shadow_fill = (0, 0, 0, 200)
 
-        line_height = 68
-        total_text_h = len(lines) * line_height
-        start_y = banner_top + (banner_height - total_text_h) // 2
+            # Frosted banner background
+            banner_box = [0, banner_top, width, banner_top + banner_height]
+            banner_layer = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+            bd = ImageDraw.Draw(banner_layer)
+            bd.rectangle(banner_box, fill=bg_fill)
 
-        for idx, line in enumerate(lines):
-            bbox = draw.textbbox((0, 0), line, font=font)
-            text_w = bbox[2] - bbox[0]
-            x = (width - text_w) // 2
-            y = start_y + idx * line_height
+            # Accent top and bottom borders
+            bd.line([(0, banner_top), (width, banner_top)], fill=top_border, width=3)
+            bd.line([(0, banner_top + banner_height), (width, banner_top + banner_height)], fill=bottom_border, width=2)
+            img = Image.alpha_composite(img, banner_layer)
 
-            # Drop shadow
-            draw.text((x + 2, y + 2), line, font=font, fill=shadow_fill)
-            # Primary headline text
-            draw.text((x, y), line, font=font, fill=text_fill)
-
-        # Bottom Social Pill Badge if specified
-        if social_pill_text and social_pill_text.strip():
-            pill_str = social_pill_text.strip()
-            pill_font = ImageFont.truetype(font_file, 34)
-            pill_bbox = draw.textbbox((0, 0), pill_str, font=pill_font)
-            pill_text_w = pill_bbox[2] - pill_bbox[0]
-            pill_w = pill_text_w + 64
-            pill_h = 58
-            pill_x = (width - pill_w) // 2
-            pill_y = height - 260
-
-            pill_layer = Image.new("RGBA", (width, height), (0, 0, 0, 0))
-            pbd = ImageDraw.Draw(pill_layer)
-            # Rounded frosted glass pill
-            pbd.rounded_rectangle([pill_x, pill_y, pill_x + pill_w, pill_y + pill_h], radius=29, fill=(8, 12, 20, 220), outline=top_border, width=2)
-            img = Image.alpha_composite(img, pill_layer)
-
+            # Text rendering
             draw = ImageDraw.Draw(img)
-            # Text inside pill
-            draw.text((pill_x + 32, pill_y + 11), pill_str, font=pill_font, fill=(240, 245, 255, 255))
+            font = ImageFont.truetype(font_file, 56)
+
+            words = headline.split()
+            lines = []
+            cur = []
+            for w in words:
+                if len(" ".join(cur + [w])) > 24 and cur:
+                    lines.append(" ".join(cur))
+                    cur = [w]
+                else:
+                    cur.append(w)
+            if cur:
+                lines.append(" ".join(cur))
+
+            line_height = 68
+            total_text_h = len(lines) * line_height
+            start_y = banner_top + (banner_height - total_text_h) // 2
+
+            for idx, line in enumerate(lines):
+                bbox = draw.textbbox((0, 0), line, font=font)
+                text_w = bbox[2] - bbox[0]
+                x = (width - text_w) // 2
+                y = start_y + idx * line_height
+
+                draw.text((x + 2, y + 2), line, font=font, fill=shadow_fill)
+                draw.text((x, y), line, font=font, fill=text_fill)
+
+        # 2. Bottom Social Pill Badges (multi-capsule layout matching Live Design preview)
+        raw_capsules = []
+        if social_handles_json:
+            try:
+                if isinstance(social_handles_json, str):
+                    raw_capsules = json.loads(social_handles_json)
+                elif isinstance(social_handles_json, list):
+                    raw_capsules = social_handles_json
+            except Exception:
+                raw_capsules = []
+
+        if not raw_capsules and social_pill_text and social_pill_text.strip():
+            raw_str = social_pill_text.strip()
+            # If JSON passed in social_pill_text
+            if raw_str.startswith("[") and raw_str.endswith("]"):
+                try:
+                    raw_capsules = json.loads(raw_str)
+                except Exception:
+                    raw_capsules = []
+
+            if not raw_capsules:
+                # Split on bullet separator if present
+                parts = [p.strip() for p in raw_str.split("•") if p.strip()]
+                if social_platforms is None:
+                    plat_list = ["tiktok", "instagram", "youtube"]
+                elif isinstance(social_platforms, str):
+                    plat_list = [p.strip().lower() for p in social_platforms.split(",") if p.strip()]
+                else:
+                    plat_list = [str(p).strip().lower() for p in social_platforms if str(p).strip()]
+
+                if len(parts) <= 1:
+                    raw_capsules.append({"handle": parts[0] if parts else raw_str, "platforms": plat_list})
+                else:
+                    for i, p in enumerate(parts):
+                        assigned_plat = [plat_list[i]] if i < len(plat_list) else plat_list
+                        raw_capsules.append({"handle": p, "platforms": assigned_plat})
+
+        if raw_capsules:
+            icons_dir = BRANDING_DIR / "icons"
+            if not icons_dir.exists():
+                icons_dir = Path("assets/branding/icons")
+
+            icon_size = 26
+            pill_font = ImageFont.truetype(font_file, 26)
+            dummy_draw = ImageDraw.Draw(img)
+
+            capsule_items = []
+            for item in raw_capsules:
+                h_name = str(item.get("handle", "")).strip()
+                if not h_name:
+                    continue
+                h_clean = f"@{h_name.lstrip('@')}"
+                p_names = item.get("platforms", [])
+                if isinstance(p_names, str):
+                    p_names = [p.strip().lower() for p in p_names.split(",") if p.strip()]
+
+                c_icons = []
+                for p_name in p_names:
+                    ic_path = icons_dir / f"{str(p_name).lower()}.png"
+                    if ic_path.exists():
+                        try:
+                            ic = Image.open(ic_path).convert("RGBA")
+                            ic = ic.resize((icon_size, icon_size), Image.Resampling.LANCZOS)
+                            c_icons.append(ic)
+                        except Exception:
+                            pass
+
+                bbox = dummy_draw.textbbox((0, 0), h_clean, font=pill_font)
+                text_w = bbox[2] - bbox[0]
+                text_h = bbox[3] - bbox[1]
+                icons_total_w = len(c_icons) * icon_size + max(0, len(c_icons) - 1) * 8 if c_icons else 0
+                padding_x = 20
+                pill_w = icons_total_w + (12 if c_icons else 0) + text_w + (padding_x * 2)
+
+                capsule_items.append({
+                    "handle": h_clean,
+                    "icons": c_icons,
+                    "bbox": bbox,
+                    "text_w": text_w,
+                    "text_h": text_h,
+                    "icons_w": icons_total_w,
+                    "pill_w": pill_w,
+                    "padding_x": padding_x
+                })
+
+            if capsule_items:
+                pill_h = 52
+                gap_between = 14
+                total_w = sum(c["pill_w"] for c in capsule_items) + (len(capsule_items) - 1) * gap_between
+                start_x = (width - total_w) // 2
+                pill_y = height - 120  # Safe zone bottom offset
+
+                pill_layer = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+                pbd = ImageDraw.Draw(pill_layer)
+
+                cur_x = start_x
+                for c in capsule_items:
+                    pw = c["pill_w"]
+                    # Drop shadow
+                    pbd.rounded_rectangle(
+                        [cur_x, pill_y + 2, cur_x + pw, pill_y + pill_h + 2],
+                        radius=pill_h // 2,
+                        fill=(0, 0, 0, 95)
+                    )
+                    # Frosted glass capsule: bg-black/80 backdrop-blur-md border border-white/20
+                    pbd.rounded_rectangle(
+                        [cur_x, pill_y, cur_x + pw, pill_y + pill_h],
+                        radius=pill_h // 2,
+                        fill=(10, 14, 22, 215),
+                        outline=(255, 255, 255, 45),
+                        width=1
+                    )
+                    cur_x += pw + gap_between
+
+                img = Image.alpha_composite(img, pill_layer)
+                draw = ImageDraw.Draw(img)
+
+                cur_x = start_x
+                for c in capsule_items:
+                    px = cur_x + c["padding_x"]
+                    icon_y = pill_y + (pill_h - icon_size) // 2
+                    for ic in c["icons"]:
+                        img.alpha_composite(ic, (px, icon_y))
+                        px += icon_size + 8
+                    if c["icons"]:
+                        px += (12 - 8)
+
+                    text_y = pill_y + (pill_h - c["text_h"]) // 2 - c["bbox"][1]
+                    draw.text((px + 1, text_y + 1), c["handle"], font=pill_font, fill=(0, 0, 0, 180))
+                    draw.text((px, text_y), c["handle"], font=pill_font, fill=(245, 248, 255, 250))
+                    cur_x += c["pill_w"] + gap_between
 
         Path(output_png).parent.mkdir(parents=True, exist_ok=True)
         img.save(output_png)
@@ -657,8 +775,6 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             manifest_lines.append(f"file '{empty_path.name}'\n")
             manifest_lines.append(f"duration {gap:.3f}\n")
 
-        manifest_lines.append(f"file '{empty_path.name}'\n")
-
         with open(manifest_path, "w", encoding="utf-8") as f:
             f.writelines(manifest_lines)
 
@@ -699,11 +815,11 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             inputs.extend(["-i", str(banner_resolved)])
 
             if banner_duration == "first_3s":
-                overlay_clause = "overlay=0:0:enable='lte(t,3.0)':eof_action=repeat"
+                overlay_clause = "overlay=0:0:enable='lte(t,3.0)':eof_action=pass"
             elif banner_duration == "first_5s":
-                overlay_clause = "overlay=0:0:enable='lte(t,5.0)':eof_action=repeat"
+                overlay_clause = "overlay=0:0:enable='lte(t,5.0)':eof_action=pass"
             else:  # full_clip
-                overlay_clause = "overlay=0:0:eof_action=repeat"
+                overlay_clause = "overlay=0:0:eof_action=pass"
 
             filter_parts.append(f"{next_v}[{input_idx}:v]{overlay_clause}[v_banner]")
             next_v = "[v_banner]"
@@ -712,7 +828,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         # 2. Live Design Subtitle Overlay Filter (Pixel-identical to Live Design preview)
         if subtitle_manifest and Path(subtitle_manifest).exists():
             inputs.extend(["-f", "concat", "-safe", "0", "-i", str(Path(subtitle_manifest).resolve())])
-            filter_parts.append(f"{next_v}[{input_idx}:v]overlay=0:0[v_sub]")
+            filter_parts.append(f"{next_v}[{input_idx}:v]overlay=0:0:eof_action=pass[v_sub]")
             next_v = "[v_sub]"
             input_idx += 1
         elif ass_path and Path(ass_path).exists():
@@ -780,6 +896,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 "-c:a", "aac",
                 "-b:a", "192k",
                 "-ar", "48000",
+                "-shortest",
                 str(out_path)
             ])
 

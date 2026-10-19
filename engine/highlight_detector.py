@@ -56,6 +56,25 @@ For each clip candidate:
 6. 'reason': brief rationale why this segment works as a standalone short
 7. 'duration_advisory': 1-sentence explanation of why this specific length was chosen (e.g., "Extended to 88s to capture the speaker's closing punchline without abrupt cutoff", or "Naturally concise 42s standalone takeaway")
 8. 'story_arc': "complete_story" (narrative with resolution) or "punchy_takeaway" (concise power punch)
+9. 'motion_suggestions': An array of 4 to 5 bespoke motion design and sound effect cues paced across the clip to maximize viewer retention using Dual-Coding Theory and Auditory Orienting Reflexes.
+   Each motion suggestion object MUST have:
+   - 'time_offset': timestamp in seconds RELATIVE to clip start (e.g., 0.0 for opening hook, 5.2 for illustration, etc.)
+   - 'style': 'hyperframes' (kinetic typography, continuous momentum, code-rendered springs) OR 'collage' (tactile paper cutout, halftone texture, polaroid card, scotch tape, stamp)
+   - 'element': one of 'kinetic_hook', 'torn_paper_stat', 'polaroid_card', 'highlighter_swatch', 'rubber_stamp', 'chat_bubble', 'wisdom_plaque', 'brand_badge'
+   - 'text': punchy text or keyword string to display on screen (3-8 words max)
+   - 'sfx': exact sound effect name from the acoustic catalog:
+     'fast_whip_whoosh' (rapid kinetic whoosh for hook entrance),
+     'marker_squeak' (felt-tip friction for highlighter swatch),
+     'pencil_scribble' (fast graphite scratching for handwritten reveal),
+     'paper_tear' (sharp paper rip for collage card reveal),
+     'paper_slide' (smooth parchment slide for document entrance),
+     'keyboard_thock' (mechanical keyboard thock for coding/typing text),
+     'camera_shutter' (crisp DSLR shutter for polaroid/freeze frame),
+     'stamp_thump' (heavy rubber stamp impact for verified truth/warning),
+     'warm_chime' (resonant 2-tone chime for wisdom insight or resolution),
+     'pop' (organic bubble pop for badge entrance)
+   - 'position': 'upper-center' | 'floating-right' | 'floating-left' | 'lower-third' | 'center'
+   - 'rationale': brief 1-sentence explanation of cognitive retention impact
 
 You MUST output ONLY a valid JSON array of {count} objects conforming to this schema, with no markdown code fences or conversational text.
 Example format:
@@ -68,7 +87,59 @@ Example format:
     "hook": "You cannot measure your beginning by someone else's harvest.",
     "reason": "Immediate emotional punch with standalone philosophical clarity.",
     "duration_advisory": "Clean 53s story arc landing on a definitive moral conclusion.",
-    "story_arc": "complete_story"
+    "story_arc": "complete_story",
+    "motion_suggestions": [
+      {{
+        "id": "cue_1",
+        "time_offset": 0.0,
+        "style": "hyperframes",
+        "element": "kinetic_hook",
+        "text": "STOP COMPARING YOUR JOURNEY",
+        "sfx": "fast_whip_whoosh",
+        "position": "upper-center",
+        "rationale": "High-velocity kinetic entrance triggering auditory orienting reflex at 0.0s."
+      }},
+      {{
+        "id": "cue_2",
+        "time_offset": 5.2,
+        "style": "collage",
+        "element": "torn_paper_stat",
+        "text": "10 YEARS OF SACRIFICE",
+        "sfx": "paper_tear",
+        "position": "floating-right",
+        "rationale": "Tactile paper rip revealing key foundational sacrifice stat."
+      }},
+      {{
+        "id": "cue_3",
+        "time_offset": 14.0,
+        "style": "hyperframes",
+        "element": "highlighter_swatch",
+        "text": "RUN YOUR OWN RACE",
+        "sfx": "marker_squeak",
+        "position": "center",
+        "rationale": "Dynamic fluorescent ink swipe reinforcing core instruction."
+      }},
+      {{
+        "id": "cue_4",
+        "time_offset": 28.5,
+        "style": "collage",
+        "element": "rubber_stamp",
+        "text": "VERIFIED TRUTH",
+        "sfx": "stamp_thump",
+        "position": "floating-left",
+        "rationale": "Physical rubber stamp impact emphasizing immutable law."
+      }},
+      {{
+        "id": "cue_5",
+        "time_offset": 45.0,
+        "style": "hyperframes",
+        "element": "wisdom_plaque",
+        "text": "Harvest comes in its own season.",
+        "sfx": "warm_chime",
+        "position": "upper-center",
+        "rationale": "Resonant glass chime landing on final philosophical punchline."
+      }}
+    ]
   }}
 ]
 """
@@ -161,11 +232,146 @@ Example format:
         self._attach_transcript_cues(fallback_selected, cues)
         return fallback_selected
 
+    def _generate_default_motion_suggestions(
+        self,
+        clip_duration: float,
+        comb_text: str = "",
+        hook: str = "",
+        title: str = ""
+    ) -> List[Dict[str, Any]]:
+        """
+        Generates 4-5 bespoke motion design & tactile SFX cues paced across the clip
+        based on Dual-Coding Theory, Auditory Orienting Reflex, and semantic keyword matching.
+        """
+        cues = []
+        dur = max(15.0, clip_duration)
+        text_lower = comb_text.lower() if comb_text else ""
+
+        # 1. Opening Hook (0.0s) - HyperFrames Kinetic Typography
+        cues.append({
+            "id": "cue_1_hook",
+            "time_offset": 0.0,
+            "style": "hyperframes",
+            "element": "kinetic_hook",
+            "text": (hook or title or "KEY BREAKTHROUGH MOMENT").upper()[:45],
+            "sfx": "fast_whip_whoosh",
+            "position": "upper-center",
+            "rationale": "High-velocity kinetic entrance triggering auditory orienting reflex at 0.0s."
+        })
+
+        # 2. Second Beat (20% through clip) - Collage or HyperFrames
+        t2 = round(min(5.5, max(3.0, dur * 0.15)), 1)
+        money_match = re.search(r'(\$|₦|£|€)?\s*(\d+[kK]?|\d+,\d+|\d+)\s*(dollars|naira|bucks|pounds|k|n)?', comb_text)
+        if money_match:
+            cues.append({
+                "id": "cue_2_stat",
+                "time_offset": t2,
+                "style": "collage",
+                "element": "torn_paper_stat",
+                "text": money_match.group(0).upper().strip()[:28],
+                "sfx": "paper_tear",
+                "position": "floating-right",
+                "rationale": "Tactile paper rip revealing key numerical/financial evidence."
+            })
+        elif any(w in text_lower for w in ["said to me", "told me", "texted", "message", "chat", "dm"]):
+            cues.append({
+                "id": "cue_2_chat",
+                "time_offset": t2,
+                "style": "collage",
+                "element": "chat_bubble",
+                "text": "MESSAGE RECEIVED",
+                "sfx": "paper_slide",
+                "position": "floating-left",
+                "rationale": "Visual chat card pop grounding dialogue in personal testimony."
+            })
+        else:
+            cues.append({
+                "id": "cue_2_card",
+                "time_offset": t2,
+                "style": "collage",
+                "element": "polaroid_card",
+                "text": (title or "CORE LESSON").upper()[:32],
+                "sfx": "paper_slide",
+                "position": "floating-right",
+                "rationale": "Parchment card sliding into frame to anchor the illustration."
+            })
+
+        # 3. Third Beat (40% through clip) - Dynamic Highlighter Swatch
+        t3 = round(min(18.0, max(8.0, dur * 0.38)), 1)
+        highlight_word = "CRITICAL PRINCIPLE"
+        for kw in self.VIRAL_KEYWORDS:
+            if kw in text_lower:
+                highlight_word = kw.upper()
+                break
+        cues.append({
+            "id": "cue_3_highlight",
+            "time_offset": t3,
+            "style": "hyperframes",
+            "element": "highlighter_swatch",
+            "text": highlight_word,
+            "sfx": "marker_squeak",
+            "position": "center",
+            "rationale": "Felt-tip friction squeak synchronized with ink swipe over keyword."
+        })
+
+        # 4. Fourth Beat (65% through clip) - Verification Stamp or Warning or Wisdom
+        t4 = round(min(dur - 6.0, max(t3 + 5.0, dur * 0.65)), 1)
+        if any(w in text_lower for w in ["warning", "trap", "danger", "mistake", "stop", "never"]):
+            cues.append({
+                "id": "cue_4_stamp",
+                "time_offset": t4,
+                "style": "collage",
+                "element": "rubber_stamp",
+                "text": "CRITICAL WARNING",
+                "sfx": "stamp_thump",
+                "position": "floating-left",
+                "rationale": "Heavy rubber stamp impact forcing conscious attention onto warning."
+            })
+        elif any(w in text_lower for w in ["proverb", "psalm", "verse", "scripture", "bible", "commandment", "god", "faith", "truth"]):
+            cues.append({
+                "id": "cue_4_wisdom",
+                "time_offset": t4,
+                "style": "hyperframes",
+                "element": "wisdom_plaque",
+                "text": "DIVINE TRUTH",
+                "sfx": "warm_chime",
+                "position": "upper-center",
+                "rationale": "Sacred acoustic chime crystallizing spiritual law."
+            })
+        else:
+            cues.append({
+                "id": "cue_4_stamp",
+                "time_offset": t4,
+                "style": "collage",
+                "element": "rubber_stamp",
+                "text": "VERIFIED TRUTH",
+                "sfx": "stamp_thump",
+                "position": "floating-left",
+                "rationale": "Rubber stamp thump locking the premise into viewer memory."
+            })
+
+        # 5. Fifth Beat (85% through clip) - Resolution / Punchline
+        if dur >= 28.0:
+            t5 = round(max(t4 + 4.0, dur - 4.5), 1)
+            cues.append({
+                "id": "cue_5_resolution",
+                "time_offset": t5,
+                "style": "hyperframes",
+                "element": "wisdom_plaque",
+                "text": (hook or title or "Final Takeaway").capitalize()[:40],
+                "sfx": "warm_chime",
+                "position": "upper-center",
+                "rationale": "Harmonic glass chime providing narrative and emotional closure."
+            })
+
+        return cues
+
     def _attach_transcript_cues(self, clips: List[Dict[str, Any]], cues: List[Dict[str, Any]]):
-        """Attaches clip-relative transcript cues for synchronized subtitle playback."""
+        """Attaches clip-relative transcript cues and validates 5-item bespoke motion suggestions."""
         for clip in clips:
             c_start = clip.get("start", 0.0)
             c_end = clip.get("end", c_start + 30.0)
+            clip_dur = max(5.0, c_end - c_start)
             matched = [
                 {
                     "start": round(max(0.0, c["start"] - c_start), 2),
@@ -176,29 +382,58 @@ Example format:
                 if c.get("end", 0.0) >= c_start and c.get("start", 0.0) <= c_end
             ]
             clip["transcript_cues"] = matched
+            comb_text = " ".join(c["text"] for c in matched) if matched else clip.get("reason", "")
             if not clip.get("customHeadline"):
                 clip["customHeadline"] = clip.get("title", "SERMON HIGHLIGHT").upper()
 
+            # Validate or synthesize 5 bespoke motion suggestions
+            raw_ms = clip.get("motion_suggestions")
+            validated_ms = []
+            if isinstance(raw_ms, list) and len(raw_ms) >= 3:
+                for idx, item in enumerate(raw_ms):
+                    if not isinstance(item, dict):
+                        continue
+                    offset = float(item.get("time_offset", idx * 6.0))
+                    offset = round(max(0.0, min(clip_dur - 1.0, offset)), 1)
+                    sfx_val = str(item.get("sfx", "pop")).lower().strip().replace(".wav", "")
+                    validated_ms.append({
+                        "id": str(item.get("id") or f"cue_{idx + 1}"),
+                        "time_offset": offset,
+                        "style": "collage" if str(item.get("style", "")).lower() == "collage" else "hyperframes",
+                        "element": str(item.get("element") or "kinetic_hook"),
+                        "text": str(item.get("text") or clip.get("title") or "HIGHLIGHT").strip()[:50],
+                        "sfx": sfx_val,
+                        "position": str(item.get("position") or "upper-center"),
+                        "rationale": str(item.get("rationale") or "High retention audiovisual sync.")
+                    })
+
+            if len(validated_ms) >= 3:
+                clip["motion_suggestions"] = validated_ms[:5]
+            else:
+                clip["motion_suggestions"] = self._generate_default_motion_suggestions(
+                    clip_duration=clip_dur,
+                    comb_text=comb_text,
+                    hook=clip.get("hook", ""),
+                    title=clip.get("title", "")
+                )
+
     def _resolve_cues(self, transcript_text: str, video_path: Optional[str]) -> List[Dict[str, Any]]:
         """
-        Finds and parses subtitles/transcripts with rolling overlap deduplication.
+        Finds and parses subtitles/transcripts. Prioritizes clean Faster-Whisper transcription
+        directly from the video audio, bypassing corrupt or rolling YouTube auto-captions.
         """
         content = ""
         candidate_files = []
 
-        # 1. From video path
+        # 1. First check for existing transcripts (Whisper transcripts, VTT, or SRT)
         if video_path:
             v_path = Path(video_path)
-            for ext in [".en.vtt", ".en-orig.vtt", ".vtt", ".en.srt", ".srt"]:
+            for ext in [".whisper.vtt", ".whisper.json", ".en.vtt", ".vtt", ".en-orig.vtt", ".en.srt", ".srt"]:
                 candidate_files.append(v_path.with_suffix(ext))
-                candidate_files.append(Path(str(v_path) + ext))
+                candidate_files.append(v_path.parent / f"{v_path.stem}{ext}")
 
-            # Also check downloads directory if applicable
+            # Check parent directory for matching stem prefix
             parent = v_path.parent
-            for ext in [".en.vtt", ".en-orig.vtt", ".vtt", ".en.srt", ".srt"]:
-                candidate_files.append(parent / f"{v_path.stem}{ext}")
-
-            # Check for any subtitle file in parent matching stem prefix
             if parent.exists():
                 stem_prefix = v_path.stem[:25]
                 for f in parent.glob(f"*{stem_prefix}*.vtt"):
@@ -206,17 +441,17 @@ Example format:
                 for f in parent.glob(f"*{stem_prefix}*.srt"):
                     candidate_files.append(f)
 
-        # 2. From transcript_text if it looks like a path
+        # 2. From explicit transcript_text if provided
         if transcript_text:
             cleaned_t = transcript_text.strip()
             match_path = re.search(r'(?:[A-Za-z]:\\[^\r\n]+|/[^\r\n]+)', cleaned_t)
             if match_path:
                 raw_p = match_path.group(0).strip()
                 p = Path(raw_p)
-                for ext in ["", ".en.vtt", ".vtt", ".en.srt", ".srt"]:
+                for ext in ["", ".whisper.vtt", ".en.vtt", ".vtt", ".srt"]:
                     candidate_files.append(Path(str(p) + ext))
 
-        # Check candidate files
+        # Check existing clean candidate files
         for cf in candidate_files:
             if cf and os.path.exists(cf) and os.path.isfile(cf):
                 try:
@@ -227,31 +462,48 @@ Example format:
                 except Exception:
                     pass
 
-        # If no file read but transcript_text contains timecode lines, use transcript_text
+        # If transcript_text contains timecode lines directly
         if not content and "-->" in transcript_text:
             content = transcript_text
 
         if content:
             return self._parse_cues_deduped(content)
 
-        # 3. If no subtitle file and video_path exists, try faster-whisper transcription
+        # 3. If no pre-existing Whisper transcript, automatically transcribe audio with Faster-Whisper
         if video_path and os.path.exists(video_path):
             try:
+                print(f"[HighlightScout] Transcribing speech audio with local Faster-Whisper ({Path(video_path).name})...", flush=True)
                 from engine.subtitles import SubtitleEngine
                 sub = SubtitleEngine()
                 whisper_cues = sub.transcribe_with_whisper(video_path, model_size="base")
                 if whisper_cues:
                     v_p = Path(video_path)
-                    vtt_out = v_p.with_suffix(".vtt")
+                    vtt_out = v_p.with_suffix(".whisper.vtt")
                     with open(vtt_out, "w", encoding="utf-8") as vf:
                         vf.write("WEBVTT\n\n")
                         for c in whisper_cues:
                             s_tc = f"{int(c['start']//3600):02d}:{int((c['start']%3600)//60):02d}:{c['start']%60:06.3f}"
                             e_tc = f"{int(c['end']//3600):02d}:{int((c['end']%3600)//60):02d}:{c['end']%60:06.3f}"
                             vf.write(f"{s_tc} --> {e_tc}\n{c['text']}\n\n")
+                    print(f"[HighlightScout] Saved clean Faster-Whisper transcript to {vtt_out.name}", flush=True)
                     return whisper_cues
-            except Exception:
-                pass
+            except Exception as e:
+                sys.stderr.write(f"[HighlightScout] Faster-Whisper transcription note: {e}\n")
+                sys.stderr.flush()
+
+        # 4. Fallback to existing manual .vtt / .srt if user supplied one
+        if video_path:
+            v_path = Path(video_path)
+            for ext in [".vtt", ".srt"]:
+                f = v_path.with_suffix(ext)
+                if f.exists():
+                    try:
+                        with open(f, "r", encoding="utf-8", errors="replace") as h:
+                            c = h.read()
+                            if c.strip():
+                                return self._parse_cues_deduped(c)
+                    except Exception:
+                        pass
 
         return []
 
@@ -322,29 +574,45 @@ Example format:
 
     def _call_gemini(self, dialogue_str: str, system_prompt: str) -> List[Dict[str, Any]]:
         """Google Gemini API via standard REST endpoint."""
-        model_name = self.model or "gemini-2.0-flash"
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={self.api_key}"
+        candidates = [self.model] if self.model else ["gemini-3.5-flash", "gemini-flash-latest", "gemini-3.8-flash"]
+        last_error = None
 
-        payload = {
-            "contents": [{
-                "parts": [{"text": f"{system_prompt}\n\nTRANSCRIPT:\n{dialogue_str}"}]
-            }],
-            "generationConfig": {
-                "response_mime_type": "application/json",
-                "temperature": 0.4
+        for model_name in candidates:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={self.api_key}"
+
+            payload = {
+                "contents": [{
+                    "parts": [{"text": f"{system_prompt}\n\nTRANSCRIPT:\n{dialogue_str}"}]
+                }],
+                "generationConfig": {
+                    "response_mime_type": "application/json",
+                    "temperature": 0.4
+                }
             }
-        }
 
-        req = urllib.request.Request(
-            url,
-            data=json.dumps(payload).encode("utf-8"),
-            headers={"Content-Type": "application/json"}
-        )
+            req = urllib.request.Request(
+                url,
+                data=json.dumps(payload).encode("utf-8"),
+                headers={"Content-Type": "application/json"}
+            )
 
-        with urllib.request.urlopen(req, timeout=35) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-            text = data["candidates"][0]["content"]["parts"][0]["text"]
-            return self._clean_json(text)
+            try:
+                with urllib.request.urlopen(req, timeout=45) as resp:
+                    data = json.loads(resp.read().decode("utf-8"))
+                    text = data["candidates"][0]["content"]["parts"][0]["text"]
+                    return self._clean_json(text)
+            except urllib.error.HTTPError as e:
+                last_error = e
+                if e.code == 404:
+                    continue
+                raise e
+            except Exception as e:
+                last_error = e
+                raise e
+
+        if last_error:
+            raise last_error
+        return []
 
     def _call_openai_compatible(self, dialogue_str: str, system_prompt: str) -> List[Dict[str, Any]]:
         """OpenAI, Groq, DeepSeek, xAI, Kimi, or Ollama chat completions."""

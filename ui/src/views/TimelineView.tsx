@@ -46,17 +46,19 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
     musicVolume
   } = timelineState;
 
+  const activeClip = clips[activeClipIndex] || { start: inTime, end: outTime };
+
   const [isProcessing, setIsProcessing] = useState(false);
   const [timeSaved, setTimeSaved] = useState<number | null>(null);
 
-  const handleSetInPoint = () => {
-    const cur = activePlayhead || inTime;
+  const handleSetInPoint = (customSec?: number) => {
+    const cur = typeof customSec === 'number' ? customSec : (activePlayhead || inTime);
     setTimelineState((prev) => ({ ...prev, inTime: cur }));
     updateActiveClip({ start: cur });
   };
 
-  const handleSetOutPoint = () => {
-    const cur = activePlayhead || outTime;
+  const handleSetOutPoint = (customSec?: number) => {
+    const cur = typeof customSec === 'number' ? customSec : (activePlayhead || outTime);
     setTimelineState((prev) => ({ ...prev, outTime: cur }));
     updateActiveClip({ end: cur });
   };
@@ -64,12 +66,16 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
   const handleTestCadenceTrim = async () => {
     if (!sourceVideo) return;
     setIsProcessing(true);
-    addLog(`Testing cadence silence trimmer on ${sourceVideo} (noise: ${noiseThreshold}, minSilence: ${minSilence}s)...`, 'trim');
+    const clipStart = activeClip.start !== undefined ? activeClip.start : inTime;
+    const clipEnd = activeClip.end !== undefined ? activeClip.end : outTime;
+    addLog(`Testing cadence silence trimmer on ${sourceVideo} (${clipStart.toFixed(1)}s - ${clipEnd.toFixed(1)}s, noise: ${noiseThreshold}, minSilence: ${minSilence}s)...`, 'trim');
     if (window.hclipper) {
       const res = await window.hclipper.runEngine('trim', [
         sourceVideo,
         'clips/test_cadence_trimmed.mp4',
         '--cadence',
+        '--start', clipStart.toString(),
+        '--end', clipEnd.toString(),
         '--threshold', noiseThreshold,
         '--min-silence', minSilence.toString()
       ]);

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { WorkflowProvider, useWorkflow } from './context/WorkflowContext';
 import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
@@ -28,6 +28,16 @@ function StudioWorkspace() {
     setShowSettingsModal
   } = useWorkflow();
   const [showLogs, setShowLogs] = useState(false);
+
+  // Automatically pause all playing videos in hidden views when active tab changes
+  useEffect(() => {
+    const allVideos = document.querySelectorAll('video');
+    allVideos.forEach((v) => {
+      try {
+        if (!v.paused) v.pause();
+      } catch (e) {}
+    });
+  }, [activeTab]);
 
   return (
     <div className="h-screen w-screen flex flex-col bg-[#090b10] text-slate-100 overflow-hidden select-none relative">
@@ -75,6 +85,7 @@ function StudioWorkspace() {
             <ReframeView 
               onNext={() => setActiveTab('subtitles')}
               onNavigateToScout={() => setActiveTab('scout')}
+              isActive={activeTab === 'reframe'}
             />
           </div>
 
@@ -83,6 +94,7 @@ function StudioWorkspace() {
             <SubtitlesView 
               onNext={() => setActiveTab('publisher')}
               onNavigateToScout={() => setActiveTab('scout')}
+              isActive={activeTab === 'subtitles'}
             />
           </div>
 

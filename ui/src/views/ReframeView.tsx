@@ -26,11 +26,13 @@ import { Slider } from '../components/ui/slider';
 interface ReframeViewProps {
   onNext: () => void;
   onNavigateToScout: () => void;
+  isActive?: boolean;
 }
 
 export const ReframeView: React.FC<ReframeViewProps> = ({ 
   onNext,
-  onNavigateToScout 
+  onNavigateToScout,
+  isActive = true
 }) => {
   const { 
     sourceVideo, 
@@ -125,8 +127,18 @@ export const ReframeView: React.FC<ReframeViewProps> = ({
   };
 
   const config = getAspectConfig();
-  const activeLeft = aspectRatio === '16:9' ? 0 : Math.min(Math.max(cropXPercent, 0), 100 - config.widthPct);
-  const activeCenter = aspectRatio === '16:9' ? 50 : activeLeft + (config.widthPct / 2);
+  const maxLeft = Math.max(0.001, 100 - config.widthPct);
+  const activeLeft = aspectRatio === '16:9' ? 0 : Math.min(Math.max(cropXPercent, 0), maxLeft);
+  const objectPositionX = aspectRatio === '16:9' ? 50 : Math.min(100, Math.max(0, (activeLeft / maxLeft) * 100));
+
+  // Pause playback when tab is inactive
+  useEffect(() => {
+    if (!isActive) {
+      if (videoRef.current) videoRef.current.pause();
+      if (croppedVideoRef.current) croppedVideoRef.current.pause();
+      setIsPlaying(false);
+    }
+  }, [isActive]);
 
   // Play/pause real video element and keep playback within active clip range
   useEffect(() => {
@@ -343,7 +355,7 @@ export const ReframeView: React.FC<ReframeViewProps> = ({
                     onTimeUpdate={handleTimeUpdate}
                     className="w-full h-full object-cover"
                     style={{
-                      objectPosition: `${activeCenter}% center`
+                      objectPosition: `${objectPositionX}% center`
                     }}
                     playsInline
                     muted

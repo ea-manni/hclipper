@@ -103,6 +103,7 @@ export const ClipScoutView: React.FC<ClipScoutViewProps> = ({
               customHeadline: (c.customHeadline || c.title || `VIRAL CLIP #${i + 1}`).toUpperCase(),
               subtitlePreset: 'tiktok_bold',
               transcriptCues: c.transcript_cues || c.transcriptCues || [],
+              motionSuggestions: c.motion_suggestions || c.motionSuggestions || [],
               isRendered: false
             }));
             setClips(formatted);
@@ -113,7 +114,9 @@ export const ClipScoutView: React.FC<ClipScoutViewProps> = ({
           }
         }
 
-        const errMsg = (res as any)?.error || (res?.events?.find((e: any) => e.event === 'error')?.message) || 'AI Scout engine did not return valid clip boundaries. Verify the video has speech audio or check engine console logs.';
+        const highlightsErr = res?.events?.find((e: any) => e.event === 'highlights_result')?.error;
+        const generalErr = res?.events?.find((e: any) => e.event === 'error')?.message || res?.events?.find((e: any) => e.event === 'error')?.error;
+        const errMsg = highlightsErr || (res as any)?.error || generalErr || 'AI Scout engine did not return valid clip boundaries. Verify the video has speech audio or check engine console logs.';
         setScoutError(errMsg);
         addLog(`[AI Scout Error] ${errMsg}`, 'error');
         return;
@@ -281,7 +284,7 @@ export const ClipScoutView: React.FC<ClipScoutViewProps> = ({
               onChange={(e) => setProvider(e.target.value)}
               className="w-full bg-slate-900 border border-white/15 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-400 font-medium"
             >
-              <option value="gemini">Google Gemini 2.5 Flash (100% Free - 15 RPM)</option>
+              <option value="gemini">Google Gemini 3.5 Flash (100% Free - 15 RPM)</option>
               <option value="groq">GroqCloud (Ultra-Fast 500 T/s Llama 3.3 70B - Free)</option>
               <option value="deepseek">DeepSeek V3 / R1 (Platform BYOK)</option>
               <option value="openai">OpenAI GPT-4o-mini (BYOK)</option>
@@ -455,6 +458,38 @@ export const ClipScoutView: React.FC<ClipScoutViewProps> = ({
                         <div>
                           <span className="font-bold text-amber-200">AI Story Advisory: </span>
                           <span className="text-slate-300">{clip.durationAdvisory}</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Bespoke Motion & SFX Recipe */}
+                    {clip.motionSuggestions && clip.motionSuggestions.length > 0 && (
+                      <div className="mt-2.5 p-2.5 rounded-lg bg-sky-500/5 border border-sky-500/20 text-[11px]">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="font-bold text-sky-300 flex items-center space-x-1.5">
+                            <Film className="w-3.5 h-3.5 text-sky-400" />
+                            <span>Bespoke Motion & SFX Recipe ({clip.motionSuggestions.length} Cues):</span>
+                          </span>
+                          <span className="text-[10px] uppercase tracking-wider font-semibold text-slate-400">HyperFrames + Collage</span>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2">
+                          {clip.motionSuggestions.map((m, mIdx) => (
+                            <div key={m.id || mIdx} className="px-2.5 py-1.5 rounded-md bg-black/40 border border-white/5 flex flex-col justify-between">
+                              <div className="flex items-center justify-between text-[10px]">
+                                <span className={`font-bold uppercase tracking-wider text-[9px] px-1.5 py-0.5 rounded ${m.style === 'collage' ? 'text-amber-300 bg-amber-400/10 border border-amber-400/20' : 'text-sky-300 bg-sky-400/10 border border-sky-400/20'}`}>
+                                  {m.style}
+                                </span>
+                                <span className="font-mono text-slate-400 text-[10px]">+{m.time_offset}s</span>
+                              </div>
+                              <div className="text-[10px] font-semibold text-slate-200 truncate mt-1.5" title={m.text}>
+                                {m.text}
+                              </div>
+                              <div className="text-[9px] text-slate-400 flex items-center space-x-1 mt-1 font-mono">
+                                <span className="text-amber-400 font-sans">🔊</span>
+                                <span className="truncate">{m.sfx}</span>
+                              </div>
+                            </div>
+                          ))}
                         </div>
                       </div>
                     )}

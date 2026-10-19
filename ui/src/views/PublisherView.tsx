@@ -224,15 +224,16 @@ export const PublisherView: React.FC = () => {
   };
 
   // Open Real In-App Interactive Video Player Modal
-  const openVideoInPlayer = (item: QueueItem) => {
+  const openVideoInPlayer = async (item: QueueItem) => {
     const rawPath = item.file_path;
-    let norm = rawPath.replace(/\\/g, '/');
-    let url = norm;
-    if (!norm.startsWith('http') && !norm.startsWith('file:')) {
-      if (!norm.includes(':') && !norm.startsWith('/')) {
-        norm = `C:/Users/Ebunoluwa/Desktop/hclipper/${norm}`;
+    let url = rawPath;
+    if (window.hclipper?.resolveMediaUrl) {
+      url = await window.hclipper.resolveMediaUrl(rawPath);
+    } else {
+      let norm = rawPath.replace(/\\/g, '/');
+      if (!norm.startsWith('http') && !norm.startsWith('file:')) {
+        url = norm.startsWith('/') ? `file://${norm}` : `file:///${norm}`;
       }
-      url = norm.startsWith('/') ? `file://${norm}` : `file:///${norm}`;
     }
 
     setPreviewVideo({

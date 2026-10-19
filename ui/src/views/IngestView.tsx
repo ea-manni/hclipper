@@ -112,7 +112,7 @@ export const IngestView: React.FC<IngestViewProps> = ({
         addLog(`Imported local media file: ${selected}`, 'info');
       }
     } else {
-      const sample = 'C:/Users/Ebunoluwa/Desktop/hclipper/downloads/sample_sermon.mp4';
+      const sample = 'downloads/sample_sermon.mp4';
       setSourceVideo(sample);
       setStatusMessage(`Selected sample file: ${sample}`);
     }
@@ -173,10 +173,8 @@ export const IngestView: React.FC<IngestViewProps> = ({
         const res = await window.hclipper.runEngine('download', [url.trim()]);
         if (!res.success) {
           setIsDownloading(false);
-          if (!errorMessage) {
-            setErrorMessage('Download process exited with an error. Check live logs below.');
-            setStatusMessage('Process terminated.');
-          }
+          setErrorMessage((prev) => prev || 'Download process exited with an error. Check live logs below.');
+          setStatusMessage((prev) => (prev && prev.includes('failed') ? prev : 'Process terminated.'));
           addLog(`Process exited with code ${res.code ?? 'unknown'}`, 'stderr');
         }
       } catch (err: any) {
@@ -197,7 +195,7 @@ export const IngestView: React.FC<IngestViewProps> = ({
           clearInterval(interval);
           setDownloadProgress(100);
           setIsDownloading(false);
-          setSourceVideo('C:/Users/Ebunoluwa/Desktop/hclipper/downloads/sample_sermon.mp4');
+          setSourceVideo('downloads/sample_sermon.mp4');
           setStatusMessage('Download completed successfully!');
           addLog('Mock stream download completed.', 'info');
         } else {

@@ -154,20 +154,39 @@ class TimelineTrimmer:
         min_silence: float = 0.75,
         cushion_before: float = 0.18,
         cushion_after: float = 0.16,
-        max_cut_time: Optional[float] = None
+        max_cut_time: Optional[float] = None,
+        start_sec: Optional[float] = None,
+        end_sec: Optional[float] = None
     ) -> Dict[str, Any]:
         """
         Detects dead air (> min_silence) and contracts it,
         preserving cushion_before + cushion_after (~0.34s) to keep
         natural human speech rhythm intact.
+        If start_sec and end_sec are provided, operates only on that bounded clip segment.
         """
-        total_dur = self.get_duration(input_path)
+        temp_slice = None
+        work_path = input_path
+        if start_sec is not None and end_sec is not None:
+            import tempfile
+            temp_slice = Path(tempfile.gettempdir()) / f"cadence_slice_{os.getpid()}_{int(start_sec)}_{int(end_sec)}.mp4"
+            cut_ok = self.cut_range(input_path, str(temp_slice), start_sec, end_sec, reencode=False)
+            if cut_ok and temp_slice.exists():
+                work_path = str(temp_slice)
+
+        def _cleanup():
+            if temp_slice and temp_slice.exists():
+                try:
+                    temp_slice.unlink()
+                except Exception:
+                    pass
+
+        total_dur = self.get_duration(work_path)
         speech_end_limit = total_dur if max_cut_time is None else max(0.0, total_dur - max_cut_time)
 
         # Run silencedetect filter
         detect_cmd = [
             self.ffmpeg_bin,
-            "-i", str(input_path),
+            "-i", str(work_path),
             "-af", f"silencedetect=noise={noise_threshold}:d={min_silence}",
             "-f", "null", "-"
         ]
@@ -177,6 +196,7 @@ class TimelineTrimmer:
         s_ends = [float(x) for x in re.findall(r'silence_end:\s*([0-9.]+)', res.stderr)]
 
         if not s_starts or not s_ends:
+            _cleanup()
             shutil.copy2(input_path, output_path)
             return {
                 "original_duration": total_dur,
@@ -197,6 +217,7 @@ class TimelineTrimmer:
                 speech_pauses.append((s, e, dur))
 
         if not speech_pauses:
+            _cleanup()
             shutil.copy2(input_path, output_path)
             return {
                 "original_duration": total_dur,
@@ -251,7 +272,7 @@ class TimelineTrimmer:
         Path(output_path).parent.mkdir(parents=True, exist_ok=True)
         render_cmd = [
             self.ffmpeg_bin,
-            "-i", str(input_path),
+            "-i", str(work_path),
             "-filter_complex", full_filter,
             "-map", "[outv]", "-map", "[outa]",
             *vcodec_args,
@@ -259,18 +280,21 @@ class TimelineTrimmer:
             str(output_path), "-y"
         ]
 
-        res = subprocess.run(render_cmd, capture_output=True, text=True)
-        if res.returncode != 0:
-            raise RuntimeError(f"FFmpeg trim error: {res.stderr[-600:]}")
+        try:
+            res = subprocess.run(render_cmd, capture_output=True, text=True)
+            if res.returncode != 0:
+                raise RuntimeError(f"FFmpeg trim error: {res.stderr[-600:]}")
 
-        new_dur = self.get_duration(output_path)
-        return {
-            "original_duration": total_dur,
-            "trimmed_duration": new_dur,
-            "time_saved": round(total_dur - new_dur, 2),
-            "segments_kept": keep_segments,
-            "trimmed": True
-        }
+            new_dur = self.get_duration(output_path)
+            return {
+                "original_duration": total_dur,
+                "trimmed_duration": new_dur,
+                "time_saved": round(total_dur - new_dur, 2),
+                "segments_kept": keep_segments,
+                "trimmed": True
+            }
+        finally:
+            _cleanup()
 
     @staticmethod
     def remap_timestamp(orig_sec: float, keep_segments: List[Tuple[float, float]]) -> Optional[float]:

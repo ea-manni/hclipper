@@ -32,24 +32,6 @@ class MediaDownloader:
         self.download_dir = Path(download_dir) if download_dir else PROJECT_ROOT / "downloads"
         self.download_dir.mkdir(parents=True, exist_ok=True)
 
-    def extract_info(self, url: str) -> Dict[str, Any]:
-        """
-        Extract video metadata without downloading.
-        Returns a dictionary with title, duration, thumbnail, channel, and formats.
-        """
-        # If it is a local file path
-        local_path = Path(url)
-        if local_path.is_file():
-            return {
-                "id": local_path.stem,
-                "title": local_path.stem,
-                "duration": None,
-                "uploader": "Local File",
-                "thumbnail": None,
-                "is_local": True,
-                "local_path": str(local_path.resolve())
-            }
-
     def _get_base_ydl_opts(self) -> Dict[str, Any]:
         """Configures JavaScript runtime and client fallbacks to bypass YouTube bot detection."""
         opts: Dict[str, Any] = {
@@ -121,7 +103,7 @@ class MediaDownloader:
         self,
         url: str,
         output_name: Optional[str] = None,
-        download_subs: bool = True,
+        download_subs: bool = False,
         max_height: int = 1080,
         cookies_from_browser: Optional[str] = None,
         cookiefile: Optional[str] = None,

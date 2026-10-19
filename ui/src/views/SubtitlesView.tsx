@@ -21,20 +21,49 @@ import {
   Eye,
   AlertCircle,
   User,
-  Tag
+  Tag,
+  RotateCcw
 } from 'lucide-react';
 import { YoutubeIcon, TikTokIcon, InstagramIcon } from '../components/Icons';
-import { useWorkflow } from '../context/WorkflowContext';
+import { useWorkflow, type MotionSuggestion } from '../context/WorkflowContext';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
 
 interface SubtitlesViewProps {
   onNext: () => void;
   onNavigateToScout?: () => void;
+  isActive?: boolean;
 }
 
+const SFX_OPTIONS = [
+  { value: 'fast_whip_whoosh', label: '⚡ Fast Whip Whoosh', desc: 'Punchy aerodynamic whip' },
+  { value: 'paper_tear', label: '📄 Paper Tear', desc: 'Tactile torn paper rip' },
+  { value: 'camera_shutter', label: '📸 Camera Shutter', desc: 'Mechanical snap & latch' },
+  { value: 'stamp_thump', label: '🔴 Stamp Thump', desc: 'Heavy ink seal impact' },
+  { value: 'whoosh', label: '💨 Classic Whoosh', desc: 'Smooth spring transition' },
+  { value: 'paper_slide', label: '📜 Paper Slide', desc: 'Friction parchment drag' },
+  { value: 'marker_squeak', label: '🖍️ Marker Squeak', desc: 'Fluorescent highlighter swipe' },
+  { value: 'pencil_scribble', label: '✏️ Pencil Scribble', desc: 'Graphite scribble accent' },
+  { value: 'keyboard_thock', label: '⌨️ Keyboard Thock', desc: 'Mechanical keycap click' },
+  { value: 'warm_chime', label: '🔔 Warm Chime', desc: 'Harmonic wisdom accent' },
+  { value: 'pop', label: '🫧 Tactile Pop', desc: 'Crisp spring bubble' },
+  { value: 'sub_thud', label: '💥 Sub Thud', desc: 'Low-frequency punch' },
+  { value: 'red_scratch', label: '⚡ Vinyl Scratch', desc: 'Record needle pause' }
+];
+
+const ELEMENT_OPTIONS = [
+  { value: 'kinetic_hook', label: '🎯 Kinetic Spring Hook', style: 'hyperframes' },
+  { value: 'torn_paper_stat', label: '📄 Torn Paper Stat Box', style: 'collage' },
+  { value: 'polaroid_card', label: '🖼️ Polaroid Picture Frame', style: 'collage' },
+  { value: 'highlighter_swatch', label: '🖍️ Fluorescent Swatch', style: 'hyperframes' },
+  { value: 'rubber_stamp', label: '🔴 Inked Rubber Stamp', style: 'collage' },
+  { value: 'wisdom_plaque', label: '💎 Frosted Wisdom Plaque', style: 'hyperframes' },
+  { value: 'chat_bubble', label: '💬 Simulated Chat Bubble', style: 'collage' }
+];
+
 export const SubtitlesView: React.FC<SubtitlesViewProps> = ({ 
-  onNext
+  onNext,
+  isActive = true
 }) => {
   const { 
     sourceVideo,
@@ -122,6 +151,7 @@ export const SubtitlesView: React.FC<SubtitlesViewProps> = ({
   const [renderMotionStatus, setRenderMotionStatus] = useState<string | null>(null);
   const [showRerenderMasterConfirm, setShowRerenderMasterConfirm] = useState(false);
   const [isTranscribingWhisper, setIsTranscribingWhisper] = useState(false);
+  const [auditioningSfx, setAuditioningSfx] = useState<string | null>(null);
   const [previewMode, setPreviewMode] = useState<'design' | 'rendered'>(
     activeClip.isRendered ? 'rendered' : 'design'
   );
@@ -175,29 +205,55 @@ export const SubtitlesView: React.FC<SubtitlesViewProps> = ({
     return clean.toUpperCase() || 'SERMON HIGHLIGHT';
   };
 
+  const [resolvedVideoSrc, setResolvedVideoSrc] = useState<string>('');
+
   const toFileUrl = (rawPath: string | null | undefined): string => {
     if (!rawPath) return '';
     if (rawPath.startsWith('http://') || rawPath.startsWith('https://') || rawPath.startsWith('file://')) {
       return rawPath;
     }
-    let norm = rawPath.replace(/\\/g, '/');
-    if (!norm.includes(':') && !norm.startsWith('/')) {
-      norm = `C:/Users/Ebunoluwa/Desktop/hclipper/${norm}`;
-    }
+    const norm = rawPath.replace(/\\/g, '/');
     return norm.startsWith('/') ? `file://${norm}` : `file:///${norm}`;
   };
 
   // Resolve video URL for playback depending on preview mode
-  const currentVideoSrc = useMemo(() => {
+  const rawTargetVideo = useMemo(() => {
     if (previewMode === 'rendered' && activeClip.renderedPath) {
-      return toFileUrl(activeClip.renderedPath);
+      return activeClip.renderedPath;
     }
-    // In design mode, use sourceVideo so frames have NO burned-in duplicate text
     if (sourceVideo) {
-      return toFileUrl(sourceVideo);
+      return sourceVideo;
     }
-    return activeClip.renderedPath ? toFileUrl(activeClip.renderedPath) : '';
+    return activeClip.renderedPath || '';
   }, [previewMode, activeClip.renderedPath, sourceVideo]);
+
+  useEffect(() => {
+    let active = true;
+    if (!rawTargetVideo) {
+      setResolvedVideoSrc('');
+      return;
+    }
+    if (window.hclipper?.resolveMediaUrl) {
+      window.hclipper.resolveMediaUrl(rawTargetVideo).then((url: string) => {
+        if (active && url) setResolvedVideoSrc(url);
+      }).catch(() => {
+        if (active) setResolvedVideoSrc(toFileUrl(rawTargetVideo));
+      });
+    } else {
+      setResolvedVideoSrc(toFileUrl(rawTargetVideo));
+    }
+    return () => { active = false; };
+  }, [rawTargetVideo]);
+
+  const currentVideoSrc = resolvedVideoSrc || toFileUrl(rawTargetVideo);
+
+  // Pause playback when tab is not active
+  useEffect(() => {
+    if (!isActive && videoRef.current) {
+      videoRef.current.pause();
+      setIsPlaying(false);
+    }
+  }, [isActive]);
 
   // Keep design preview loop within clip boundaries
   useEffect(() => {
@@ -323,149 +379,6 @@ export const SubtitlesView: React.FC<SubtitlesViewProps> = ({
     };
   }, [activeClip.transcriptCues, activeClip.customHeadline, activeClip.title, activeClip.hook, activeClip.start, activeClip.end, videoCurrentTime]);
 
-  // Dynamic Semantic Motion Cue Detection based on actual speech cues
-  const detectedMotionCues = useMemo(() => {
-    const list: Array<{
-      id: string;
-      type: string;
-      icon: string;
-      label: string;
-      timeRange: string;
-      sfx: string;
-      detail: string;
-      badgeColor: string;
-    }> = [];
-
-    const clipDur = Math.max(10, (activeClip.end || 30) - (activeClip.start || 0));
-
-    // 1. Kinetic Hook Intro (0.0s - 3.5s)
-    list.push({
-      id: 'cue_hook',
-      type: 'kinetic_hook',
-      icon: '🎯',
-      label: 'Kinetic Hook Typography',
-      timeRange: '0.0s - 3.5s',
-      sfx: 'Whoosh Swish',
-      detail: cleanSermonHeadline(headline || activeClip.customHeadline || activeClip.hook || activeClip.title),
-      badgeColor: 'border-amber-500/40 bg-amber-950/60 text-amber-300'
-    });
-
-    // 2. Speaker Badge Lower-Third (4.0s - 7.5s)
-    list.push({
-      id: 'cue_speaker',
-      type: 'lower_third',
-      icon: '👤',
-      label: `Speaker: ${customSpeaker}`,
-      timeRange: '4.0s - 7.5s',
-      sfx: 'Acoustic Slide',
-      detail: customTopic,
-      badgeColor: 'border-cyan-500/40 bg-cyan-950/60 text-cyan-300'
-    });
-
-    // 3. Scan transcript cues for semantic triggers
-    const transcript = activeClip.transcriptCues || [];
-    let lastTime = 7.5;
-
-    for (let i = 0; i < transcript.length; i++) {
-      const c = transcript[i];
-      const s = typeof c.start === 'number' ? c.start : 0;
-      const txt = c.text || '';
-      if (s - lastTime < 3.0) continue;
-
-      // Scripture / Wisdom detection
-      if (/\b(scripture|bible|proverb|psalm|god|lord|verse|solomon|matthew|john|romans|commandment)\b/i.test(txt)) {
-        list.push({
-          id: `cue_scripture_${i}`,
-          type: 'scripture_plaque',
-          icon: '📖',
-          label: 'Scripture / Wisdom Plaque',
-          timeRange: `${s.toFixed(1)}s - ${(s + 3.8).toFixed(1)}s`,
-          sfx: 'Harmonic Chime',
-          detail: `"${txt.slice(0, 48)}..."`,
-          badgeColor: 'border-purple-500/40 bg-purple-950/60 text-purple-300'
-        });
-        lastTime = s + 3.8;
-        continue;
-      }
-
-      // Money / Currency / Value detection
-      if (/\b(money|wealth|salary|dollar|naira|paid|cash|profit|50 houses|rollsroyce|\$|₦|£|€)\b/i.test(txt)) {
-        list.push({
-          id: `cue_money_${i}`,
-          type: 'currency_badge',
-          icon: '💰',
-          label: 'Value & Wealth Callout',
-          timeRange: `${s.toFixed(1)}s - ${(s + 3.0).toFixed(1)}s`,
-          sfx: 'Kaching Ring',
-          detail: `Highlight: ${txt.slice(0, 36)}`,
-          badgeColor: 'border-emerald-500/40 bg-emerald-950/60 text-emerald-300'
-        });
-        lastTime = s + 3.0;
-        continue;
-      }
-
-      // Warning / Danger / Trap detection
-      if (/\b(warning|danger|trap|mistake|stop|never|beware|leanness|sickness)\b/i.test(txt)) {
-        list.push({
-          id: `cue_warning_${i}`,
-          type: 'warning_stamp',
-          icon: '⚠️',
-          label: 'High-Impact Warning Stamp',
-          timeRange: `${s.toFixed(1)}s - ${(s + 3.0).toFixed(1)}s`,
-          sfx: 'Vinyl Scratch',
-          detail: txt.toUpperCase().slice(0, 36),
-          badgeColor: 'border-rose-500/40 bg-rose-950/60 text-rose-300'
-        });
-        lastTime = s + 3.0;
-        continue;
-      }
-
-      // Chat / DM / Quote detection
-      if (/\b(said to me|told me|replied|dm|message|texted)\b/i.test(txt)) {
-        list.push({
-          id: `cue_chat_${i}`,
-          type: 'chat_bubble',
-          icon: '💬',
-          label: 'Simulated Dialogue Bubble',
-          timeRange: `${s.toFixed(1)}s - ${(s + 3.2).toFixed(1)}s`,
-          sfx: 'Tactile Pop',
-          detail: `"${txt.slice(0, 40)}..."`,
-          badgeColor: 'border-sky-500/40 bg-sky-950/60 text-sky-300'
-        });
-        lastTime = s + 3.2;
-        continue;
-      }
-    }
-
-    // 4. Karaoke Subtitles
-    list.push({
-      id: 'cue_subs',
-      type: 'karaoke_subs',
-      icon: '⚡',
-      label: `Progressive Subtitles (${stylePreset === 'dynamic_pop' ? 'Electric Cyan' : stylePreset === 'clean_white' ? 'Clean White' : 'TikTok Gold'})`,
-      timeRange: '0.0s - End',
-      sfx: 'Karaoke Sync',
-      detail: 'Progressive word-by-word karaoke with safe-zone positioning',
-      badgeColor: 'border-emerald-500/40 bg-emerald-950/60 text-emerald-300'
-    });
-
-    // 5. Outro Call to Action
-    if (clipDur >= 18) {
-      list.push({
-        id: 'cue_outro',
-        type: 'outro_cta',
-        icon: '🚀',
-        label: 'Outro Engagement CTA',
-        timeRange: `${(clipDur - 4.0).toFixed(1)}s - ${clipDur.toFixed(1)}s`,
-        sfx: 'Warm Chime',
-        detail: 'Follow for more divine insights',
-        badgeColor: 'border-amber-500/40 bg-amber-950/60 text-amber-300'
-      });
-    }
-
-    return list;
-  }, [activeClip.transcriptCues, activeClip.start, activeClip.end, headline, activeClip.customHeadline, activeClip.hook, activeClip.title, customSpeaker, customTopic, stylePreset]);
-
   // Hook banner visibility window
   const isHookVisible = enableHookBanner && (
     hookBannerDuration === 'full_clip' ||
@@ -554,6 +467,209 @@ export const SubtitlesView: React.FC<SubtitlesViewProps> = ({
       videoRef.current.currentTime = startSec;
       setVideoCurrentTime(startSec);
     }
+  };
+
+  // Procedural Web Audio Synth fallback for instantaneous auditioning
+  const playAudioSynthFallback = (cleanName: string) => {
+    try {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const now = ctx.currentTime;
+      if (cleanName.includes('whoosh')) {
+        const bufferSize = Math.floor(ctx.sampleRate * 0.35);
+        const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+        const noise = ctx.createBufferSource();
+        noise.buffer = buffer;
+        const filter = ctx.createBiquadFilter();
+        filter.type = 'bandpass';
+        filter.frequency.setValueAtTime(250, now);
+        filter.frequency.exponentialRampToValueAtTime(1900, now + 0.15);
+        filter.frequency.exponentialRampToValueAtTime(300, now + 0.35);
+        const gain = ctx.createGain();
+        gain.gain.setValueAtTime(0.01, now);
+        gain.gain.linearRampToValueAtTime(0.35, now + 0.12);
+        gain.gain.linearRampToValueAtTime(0.001, now + 0.35);
+        noise.connect(filter);
+        filter.connect(gain);
+        gain.connect(ctx.destination);
+        noise.start(now);
+      } else if (cleanName.includes('pop') || cleanName.includes('bubble')) {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.frequency.setValueAtTime(320, now);
+        osc.frequency.exponentialRampToValueAtTime(950, now + 0.07);
+        gain.gain.setValueAtTime(0.4, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.07);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.08);
+      } else if (cleanName.includes('chime')) {
+        [523.25, 659.25, 783.99, 1046.5].forEach((f, idx) => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(f, now + idx * 0.05);
+          gain.gain.setValueAtTime(0.18, now + idx * 0.05);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.05 + 0.5);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start(now + idx * 0.05);
+          osc.stop(now + idx * 0.05 + 0.55);
+        });
+      } else if (cleanName.includes('stamp') || cleanName.includes('thud')) {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(150, now);
+        osc.frequency.exponentialRampToValueAtTime(30, now + 0.18);
+        gain.gain.setValueAtTime(0.5, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.2);
+      } else {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.frequency.setValueAtTime(550, now);
+        osc.frequency.exponentialRampToValueAtTime(80, now + 0.06);
+        gain.gain.setValueAtTime(0.35, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.07);
+      }
+    } catch {
+      // ignore
+    } finally {
+      setTimeout(() => setAuditioningSfx(null), 500);
+    }
+  };
+
+  const playAuditionSfx = (sfxName: string) => {
+    setAuditioningSfx(sfxName);
+    const cleanName = sfxName.replace(/\.wav$/i, '').trim();
+    const filePath = `engine/motion/sfx/${cleanName}.wav`;
+    const url = toFileUrl(filePath);
+
+    try {
+      const audio = new Audio(url);
+      audio.volume = 0.85;
+      const playPromise = audio.play();
+      if (playPromise !== undefined) {
+        playPromise
+          .then(() => {
+            setTimeout(() => setAuditioningSfx(null), 600);
+          })
+          .catch(() => {
+            playAudioSynthFallback(cleanName);
+          });
+      } else {
+        playAudioSynthFallback(cleanName);
+      }
+    } catch {
+      playAudioSynthFallback(cleanName);
+    }
+  };
+
+  const getDefaultMotionSuggestions = (clip: any): MotionSuggestion[] => {
+    const dur = Math.max(12, (clip.end || 30) - (clip.start || 0));
+    const cleanHeadline = cleanSermonHeadline(clip.customHeadline || clip.hook || clip.title || 'THE KEY PRINCIPLE');
+    const speaker = customSpeaker || 'Keynote Speaker';
+    return [
+      {
+        id: 'beat_1',
+        time_offset: 0.0,
+        style: 'hyperframes',
+        element: 'kinetic_hook',
+        text: cleanHeadline,
+        sfx: 'fast_whip_whoosh',
+        position: 'upper-center',
+        rationale: 'High-energy kinetic typography hook grabs viewer attention in first 3s.'
+      },
+      {
+        id: 'beat_2',
+        time_offset: Number(Math.min(3.5, dur * 0.2).toFixed(1)),
+        style: 'collage',
+        element: 'torn_paper_stat',
+        text: speaker.toUpperCase(),
+        sfx: 'paper_tear',
+        position: 'lower-third',
+        rationale: 'Torn-paper tactile stat callout establishes speaker authority.'
+      },
+      {
+        id: 'beat_3',
+        time_offset: Number(Math.min(7.0, dur * 0.45).toFixed(1)),
+        style: 'hyperframes',
+        element: 'highlighter_swatch',
+        text: 'CORE VALUE INSIGHT',
+        sfx: 'marker_squeak',
+        position: 'center',
+        rationale: 'Fluorescent neon highlighter anchors the central thesis.'
+      },
+      {
+        id: 'beat_4',
+        time_offset: Number(Math.min(11.5, dur * 0.7).toFixed(1)),
+        style: 'collage',
+        element: 'rubber_stamp',
+        text: 'CRITICAL VERDICT',
+        sfx: 'stamp_thump',
+        position: 'floating-right',
+        rationale: 'Inked rubber stamp provides visual punctuation on the turning point.'
+      },
+      {
+        id: 'beat_5',
+        time_offset: Number(Math.max(12.0, dur - 3.5).toFixed(1)),
+        style: 'hyperframes',
+        element: 'wisdom_plaque',
+        text: 'FOLLOW FOR PART 2',
+        sfx: 'warm_chime',
+        position: 'lower-third',
+        rationale: 'Frosted glass wisdom plaque delivers a high-conversion call to action.'
+      }
+    ];
+  };
+
+  const currentMotionCues: MotionSuggestion[] = useMemo(() => {
+    if (activeClip.motionSuggestions && activeClip.motionSuggestions.length > 0) {
+      return activeClip.motionSuggestions;
+    }
+    return getDefaultMotionSuggestions(activeClip);
+  }, [activeClip.motionSuggestions, activeClip.id, activeClip.hook, activeClip.title, activeClip.customHeadline, activeClip.start, activeClip.end, customSpeaker]);
+
+  const handleUpdateMotionCue = (index: number, updates: Partial<MotionSuggestion>) => {
+    const updated = [...currentMotionCues];
+    updated[index] = { ...updated[index], ...updates };
+    updateActiveClip({ motionSuggestions: updated });
+  };
+
+  const handleAddMotionCue = () => {
+    const lastOffset = currentMotionCues.length > 0 ? currentMotionCues[currentMotionCues.length - 1].time_offset + 3.0 : 0;
+    const newCue: MotionSuggestion = {
+      id: `beat_${Date.now()}`,
+      time_offset: Number(lastOffset.toFixed(1)),
+      style: 'collage',
+      element: 'polaroid_card',
+      text: 'KEY MOMENT',
+      sfx: 'camera_shutter',
+      position: 'center',
+      rationale: 'Custom user-added tactile motion beat.'
+    };
+    updateActiveClip({ motionSuggestions: [...currentMotionCues, newCue] });
+  };
+
+  const handleDeleteMotionCue = (index: number) => {
+    const updated = currentMotionCues.filter((_, i) => i !== index);
+    updateActiveClip({ motionSuggestions: updated });
+  };
+
+  const handleResetMotionCues = () => {
+    updateActiveClip({ motionSuggestions: getDefaultMotionSuggestions(activeClip) });
   };
 
   const hookPresets: {
@@ -1141,23 +1257,40 @@ export const SubtitlesView: React.FC<SubtitlesViewProps> = ({
             </div>
           </div>
 
-          {/* Bespoke Dynamic Motion Design Track */}
+          {/* Bespoke Dynamic Motion & SFX Design Manager Track */}
           <div className="glass-card rounded-xl p-5 space-y-4 border-cyan-500/30 bg-gradient-to-br from-slate-950/90 to-cyan-950/20 shadow-[0_0_25px_rgba(0,245,255,0.08)]">
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-cyan-300 uppercase tracking-wider flex items-center gap-1.5">
                 <Sparkles className="w-4 h-4 text-cyan-400" />
-                Bespoke Dynamic Motion Design (Multi-Cue)
+                Dynamic Motion & SFX Design Manager
               </span>
               <div className="flex items-center space-x-2">
+                <button
+                  type="button"
+                  onClick={handleResetMotionCues}
+                  className="text-[10px] text-slate-400 hover:text-white px-2 py-0.5 rounded border border-white/10 hover:border-white/30 flex items-center gap-1 transition-colors"
+                  title="Reset to 5 AI-curated beats"
+                >
+                  <RotateCcw className="w-3 h-3" />
+                  <span>Reset AI Beats</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleAddMotionCue}
+                  className="text-[10px] text-cyan-300 bg-cyan-500/20 hover:bg-cyan-500/30 px-2 py-0.5 rounded border border-cyan-400/40 flex items-center gap-1 transition-colors font-semibold"
+                >
+                  <Plus className="w-3 h-3" />
+                  <span>Add Beat</span>
+                </button>
                 <span className="text-[10px] text-cyan-300 bg-cyan-400/10 px-2 py-0.5 rounded border border-cyan-400/30 font-semibold flex items-center gap-1">
                   <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-ping inline-block" />
-                  {detectedMotionCues.length} Active Cues
+                  {currentMotionCues.length} Bespoke Beats
                 </span>
               </div>
             </div>
 
             <p className="text-[11px] text-slate-300 leading-relaxed">
-              Synthesizes physical spring physics typography, responsive lower-third speaker identifiers, and synchronized tactile sound effects directly onto the reframed vertical short.
+              Curate and fine-tune code-driven <strong className="text-amber-300">HyperFrames</strong> (kinetic spring physics) & <strong className="text-cyan-300">Collage Aesthetics</strong> (torn paper, polaroid, stamps). Audition tactile acoustic SFX in real-time before hardware rendering.
             </p>
 
             {/* Editable Speaker & Topic Config */}
@@ -1190,25 +1323,156 @@ export const SubtitlesView: React.FC<SubtitlesViewProps> = ({
               </div>
             </div>
 
-            <div className="space-y-2 pt-1 border-t border-white/10">
+            {/* 5-Beat Interactive Motion & SFX List */}
+            <div className="space-y-2.5 pt-1 border-t border-white/10">
               <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center justify-between">
-                <span>Active Visual Motion Layers:</span>
-                <span className="text-[10px] text-cyan-400/80 font-mono">Dynamic AI Speech Analysis</span>
+                <span>Motion Beats & Tactile Sound FX:</span>
+                <span className="text-[10px] text-cyan-400/90 font-mono">Realtime Spring Physics</span>
               </div>
               
-              <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1">
-                {detectedMotionCues.map((cue) => (
-                  <div key={cue.id} className="flex items-center justify-between p-2 rounded-lg bg-slate-900/80 border border-white/5 text-xs">
-                    <div className="flex items-center gap-2 overflow-hidden mr-2">
-                      <span className="font-bold text-amber-400 shrink-0 font-mono text-[11px]">{cue.timeRange}</span>
-                      <span className="text-white font-semibold truncate flex items-center gap-1">
-                        <span>{cue.icon}</span>
-                        <span className="truncate">{cue.label}</span>
-                      </span>
+              <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
+                {currentMotionCues.map((cue, idx) => (
+                  <div 
+                    key={cue.id || idx}
+                    className="p-3 rounded-xl bg-slate-900/90 border border-white/10 hover:border-cyan-400/40 transition-colors space-y-2.5 text-xs shadow-md"
+                  >
+                    {/* Cue Header Row */}
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-2">
+                        <span className="font-mono font-bold text-amber-400 text-xs px-2 py-0.5 rounded bg-amber-950/70 border border-amber-500/30">
+                          Beat #{idx + 1}
+                        </span>
+                        
+                        {/* Style Selector Pill */}
+                        <div className="flex items-center rounded-lg p-0.5 bg-slate-950 border border-white/10 text-[10px]">
+                          <button
+                            type="button"
+                            onClick={() => handleUpdateMotionCue(idx, { style: 'hyperframes' })}
+                            className={`px-2 py-0.5 rounded-md font-medium transition-colors ${
+                              cue.style === 'hyperframes'
+                                ? 'bg-amber-400 text-slate-950 font-bold'
+                                : 'text-slate-400 hover:text-white'
+                            }`}
+                          >
+                            HyperFrames
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleUpdateMotionCue(idx, { style: 'collage' })}
+                            className={`px-2 py-0.5 rounded-md font-medium transition-colors ${
+                              cue.style === 'collage'
+                                ? 'bg-cyan-400 text-slate-950 font-bold'
+                                : 'text-slate-400 hover:text-white'
+                            }`}
+                          >
+                            Collage
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center space-x-2">
+                        {/* Timestamp Offset */}
+                        <div className="flex items-center space-x-1">
+                          <Clock className="w-3 h-3 text-slate-400" />
+                          <input
+                            type="number"
+                            step="0.1"
+                            min="0"
+                            value={cue.time_offset}
+                            onChange={(e) => handleUpdateMotionCue(idx, { time_offset: parseFloat(e.target.value) || 0 })}
+                            className="w-14 bg-slate-950 border border-white/10 rounded px-1.5 py-0.5 text-[11px] font-mono text-cyan-300 focus:outline-none focus:border-cyan-400 text-center"
+                            title="Start time offset in seconds"
+                          />
+                          <span className="text-[10px] text-slate-400 font-mono">s</span>
+                        </div>
+
+                        {currentMotionCues.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteMotionCue(idx)}
+                            className="p-1 text-slate-500 hover:text-red-400 transition-colors"
+                            title="Remove this beat"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
                     </div>
-                    <span className={`text-[10px] px-2 py-0.5 rounded border shrink-0 ${cue.badgeColor}`}>
-                      SFX: {cue.sfx}
-                    </span>
+
+                    {/* Cue Element & SFX Row */}
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-[9px] uppercase font-bold text-slate-400 block mb-1">
+                          Visual Element
+                        </label>
+                        <select
+                          value={cue.element}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            const matched = ELEMENT_OPTIONS.find(o => o.value === val);
+                            handleUpdateMotionCue(idx, { 
+                              element: val, 
+                              style: (matched?.style as any) || cue.style 
+                            });
+                          }}
+                          className="w-full bg-slate-950 border border-white/10 rounded px-2 py-1 text-[11px] text-white focus:outline-none focus:border-cyan-400 truncate"
+                        >
+                          {ELEMENT_OPTIONS.map((opt) => (
+                            <option key={opt.value} value={opt.value}>
+                              {opt.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="text-[9px] uppercase font-bold text-slate-400 block mb-1">
+                          Tactile Sound Effect
+                        </label>
+                        <div className="flex items-center space-x-1.5">
+                          <select
+                            value={cue.sfx}
+                            onChange={(e) => handleUpdateMotionCue(idx, { sfx: e.target.value })}
+                            className="w-full bg-slate-950 border border-white/10 rounded px-2 py-1 text-[11px] text-white focus:outline-none focus:border-cyan-400 truncate"
+                          >
+                            {SFX_OPTIONS.map((opt) => (
+                              <option key={opt.value} value={opt.value}>
+                                {opt.label}
+                              </option>
+                            ))}
+                          </select>
+                          <button
+                            type="button"
+                            onClick={() => playAuditionSfx(cue.sfx)}
+                            className={`p-1.5 rounded-md border shrink-0 transition-all ${
+                              auditioningSfx === cue.sfx
+                                ? 'bg-cyan-400 text-slate-950 border-cyan-300 scale-110 shadow-[0_0_10px_rgba(6,182,212,0.8)]'
+                                : 'bg-slate-950 border-white/10 text-cyan-300 hover:border-cyan-400/50 hover:bg-cyan-950/40'
+                            }`}
+                            title="Audition sound effect"
+                          >
+                            <Volume2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Cue Text Row */}
+                    <div>
+                      <input
+                        type="text"
+                        value={cue.text}
+                        onChange={(e) => handleUpdateMotionCue(idx, { text: e.target.value })}
+                        placeholder="Text on screen for this beat..."
+                        className="w-full bg-slate-950 border border-white/10 rounded px-2.5 py-1 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-cyan-400"
+                      />
+                    </div>
+
+                    {cue.rationale && (
+                      <div className="text-[10px] text-slate-400 italic">
+                        💡 {cue.rationale}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -1326,20 +1590,62 @@ export const SubtitlesView: React.FC<SubtitlesViewProps> = ({
 
             <div className="pt-2">
               <button
-                disabled={isRenderingMotion || (!activeClip.renderedPath && !sourceVideo)}
+                disabled={isRenderingMotion}
                 onClick={async () => {
                   if (!window.hclipper) return;
-                  const inputVid = activeClip.renderedPath || (activeClip.id ? `clips/${activeClip.id}.mp4` : null) || sourceVideo;
-                  if (!inputVid) return;
 
-                  setIsRenderingMotion(true);
-                  setMotionProgress(5);
-                  setMotionPhase('sfx');
-                  setMotionDetail('Synthesizing tactile SFX audio track (whoosh, pop, slide)...');
-                  setRenderMotionStatus(null);
+                  let inputVid = activeClip.renderedPath;
+                  if (!inputVid && window.hclipper?.readQueue) {
+                    try {
+                      const curQueue = await window.hclipper.readQueue();
+                      const item = curQueue?.find((q: any) => 
+                        q.id === activeClip.id || 
+                        q.title === activeClip.title || 
+                        (q.filename && q.filename.startsWith(`Clip${activeClipIndex + 1}_`))
+                      );
+                      if (item?.file_path) {
+                        inputVid = item.file_path;
+                      } else if (item?.filename) {
+                        inputVid = `clips/${item.filename}`;
+                      }
+                    } catch (e) {}
+                  }
 
                   const cleanHeadline = cleanSermonHeadline(activeClip.customHeadline || activeClip.hook || activeClip.title);
-                  const targetOut = `clips/${activeClip.id || 'Clip'}_Dynamic_Motion.mp4`;
+
+                  // If clip has not been pre-rendered yet, automatically render the clean 9:16 vertical plate first
+                  if (!inputVid) {
+                    setIsRenderingMotion(true);
+                    setMotionProgress(5);
+                    setMotionPhase('sfx');
+                    setMotionDetail('Pre-rendering clean 9:16 vertical plate before applying dynamic motion...');
+                    try {
+                      const preRendered = await startRenderClip(activeClipIndex, false);
+                      if (preRendered) {
+                        inputVid = preRendered;
+                      }
+                    } catch (e) {
+                      console.error('Failed to pre-render plate for dynamic motion:', e);
+                    }
+                  }
+
+                  if (!inputVid) {
+                    const fallbackClean = (activeClip.customHeadline || activeClip.hook || activeClip.title || '')
+                      .replace(/[^a-zA-Z0-9_-]/g, '_')
+                      .replace(/_+/g, '_')
+                      .replace(/^_|_$/g, '')
+                      .substring(0, 50);
+                    inputVid = `clips/Clip${activeClipIndex + 1}_${fallbackClean}.mp4`;
+                  }
+
+                  setIsRenderingMotion(true);
+                  setMotionProgress(10);
+                  setMotionPhase('sfx');
+                  setMotionDetail('Synthesizing bespoke tactile SFX audio track (whoosh, paper tear, shutter, stamp)...');
+                  setRenderMotionStatus(null);
+
+                  const outFilename = `Clip${activeClipIndex + 1}_Dynamic_Motion.mp4`;
+                  const targetOut = `clips/${outFilename}`;
 
                   const motionArgs = [
                     inputVid,
@@ -1347,15 +1653,19 @@ export const SubtitlesView: React.FC<SubtitlesViewProps> = ({
                     '--headline', cleanHeadline,
                     '--speaker', customSpeaker,
                     '--topic', customTopic,
-                    '--template', 'motion_canvas.html',
+                    '--template', 'collage_motion.html',
                     '--preset', subtitlesState.stylePreset || activeClip.subtitlePreset || 'tiktok_bold'
                   ];
 
-                  if (activeClip.transcriptCues && activeClip.transcriptCues.length > 0) {
-                    motionArgs.push('--text-cues', JSON.stringify(activeClip.transcriptCues));
+                  if (currentMotionCues && currentMotionCues.length > 0) {
+                    motionArgs.push('--custom-cues', JSON.stringify(currentMotionCues));
                   }
-                  if (subtitlesState.includeSubtitles === false) {
+
+                  const alreadyHasBurnedSubs = Boolean(activeClip.isRendered && activeClip.renderedPath);
+                  if (alreadyHasBurnedSubs || subtitlesState.includeSubtitles === false) {
                     motionArgs.push('--no-subs');
+                  } else if (activeClip.transcriptCues && activeClip.transcriptCues.length > 0) {
+                    motionArgs.push('--text-cues', JSON.stringify(activeClip.transcriptCues));
                   }
 
                   try {
@@ -1377,13 +1687,13 @@ export const SubtitlesView: React.FC<SubtitlesViewProps> = ({
                       if (window.hclipper?.readQueue && window.hclipper?.saveQueue) {
                         try {
                           const curQueue = (await window.hclipper.readQueue()) || [];
-                          const itemIdx = curQueue.findIndex((q: any) => q.filename === `${activeClip.id || 'Clip'}_Dynamic_Motion.mp4`);
+                          const itemIdx = curQueue.findIndex((q: any) => q.filename === outFilename || q.id === `${activeClip.id || 'Clip'}_dynamic`);
                           const motionItem = {
                             id: `${activeClip.id || 'Clip'}_dynamic`,
                             projectId: activeProject.id,
                             projectName: activeProject.name,
                             title: `${activeClip.title || 'Clip'} (Dynamic Motion)`,
-                            filename: `${activeClip.id || 'Clip'}_Dynamic_Motion.mp4`,
+                            filename: outFilename,
                             file_path: targetOut,
                             duration: `${Math.round(activeClip.end - activeClip.start)}s`,
                             caption: cleanHeadline,
@@ -1395,7 +1705,7 @@ export const SubtitlesView: React.FC<SubtitlesViewProps> = ({
                         } catch (e) {}
                       }
                     } else {
-                      const errMsg = resultEvt?.error || 'Motion render process returned an error.';
+                      const errMsg = resultEvt?.error || res?.error || res?.stderr || 'Motion render process returned an error.';
                       setMotionPhase('error');
                       setRenderMotionStatus(`Error rendering motion: ${errMsg}`);
                     }
@@ -1570,28 +1880,65 @@ export const SubtitlesView: React.FC<SubtitlesViewProps> = ({
             )}
 
             {/* In Design Mode: Bottom Safe Zone Watermark Pills */}
-            {previewMode === 'design' && includeSocialPills && (
-              <div className="relative z-20 w-full flex flex-wrap justify-center gap-1.5 mb-2">
-                {tiktokHandle && (
-                  <div className="bg-black/75 backdrop-blur-md border border-white/15 rounded-full px-2.5 py-0.5 flex items-center space-x-1 shadow">
-                    <TikTokIcon className="w-2.5 h-2.5 text-white" />
-                    <span className="text-[9px] font-mono text-slate-200">{tiktokHandle}</span>
+            {previewMode === 'design' && includeSocialPills && (() => {
+              const activeHandles = [
+                tiktokHandle?.trim() ? { platform: 'tiktok', handle: tiktokHandle.trim().replace(/^@/, ''), icon: <TikTokIcon className="w-2.5 h-2.5 text-white" /> } : null,
+                instagramHandle?.trim() ? { platform: 'instagram', handle: instagramHandle.trim().replace(/^@/, ''), icon: <InstagramIcon className="w-2.5 h-2.5 text-pink-400" /> } : null,
+                youtubeHandle?.trim() ? { platform: 'youtube', handle: youtubeHandle.trim().replace(/^@/, ''), icon: <YoutubeIcon className="w-2.5 h-2.5 text-red-500" /> } : null,
+              ].filter(Boolean) as { platform: string; handle: string; icon: React.ReactNode }[];
+
+              if (activeHandles.length === 0) return null;
+
+              // Check if all active handles are identical (e.g. 'ebun_olowo')
+              const allIdentical = activeHandles.every(h => h.handle.toLowerCase() === activeHandles[0].handle.toLowerCase());
+
+              if (allIdentical) {
+                return (
+                  <div className="relative z-20 w-full flex justify-center mb-3 px-2">
+                    <div className="bg-black/80 backdrop-blur-md border border-white/20 rounded-full px-3 py-1 flex items-center space-x-2 shadow-xl ring-1 ring-black/40">
+                      <div className="flex items-center space-x-1.5">
+                        {activeHandles.map((h) => (
+                          <span key={h.platform} className="opacity-95 hover:opacity-100 transition-opacity">
+                            {h.icon}
+                          </span>
+                        ))}
+                      </div>
+                      <span className="text-[10px] font-bold tracking-wide text-white/95 font-mono drop-shadow">
+                        @{activeHandles[0].handle}
+                      </span>
+                    </div>
                   </div>
-                )}
-                {youtubeHandle && (
-                  <div className="bg-black/75 backdrop-blur-md border border-white/15 rounded-full px-2.5 py-0.5 flex items-center space-x-1 shadow">
-                    <YoutubeIcon className="w-2.5 h-2.5 text-red-500" />
-                    <span className="text-[9px] font-mono text-slate-200">{youtubeHandle}</span>
-                  </div>
-                )}
-                {instagramHandle && (
-                  <div className="bg-black/75 backdrop-blur-md border border-white/15 rounded-full px-2.5 py-0.5 flex items-center space-x-1 shadow">
-                    <InstagramIcon className="w-2.5 h-2.5 text-pink-500" />
-                    <span className="text-[9px] font-mono text-slate-200">{instagramHandle}</span>
-                  </div>
-                )}
-              </div>
-            )}
+                );
+              }
+
+              // Group platforms by unique handle
+              const grouped: { [handle: string]: { icons: React.ReactNode[] } } = {};
+              activeHandles.forEach(h => {
+                const k = h.handle;
+                if (!grouped[k]) grouped[k] = { icons: [] };
+                grouped[k].icons.push(h.icon);
+              });
+
+              return (
+                <div className="relative z-20 w-full flex flex-wrap items-center justify-center gap-1.5 mb-3 px-2">
+                  {Object.entries(grouped).map(([handleName, grp]) => (
+                    <div
+                      key={handleName}
+                      className="bg-black/80 backdrop-blur-md border border-white/20 rounded-full px-2.5 py-1 flex items-center space-x-1.5 shadow-lg ring-1 ring-black/30"
+                    >
+                      <div className="flex items-center space-x-1">
+                        {grp.icons.map((ic, i) => (
+                          <span key={i}>{ic}</span>
+                        ))}
+                      </div>
+                      <span className="text-[9px] font-bold text-white/95 font-mono drop-shadow">
+                        @{handleName}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
 
             {/* Floating Player Controls */}
             <div className="absolute top-3 right-3 z-30 flex items-center space-x-1.5 bg-black/60 backdrop-blur-md p-1 rounded-full border border-white/15">
