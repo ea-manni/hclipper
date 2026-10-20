@@ -382,27 +382,27 @@ export const PublisherView: React.FC = () => {
   const renderBadge = (status?: string) => {
     if (status === 'posted') {
       return (
-        <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded">
+        <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded">
           <CheckCircle className="w-2.5 h-2.5" /> Live
         </span>
       );
     }
     if (status === 'staged') {
       return (
-        <span className="flex items-center gap-1 text-[10px] font-bold text-sky-400 bg-sky-500/10 border border-sky-500/20 px-2 py-0.5 rounded">
+        <span className="inline-flex items-center gap-1 text-[10px] font-bold text-sky-400 bg-sky-500/10 border border-sky-500/20 px-2 py-0.5 rounded">
           <ExternalLink className="w-2.5 h-2.5" /> Staged
         </span>
       );
     }
     if (status === 'failed') {
       return (
-        <span className="flex items-center gap-1 text-[10px] font-bold text-red-400 bg-red-500/10 border border-red-500/20 px-2 py-0.5 rounded">
+        <span className="inline-flex items-center gap-1 text-[10px] font-bold text-red-400 bg-red-500/10 border border-red-500/20 px-2 py-0.5 rounded">
           <AlertCircle className="w-2.5 h-2.5" /> Failed
         </span>
       );
     }
     return (
-      <span className="flex items-center gap-1 text-[10px] font-bold text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded">
+      <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded">
         <Clock className="w-2.5 h-2.5" /> Ready
       </span>
     );
@@ -662,89 +662,103 @@ export const PublisherView: React.FC = () => {
             </p>
           </div>
         ) : (
-          <table className="w-full text-left text-xs">
-            <thead className="bg-slate-950/60 text-slate-400 text-[10px] uppercase font-bold tracking-wider">
-              <tr>
-                <th className="py-3 px-4">Clip Title & Project</th>
-                <th className="py-3 px-3">Duration</th>
-                <th className="py-3 px-3">YouTube</th>
-                <th className="py-3 px-3">TikTok NG</th>
-                <th className="py-3 px-3">Instagram</th>
-                <th className="py-3 px-4 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-white/5">
-              {queue
-                .filter(
-                  (item) =>
-                    selectedProjectFilter === 'all' ||
-                    item.projectId === selectedProjectFilter
-                )
-                .map((item) => (
-                  <tr key={item.id} className="hover:bg-white/[0.02] transition-colors">
-                    <td className="py-3.5 px-4">
-                      <div className="font-semibold text-white">{item.title}</div>
-                      <div className="flex items-center space-x-2 mt-1">
-                        <span className="text-[10px] text-amber-400 font-medium bg-amber-400/10 border border-amber-400/20 px-1.5 py-0.5 rounded flex items-center space-x-1">
-                          <Folder className="w-2.5 h-2.5 text-amber-400 shrink-0" />
-                          <span className="truncate max-w-[200px]">{item.projectName || 'Project Clip'}</span>
-                        </span>
-                        <span className="text-[10px] text-slate-600">•</span>
-                        <span className="text-[10px] text-slate-500 font-mono">{item.filename}</span>
-                      </div>
-                    </td>
-                    <td className="py-3.5 px-3 font-mono text-slate-400">{item.duration || '30s'}</td>
-                    <td className="py-3.5 px-3">{renderBadge(item.status?.youtube)}</td>
-                    <td className="py-3.5 px-3">{renderBadge(item.status?.tiktok_ng)}</td>
-                    <td className="py-3.5 px-3">{renderBadge(item.status?.instagram)}</td>
-                    <td className="py-3.5 px-4 text-right space-x-1.5">
-                      {/* Play in Built-in Video Player */}
-                      <button 
-                        onClick={() => openVideoInPlayer(item)}
-                        className="px-2.5 py-1.5 bg-amber-400 hover:bg-amber-300 text-slate-950 rounded font-bold text-[11px] inline-flex items-center gap-1 shadow-sm transition-all"
-                        title="Play Video in Built-in Player"
-                      >
-                        <Play className="w-3 h-3 fill-slate-950" /> Play
-                      </button>
-                      {/* Jump to Project Studio */}
-                      <button 
-                        onClick={() => {
-                          if (item.projectId) switchProject(item.projectId);
-                          setActiveTab('reframe');
-                        }}
-                        className="p-1.5 bg-sky-500/10 hover:bg-sky-500/20 text-sky-400 rounded border border-sky-500/30 inline-flex items-center"
-                        title="Open in Project Studio"
-                      >
-                        <ExternalLink className="w-3.5 h-3.5" />
-                      </button>
-                      {/* Reveal in Explorer */}
-                      <button 
-                        onClick={() => openInExplorer(item.file_path)}
-                        className="p-1.5 bg-white/5 hover:bg-white/10 text-slate-300 rounded border border-white/10 inline-flex items-center"
-                        title="Reveal in File Explorer"
-                      >
-                        <FolderOpen className="w-3.5 h-3.5" />
-                      </button>
-                      {/* Stage for YouTube in authentic browser */}
-                      <button 
-                        onClick={() => handleStageForYouTube(item)}
-                        className="px-2.5 py-1 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded text-[11px] font-bold border border-red-500/30 inline-flex items-center gap-1 shadow-sm transition-all"
-                        title="Copy clip details, highlight in folder, and open YouTube Studio in selected Chrome profile"
-                      >
-                        <YoutubeIcon className="w-3 h-3 text-red-500" /> Stage YT
-                      </button>
-                      {/* Edit Caption */}
-                      <button 
-                        onClick={() => openCaptionModal(item)}
-                        className="px-2.5 py-1 bg-white/5 hover:bg-white/10 text-slate-300 rounded text-[11px] font-medium border border-white/10 inline-flex items-center gap-1"
-                      >
-                        <Edit3 className="w-3 h-3" /> Edit
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-            </tbody>
-          </table>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-950/60 text-slate-400 text-[10px] uppercase font-bold tracking-wider">
+                <tr>
+                  <th className="py-3 px-4">Clip Title & Project</th>
+                  <th className="py-3 px-3 text-center whitespace-nowrap">Duration</th>
+                  <th className="py-3 px-3 text-center whitespace-nowrap">YouTube</th>
+                  <th className="py-3 px-3 text-center whitespace-nowrap">TikTok NG</th>
+                  <th className="py-3 px-3 text-center whitespace-nowrap">Instagram</th>
+                  <th className="py-3 px-4 text-right whitespace-nowrap">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/5">
+                {queue
+                  .filter(
+                    (item) =>
+                      selectedProjectFilter === 'all' ||
+                      item.projectId === selectedProjectFilter
+                  )
+                  .map((item) => (
+                    <tr key={item.id} className="hover:bg-white/[0.02] transition-colors">
+                      <td className="py-3.5 px-4 min-w-[240px]">
+                        <div className="font-semibold text-white">{item.title}</div>
+                        <div className="flex items-center space-x-2 mt-1">
+                          <span className="text-[10px] text-amber-400 font-medium bg-amber-400/10 border border-amber-400/20 px-1.5 py-0.5 rounded flex items-center space-x-1 shrink-0">
+                            <Folder className="w-2.5 h-2.5 text-amber-400 shrink-0" />
+                            <span className="truncate max-w-[180px]">{item.projectName || 'Project Clip'}</span>
+                          </span>
+                          <span className="text-[10px] text-slate-600 shrink-0">•</span>
+                          <span className="text-[10px] text-slate-500 font-mono truncate max-w-[200px]">{item.filename}</span>
+                        </div>
+                      </td>
+                      <td className="py-3.5 px-3 font-mono text-slate-400 text-center whitespace-nowrap">{item.duration || '30s'}</td>
+                      <td className="py-3.5 px-3 text-center whitespace-nowrap">{renderBadge(item.status?.youtube)}</td>
+                      <td className="py-3.5 px-3 text-center whitespace-nowrap">{renderBadge(item.status?.tiktok_ng)}</td>
+                      <td className="py-3.5 px-3 text-center whitespace-nowrap">{renderBadge(item.status?.instagram)}</td>
+                      <td className="py-3.5 px-4 text-right whitespace-nowrap">
+                        <div className="inline-flex items-center justify-end space-x-2">
+                          {/* Play in Built-in Video Player */}
+                          <button 
+                            onClick={() => openVideoInPlayer(item)}
+                            className="h-7 px-3 bg-amber-400 hover:bg-amber-300 text-slate-950 rounded-lg font-bold text-[11px] inline-flex items-center gap-1.5 shadow-sm transition-all shrink-0"
+                            title="Play Video in Built-in Player"
+                          >
+                            <Play className="w-3 h-3 fill-slate-950" />
+                            <span>Play</span>
+                          </button>
+
+                          {/* Stage for YouTube in authentic browser */}
+                          <button 
+                            onClick={() => handleStageForYouTube(item)}
+                            className="h-7 px-2.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg text-[11px] font-bold border border-red-500/30 inline-flex items-center gap-1.5 shadow-sm transition-all shrink-0"
+                            title="Copy clip details, highlight in folder, and open YouTube Studio in selected Chrome profile"
+                          >
+                            <YoutubeIcon className="w-3.5 h-3.5 text-red-500" />
+                            <span>Stage YT</span>
+                          </button>
+
+                          {/* Secondary Tools Group */}
+                          <div className="inline-flex items-center h-7 bg-white/5 border border-white/10 rounded-lg p-0.5 space-x-0.5 shrink-0">
+                            {/* Jump to Project Studio */}
+                            <button 
+                              onClick={() => {
+                                if (item.projectId) switchProject(item.projectId);
+                                setActiveTab('reframe');
+                              }}
+                              className="p-1 hover:bg-white/10 text-slate-400 hover:text-sky-400 rounded transition-colors"
+                              title="Open in Project Studio"
+                            >
+                              <ExternalLink className="w-3.5 h-3.5" />
+                            </button>
+
+                            {/* Reveal in Explorer */}
+                            <button 
+                              onClick={() => openInExplorer(item.file_path)}
+                              className="p-1 hover:bg-white/10 text-slate-400 hover:text-amber-400 rounded transition-colors"
+                              title="Reveal in File Explorer"
+                            >
+                              <FolderOpen className="w-3.5 h-3.5" />
+                            </button>
+
+                            {/* Edit Caption */}
+                            <button 
+                              onClick={() => openCaptionModal(item)}
+                              className="p-1 hover:bg-white/10 text-slate-400 hover:text-white rounded transition-colors"
+                              title="Edit Clip Title & Caption"
+                            >
+                              <Edit3 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
 
