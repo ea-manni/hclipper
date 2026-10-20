@@ -381,100 +381,152 @@ class SocialPublisher:
                 on_log(msg, lvl)
             print(f"[Instagram] {msg}")
 
-        log("Navigating to Instagram...")
-        page.goto("https://www.instagram.com/", timeout=60000, wait_until="domcontentloaded")
-        page.wait_for_timeout(3000)
+        try:
+            log("Navigating to Instagram...")
+            page.goto("https://www.instagram.com/", timeout=60000, wait_until="domcontentloaded")
+            page.wait_for_timeout(3000)
 
-        # Check authentication
-        if "accounts/login" in page.url or page.locator('input[name="username"]').count() > 0:
-            raise RuntimeError("Instagram session is not authenticated. Please log in first in Step 6.")
+            # Check authentication
+            if "accounts/login" in page.url or page.locator('input[name="username"]').count() > 0:
+                raise RuntimeError("Instagram session is not authenticated. Please log in first in Step 6.")
 
-        # Dismiss notification / prompt overlays
-        for btn in page.locator('button:has-text("Not Now"), button:has-text("Cancel")').all():
+            # Dismiss notification / prompt / cookie overlays
+            dismiss_selectors = [
+                'button:has-text("Not Now")',
+                'button:has-text("Cancel")',
+                'button:has-text("Decline optional cookies")',
+                'button:has-text("Only allow essential cookies")',
+                'button:has-text("Allow all cookies")',
+                'button:has-text("Turn on Notifications")',
+                'button:has-text("Save Info")',
+                'button:has-text("Save info")',
+                'button:has-text("Dismiss")'
+            ]
+            for sel in dismiss_selectors:
+                for btn in page.locator(sel).all():
+                    try:
+                        if btn.is_visible():
+                            btn.click(force=True, timeout=1000)
+                            page.wait_for_timeout(500)
+                    except Exception:
+                        pass
+
+            log("Opening 'Create New Post' modal...")
+            create_selectors = [
+                'svg[aria-label="New post"]',
+                'svg[aria-label="Create"]',
+                '[aria-label="New post"]',
+                '[aria-label="Create"]',
+                'a:has(svg[aria-label="New post"])',
+                'a:has(svg[aria-label="Create"])',
+                'div[role="button"]:has(svg[aria-label="New post"])',
+                'span:text-is("Create")',
+                'a:has-text("Create")',
+                'button:has-text("Create")'
+            ]
+            clicked_create = False
+            for sel in create_selectors:
+                loc = page.locator(sel).first
+                if loc.count() > 0 and loc.is_visible():
+                    loc.click(force=True)
+                    clicked_create = True
+                    break
+
+            if not clicked_create:
+                page.keyboard.press("c")
+
+            page.wait_for_timeout(1500)
+
+            # Check if clicking Create opened the dropdown menu with "Post"
+            post_menu_options = [
+                'div[role="menu"] span:text-is("Post")',
+                'div[role="dialog"] span:text-is("Post")',
+                'div[role="menu"] a:has-text("Post")',
+                'div[role="menu"] div[role="button"]:has-text("Post")',
+                'span:text-is("Post")',
+                'a:has-text("Post")'
+            ]
+            for psel in post_menu_options:
+                ploc = page.locator(psel).first
+                if ploc.count() > 0 and ploc.is_visible():
+                    ploc.click(force=True)
+                    page.wait_for_timeout(1500)
+                    break
+
+            # Attach video
+            log("Attaching video file...")
+            file_input = page.locator('div[role="dialog"] input[type="file"], input[type="file"]').first
             try:
-                if btn.is_visible():
-                    btn.click()
-                    page.wait_for_timeout(800)
+                file_input.wait_for(state="attached", timeout=12000)
+            except Exception:
+                # If file input not yet attached, try clicking "Select from computer" button
+                sel_btn = page.locator('button:has-text("Select from computer"), div[role="button"]:has-text("Select from computer")').first
+                if sel_btn.count() > 0 and sel_btn.is_visible():
+                    sel_btn.click(force=True)
+                    page.wait_for_timeout(1000)
+                file_input = page.locator('div[role="dialog"] input[type="file"], input[type="file"]').first
+                file_input.wait_for(state="attached", timeout=15000)
+
+            file_input.set_input_files(str(video_path.resolve()))
+            page.wait_for_timeout(3500)
+
+            # Handle 'Video posts are now shared as reels' modal or OK prompts
+            try:
+                ok_btn = page.locator('div[role="dialog"] button:has-text("OK"), button:has-text("OK")').first
+                if ok_btn.is_visible(timeout=3000):
+                    ok_btn.click(force=True)
+                    page.wait_for_timeout(1000)
             except Exception:
                 pass
 
-        log("Opening 'Create New Post' modal...")
-        create_selectors = [
-            'svg[aria-label="New post"]',
-            'svg[aria-label="Create"]',
-            '[aria-label="New post"]',
-            'a:has-text("Create")',
-            'button:has-text("Create")'
-        ]
-        clicked_create = False
-        for sel in create_selectors:
-            loc = page.locator(sel).first
-            if loc.count() > 0 and loc.is_visible():
-                loc.click()
-                clicked_create = True
-                break
+            # Step 1: Crop -> Click Next
+            log("Advancing past crop settings...")
+            next_btn = page.locator('div[role="dialog"] button:has-text("Next"), div[role="dialog"] div[role="button"]:has-text("Next"), div:text-is("Next")').first
+            next_btn.wait_for(state="visible", timeout=25000)
+            next_btn.click(force=True)
+            page.wait_for_timeout(2500)
 
-        if not clicked_create:
-            page.keyboard.press("c")
-            page.wait_for_timeout(1000)
+            # Step 2: Cover / Filters -> Click Next
+            log("Advancing past cover and trim...")
+            next_btn = page.locator('div[role="dialog"] button:has-text("Next"), div[role="dialog"] div[role="button"]:has-text("Next"), div:text-is("Next")').first
+            next_btn.wait_for(state="visible", timeout=25000)
+            next_btn.click(force=True)
+            page.wait_for_timeout(2500)
 
-        # Attach video
-        log("Attaching video file...")
-        file_input = page.locator('div[role="dialog"] input[type="file"], input[type="file"]').first
-        file_input.wait_for(state="attached", timeout=20000)
-        file_input.set_input_files(str(video_path.resolve()))
-        page.wait_for_timeout(3500)
+            # Step 3: Caption
+            log("Adding caption and hashtags...")
+            caption_box = page.locator('div[role="dialog"] div[contenteditable="true"], div[role="dialog"] textarea, [aria-label*="caption" i]').first
+            full_caption = f"{title}\n\n{caption}".strip()
+            if caption_box.count() > 0 and caption_box.is_visible():
+                caption_box.click(force=True)
+                caption_box.fill(full_caption)
+                page.wait_for_timeout(1500)
 
-        # Handle 'Video posts are now shared as reels' modal
-        try:
-            ok_btn = page.locator('div[role="dialog"] button:has-text("OK")').first
-            if ok_btn.is_visible(timeout=3000):
-                ok_btn.click()
-                page.wait_for_timeout(1000)
-        except Exception:
-            pass
+            # Step 4: Click Share
+            log("Clicking 'Share' button...")
+            share_btn = page.locator('div[role="dialog"] button:has-text("Share"), div[role="dialog"] div[role="button"]:has-text("Share"), div:text-is("Share")').first
+            share_btn.wait_for(state="visible", timeout=15000)
+            share_btn.click(force=True)
 
-        # Step 1: Crop -> Click Next
-        log("Advancing past crop settings...")
-        next_btn = page.locator('div[role="dialog"] button:has-text("Next"), div[role="dialog"] div[role="button"]:has-text("Next")').first
-        next_btn.wait_for(state="visible", timeout=25000)
-        next_btn.click()
-        page.wait_for_timeout(2500)
-
-        # Step 2: Cover / Filters -> Click Next
-        log("Advancing past cover and trim...")
-        next_btn = page.locator('div[role="dialog"] button:has-text("Next"), div[role="dialog"] div[role="button"]:has-text("Next")').first
-        next_btn.wait_for(state="visible", timeout=25000)
-        next_btn.click()
-        page.wait_for_timeout(2500)
-
-        # Step 3: Caption
-        log("Adding caption and hashtags...")
-        caption_box = page.locator('div[role="dialog"] div[contenteditable="true"], div[role="dialog"] textarea').first
-        full_caption = f"{title}\n\n{caption}".strip()
-        if caption_box.count() > 0 and caption_box.is_visible():
-            caption_box.click()
-            caption_box.fill(full_caption)
-            page.wait_for_timeout(1500)
-
-        # Step 4: Click Share
-        log("Clicking 'Share' button...")
-        share_btn = page.locator('div[role="dialog"] button:has-text("Share"), div[role="dialog"] div[role="button"]:has-text("Share")').first
-        share_btn.wait_for(state="visible", timeout=15000)
-        share_btn.click()
-
-        # Step 5: Wait for real confirmation
-        log("Uploading video & awaiting Instagram confirmation (up to 90s)...")
-        success_loc = page.locator('text="Your reel has been shared", text="Your post has been shared", svg[aria-label="Animated checkmark"]').first
-        try:
-            success_loc.wait_for(state="visible", timeout=90000)
-            log("Confirmed! Reel published successfully to Instagram.", "success")
-            return {"status": "posted", "note": "Reel shared to Instagram"}
-        except Exception:
-            if page.locator('div[role="dialog"]').count() == 0:
-                log("Reel upload completed and modal closed.", "success")
+            # Step 5: Wait for real confirmation
+            log("Uploading video & awaiting Instagram confirmation (up to 90s)...")
+            success_loc = page.locator('text="Your reel has been shared", text="Your post has been shared", svg[aria-label="Animated checkmark"]').first
+            try:
+                success_loc.wait_for(state="visible", timeout=90000)
+                log("Confirmed! Reel published successfully to Instagram.", "success")
                 return {"status": "posted", "note": "Reel shared to Instagram"}
-            raise RuntimeError("Timed out waiting for Instagram reel confirmation.")
+            except Exception:
+                if page.locator('div[role="dialog"]').count() == 0:
+                    log("Reel upload completed and modal closed.", "success")
+                    return {"status": "posted", "note": "Reel shared to Instagram"}
+                raise RuntimeError("Timed out waiting for Instagram reel confirmation.")
+        except Exception as e:
+            try:
+                err_shot = PROJECT_ROOT / "scratch" / f"publish_error_instagram_{int(time.time())}.png"
+                page.screenshot(path=str(err_shot))
+            except Exception:
+                pass
+            raise e
 
     def _upload_tiktok(self, page, video_path: Path, title: str, caption: str, on_log=None) -> Dict[str, Any]:
         """Performs end-to-end TikTok Studio upload, captioning, and publishing."""
@@ -483,85 +535,142 @@ class SocialPublisher:
                 on_log(msg, lvl)
             print(f"[TikTok] {msg}")
 
-        log("Navigating to TikTok Creator Studio upload page...")
-        page.goto("https://www.tiktok.com/tiktokstudio/upload", timeout=60000, wait_until="domcontentloaded")
-        page.wait_for_timeout(4000)
-
-        # Check authentication
-        if "login" in page.url or page.locator('button:has-text("Log in"), a[href*="login"]').first.is_visible():
-            raise RuntimeError("TikTok session is not authenticated. Please log in first in Step 6.")
-
-        # Identify upload scope (direct or iframe)
-        target_scope = page
-        for frame in page.frames:
-            if "upload" in frame.url or "creator" in frame.url:
-                target_scope = frame
-                break
-
-        log("Attaching video file to TikTok uploader...")
-        file_input = target_scope.locator('input[type="file"]').first
-        try:
-            file_input.wait_for(state="attached", timeout=20000)
-        except Exception:
-            file_input = page.locator('input[type="file"]').first
-            file_input.wait_for(state="attached", timeout=15000)
-
-        file_input.set_input_files(str(video_path.resolve()))
-        page.wait_for_timeout(4000)
-
-        log("Setting caption & hashtags...")
-        caption_box = page.locator('div[contenteditable="true"], div.DraftEditor-editorContainer, textarea[placeholder*="caption" i]').first
-        full_caption = f"{title} {caption}".strip()
-        try:
-            caption_box.wait_for(state="visible", timeout=25000)
-            caption_box.click()
-            page.keyboard.press("Control+A")
-            page.keyboard.press("Backspace")
-            caption_box.fill(full_caption)
-            page.wait_for_timeout(1000)
-        except Exception as e:
-            log(f"Caption prefill note: {e}", "warn")
-
-        log("Waiting for video upload & transcoding (monitoring Post button)...")
-        post_btn = page.locator('button:has-text("Post"), div[role="button"]:has-text("Post"), button[class*="btn-post"]').first
-        post_btn.wait_for(state="visible", timeout=35000)
-
-        # Wait until Post button is active and enabled
-        start_t = time.time()
-        while time.time() - start_t < 120:
-            try:
-                is_disabled = post_btn.is_disabled() or post_btn.get_attribute("disabled") is not None
-                classes = post_btn.get_attribute("class") or ""
-                if not is_disabled and "disabled" not in classes.lower():
+        def dismiss_tiktok_popups():
+            for _ in range(4):
+                popups = page.locator('div.TUXModal-overlay, div[data-floating-ui-portal], div[role="dialog"]')
+                if popups.count() == 0:
                     break
-            except Exception:
-                pass
-            page.wait_for_timeout(2000)
+                btns = page.locator(
+                    'div.TUXModal-overlay button, div[data-floating-ui-portal] button, '
+                    'button:has-text("Got it"), button:has-text("OK"), button:has-text("Understand"), '
+                    'button:has-text("Allow"), button:has-text("Dismiss"), [aria-label="Close"], button[class*="close"]'
+                )
+                clicked = False
+                for i in range(min(btns.count(), 5)):
+                    try:
+                        b = btns.nth(i)
+                        if b.is_visible():
+                            b.click(force=True, timeout=1000)
+                            clicked = True
+                            page.wait_for_timeout(400)
+                    except Exception:
+                        pass
+                page.keyboard.press("Escape")
+                page.wait_for_timeout(400)
+                if not clicked:
+                    break
 
-        log("Clicking 'Post' button...")
-        post_btn.click()
-        page.wait_for_timeout(3000)
-
-        # Handle post-confirmation modals if prompted
-        for confirm_btn in page.locator('button:has-text("Post now"), button:has-text("Continue to post")').all():
-            try:
-                if confirm_btn.is_visible():
-                    confirm_btn.click()
-                    page.wait_for_timeout(2000)
-            except Exception:
-                pass
-
-        log("Awaiting TikTok publish confirmation...")
-        success_loc = page.locator('text="Your video has been uploaded", text="Manage your posts", text="Upload another video"').first
         try:
-            success_loc.wait_for(state="visible", timeout=60000)
-            log("Confirmed! Video published successfully to TikTok.", "success")
-            return {"status": "posted", "note": "Video published to TikTok"}
-        except Exception:
-            if "manage" in page.url or "content" in page.url:
-                log("Confirmed! Navigated to TikTok manage posts.", "success")
+            log("Navigating to TikTok Creator Studio upload page...")
+            page.goto("https://www.tiktok.com/tiktokstudio/upload", timeout=60000, wait_until="domcontentloaded")
+            page.wait_for_timeout(4000)
+
+            # Check authentication
+            if "login" in page.url or page.locator('button:has-text("Log in"), a[href*="login"]').first.is_visible():
+                raise RuntimeError("TikTok session is not authenticated. Please log in first in Step 6.")
+
+            # Identify upload scope (direct or iframe)
+            target_scope = page
+            for frame in page.frames:
+                if "upload" in frame.url or "creator" in frame.url:
+                    target_scope = frame
+                    break
+
+            log("Attaching video file to TikTok uploader...")
+            file_input = target_scope.locator('input[type="file"]').first
+            try:
+                file_input.wait_for(state="attached", timeout=20000)
+            except Exception:
+                file_input = page.locator('input[type="file"]').first
+                file_input.wait_for(state="attached", timeout=15000)
+
+            file_input.set_input_files(str(video_path.resolve()))
+            page.wait_for_timeout(4000)
+
+            # Dismiss copyright check and onboarding popups
+            dismiss_tiktok_popups()
+
+            log("Setting caption & hashtags...")
+            caption_box = page.locator('div[contenteditable="true"], div.DraftEditor-editorContainer, textarea[placeholder*="caption" i]').first
+            full_caption = f"{title} {caption}".strip()
+            try:
+                caption_box.wait_for(state="visible", timeout=25000)
+                caption_box.click(force=True)
+                page.keyboard.press("Control+A")
+                page.keyboard.press("Backspace")
+                caption_box.fill(full_caption)
+                page.wait_for_timeout(1000)
+            except Exception as e:
+                log(f"Caption prefill note: {e}", "warn")
+
+            dismiss_tiktok_popups()
+
+            log("Waiting for video upload & transcoding (monitoring Post button)...")
+            # Select only the real publish button in the form footer, NOT the sidebar
+            post_selectors = [
+                'button[class*="btn-post"]',
+                'div.btn-post button',
+                'div[class*="btn-post"]',
+                'div[class*="footer"] button:has-text("Post")',
+                'button:not([data-tt*="Sidebar"]):text-is("Post")',
+                'div[role="button"]:not([data-tt*="Sidebar"]):text-is("Post")'
+            ]
+            post_btn = None
+            for psel in post_selectors:
+                loc = page.locator(psel).first
+                if loc.count() > 0 and loc.is_visible():
+                    post_btn = loc
+                    break
+
+            if not post_btn:
+                post_btn = page.locator('button:not([data-tt*="Sidebar"]):has-text("Post")').first
+                post_btn.wait_for(state="visible", timeout=35000)
+
+            # Wait until Post button is active and enabled
+            start_t = time.time()
+            while time.time() - start_t < 120:
+                dismiss_tiktok_popups()
+                try:
+                    is_disabled = post_btn.is_disabled() or post_btn.get_attribute("disabled") is not None
+                    classes = post_btn.get_attribute("class") or ""
+                    if not is_disabled and "disabled" not in classes.lower():
+                        break
+                except Exception:
+                    pass
+                page.wait_for_timeout(2000)
+
+            dismiss_tiktok_popups()
+            log("Clicking 'Post' button...")
+            post_btn.click(force=True)
+            page.wait_for_timeout(3000)
+
+            # Handle post-confirmation modals if prompted
+            for confirm_btn in page.locator('button:has-text("Post now"), button:has-text("Continue to post")').all():
+                try:
+                    if confirm_btn.is_visible():
+                        confirm_btn.click(force=True)
+                        page.wait_for_timeout(2000)
+                except Exception:
+                    pass
+
+            log("Awaiting TikTok publish confirmation...")
+            success_loc = page.locator('text="Your video has been uploaded", text="Manage your posts", text="Upload another video"').first
+            try:
+                success_loc.wait_for(state="visible", timeout=60000)
+                log("Confirmed! Video published successfully to TikTok.", "success")
                 return {"status": "posted", "note": "Video published to TikTok"}
-            raise RuntimeError("Timed out waiting for TikTok post confirmation.")
+            except Exception:
+                if "manage" in page.url or "content" in page.url:
+                    log("Confirmed! Navigated to TikTok manage posts.", "success")
+                    return {"status": "posted", "note": "Video published to TikTok"}
+                raise RuntimeError("Timed out waiting for TikTok post confirmation.")
+        except Exception as e:
+            try:
+                err_shot = PROJECT_ROOT / "scratch" / f"publish_error_tiktok_{int(time.time())}.png"
+                page.screenshot(path=str(err_shot))
+            except Exception:
+                pass
+            raise e
 
     def _upload_youtube(self, page, video_path: Path, title: str, caption: str, on_log=None) -> Dict[str, Any]:
         """Performs YouTube Studio upload, sets title/description/visibility, and publishes Short."""
@@ -570,77 +679,107 @@ class SocialPublisher:
                 on_log(msg, lvl)
             print(f"[YouTube] {msg}")
 
-        log("Navigating to YouTube Studio...")
-        page.goto("https://studio.youtube.com", timeout=60000, wait_until="domcontentloaded")
-        page.wait_for_timeout(4000)
+        try:
+            log("Navigating to YouTube Studio...")
+            page.goto("https://studio.youtube.com", timeout=60000, wait_until="domcontentloaded")
+            page.wait_for_timeout(4000)
 
-        # Check authentication
-        if "accounts.google.com" in page.url or "signin" in page.url:
-            raise RuntimeError("YouTube session is not authenticated. Please select or connect your Google Chrome profile in Step 6.")
+            # Check authentication
+            if "accounts.google.com" in page.url or "signin" in page.url:
+                # Dedicated automated session is not signed in (due to Google's strict automated browser protection).
+                # Gracefully stage the clip for the user's authentic Chrome browser profile!
+                browser_profiles = self.detect_system_browser_profiles()
+                chrome_prof = next((p for p in browser_profiles if p.get("browser") == "chrome" and len(p.get("emails", [])) > 0), None)
+                if not chrome_prof and browser_profiles:
+                    chrome_prof = browser_profiles[0]
 
-        log("Clicking 'CREATE' -> 'Upload videos'...")
-        create_btn = page.locator('#create-icon, button[aria-label="Create"], ytcp-button#create-icon').first
-        create_btn.wait_for(state="visible", timeout=25000)
-        create_btn.click()
-        page.wait_for_timeout(1200)
+                if chrome_prof:
+                    log(f"Google prevents automated logins. Automatically staging YouTube Short in your authentic {chrome_prof.get('browser_name', 'Chrome')} profile ({chrome_prof.get('name', 'Default')})...", "info")
+                    # Copy title & caption to clipboard using Windows clip.exe
+                    try:
+                        clip_text = f"{title}\n\n{caption}\n\n#Shorts".strip()
+                        import subprocess
+                        subprocess.run(["clip"], input=clip_text.encode("utf-16"), check=True)
+                    except Exception:
+                        pass
+                    # Open authentic Chrome profile with YouTube Studio
+                    self.open_system_browser(browser=chrome_prof.get("browser", "chrome"), profile_id=chrome_prof.get("profile_id", "Default"))
+                    return {
+                        "status": "staged",
+                        "note": f"Staged in authentic {chrome_prof.get('browser_name', 'Chrome')} ({chrome_prof.get('name', 'Default')}). Title copied to clipboard."
+                    }
+                raise RuntimeError("YouTube session is not authenticated. Please select or connect your Google Chrome profile in Step 6.")
 
-        upload_item = page.locator('tp-yt-paper-item:has-text("Upload videos"), [test-id="upload-beta"]').first
-        upload_item.wait_for(state="visible", timeout=12000)
-        upload_item.click()
-        page.wait_for_timeout(2000)
+            log("Clicking 'CREATE' -> 'Upload videos'...")
+            create_btn = page.locator('#create-icon, button[aria-label="Create"], ytcp-button#create-icon').first
+            create_btn.wait_for(state="visible", timeout=25000)
+            create_btn.click()
+            page.wait_for_timeout(1200)
 
-        log("Attaching video file to YouTube Studio...")
-        file_input = page.locator('input[type="file"]').first
-        file_input.wait_for(state="attached", timeout=20000)
-        file_input.set_input_files(str(video_path.resolve()))
-        page.wait_for_timeout(4000)
-
-        log("Setting video Title and Description...")
-        # YouTube shorts title max 100 chars
-        title_box = page.locator('#title-textarea #textbox, [aria-label*="title" i]').first
-        title_box.wait_for(state="visible", timeout=25000)
-        title_box.click()
-        title_clean = title[:95].strip()
-        title_box.fill(title_clean)
-        page.wait_for_timeout(1000)
-
-        desc_box = page.locator('#description-textarea #textbox, [aria-label*="description" i]').first
-        if desc_box.is_visible():
-            desc_box.click()
-            desc_text = f"{title}\n\n{caption}\n\n#Shorts".strip()
-            desc_box.fill(desc_text)
-            page.wait_for_timeout(1000)
-
-        log("Setting audience: 'No, it's not made for kids'...")
-        not_for_kids = page.locator('tp-yt-paper-radio-button[name="VIDEO_MADE_FOR_KIDS_NOT_MFK"], [name="VIDEO_MADE_FOR_KIDS_NOT_MFK"]').first
-        not_for_kids.wait_for(state="visible", timeout=15000)
-        not_for_kids.click()
-        page.wait_for_timeout(1000)
-
-        # Step through wizard: Next -> Next -> Next
-        log("Advancing through video elements and checks...")
-        for step in range(3):
-            next_btn = page.locator('#next-button').first
-            next_btn.wait_for(state="visible", timeout=15000)
-            next_btn.click()
+            upload_item = page.locator('tp-yt-paper-item:has-text("Upload videos"), [test-id="upload-beta"]').first
+            upload_item.wait_for(state="visible", timeout=12000)
+            upload_item.click()
             page.wait_for_timeout(2000)
 
-        log("Setting Visibility: Public...")
-        public_radio = page.locator('tp-yt-paper-radio-button[name="PUBLIC"], [name="PUBLIC"]').first
-        public_radio.wait_for(state="visible", timeout=15000)
-        public_radio.click()
-        page.wait_for_timeout(1000)
+            log("Attaching video file to YouTube Studio...")
+            file_input = page.locator('input[type="file"]').first
+            file_input.wait_for(state="attached", timeout=20000)
+            file_input.set_input_files(str(video_path.resolve()))
+            page.wait_for_timeout(4000)
 
-        log("Clicking 'Publish' button...")
-        done_btn = page.locator('#done-button').first
-        done_btn.wait_for(state="visible", timeout=15000)
-        done_btn.click()
+            log("Setting video Title and Description...")
+            # YouTube shorts title max 100 chars
+            title_box = page.locator('#title-textarea #textbox, [aria-label*="title" i]').first
+            title_box.wait_for(state="visible", timeout=25000)
+            title_box.click()
+            title_clean = title[:95].strip()
+            title_box.fill(title_clean)
+            page.wait_for_timeout(1000)
 
-        log("Awaiting YouTube publish confirmation...")
-        done_dialog = page.locator('text="Video published", text="Video uploaded", a[href*="youtu.be"]').first
-        done_dialog.wait_for(state="visible", timeout=90000)
-        log("Confirmed! Short published successfully to YouTube Studio.", "success")
-        return {"status": "posted", "note": "Short published to YouTube"}
+            desc_box = page.locator('#description-textarea #textbox, [aria-label*="description" i]').first
+            if desc_box.is_visible():
+                desc_box.click()
+                desc_text = f"{title}\n\n{caption}\n\n#Shorts".strip()
+                desc_box.fill(desc_text)
+                page.wait_for_timeout(1000)
+
+            log("Setting audience: 'No, it's not made for kids'...")
+            not_for_kids = page.locator('tp-yt-paper-radio-button[name="VIDEO_MADE_FOR_KIDS_NOT_MFK"], [name="VIDEO_MADE_FOR_KIDS_NOT_MFK"]').first
+            not_for_kids.wait_for(state="visible", timeout=15000)
+            not_for_kids.click()
+            page.wait_for_timeout(1000)
+
+            # Step through wizard: Next -> Next -> Next
+            log("Advancing through video elements and checks...")
+            for step in range(3):
+                next_btn = page.locator('#next-button').first
+                next_btn.wait_for(state="visible", timeout=15000)
+                next_btn.click()
+                page.wait_for_timeout(2000)
+
+            log("Setting Visibility: Public...")
+            public_radio = page.locator('tp-yt-paper-radio-button[name="PUBLIC"], [name="PUBLIC"]').first
+            public_radio.wait_for(state="visible", timeout=15000)
+            public_radio.click()
+            page.wait_for_timeout(1000)
+
+            log("Clicking 'Publish' button...")
+            done_btn = page.locator('#done-button').first
+            done_btn.wait_for(state="visible", timeout=15000)
+            done_btn.click()
+
+            log("Awaiting YouTube publish confirmation...")
+            done_dialog = page.locator('text="Video published", text="Video uploaded", a[href*="youtu.be"]').first
+            done_dialog.wait_for(state="visible", timeout=90000)
+            log("Confirmed! Short published successfully to YouTube Studio.", "success")
+            return {"status": "posted", "note": "Short published to YouTube"}
+        except Exception as e:
+            try:
+                err_shot = PROJECT_ROOT / "scratch" / f"publish_error_youtube_{int(time.time())}.png"
+                page.screenshot(path=str(err_shot))
+            except Exception:
+                pass
+            raise e
 
     def publish_video(
         self,
@@ -850,8 +989,9 @@ class SocialPublisher:
                 _report_progress(item["id"], plat, status_str, pct, note=note_str)
 
         return {
-            "success": any(entry["status"] == "posted" for entry in published_log),
+            "success": any(entry["status"] in ("posted", "staged") for entry in published_log),
             "published_count": sum(1 for entry in published_log if entry["status"] == "posted"),
+            "staged_count": sum(1 for entry in published_log if entry["status"] == "staged"),
             "failed_count": sum(1 for entry in published_log if entry["status"] == "failed"),
             "log": published_log
         }

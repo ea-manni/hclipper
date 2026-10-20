@@ -178,13 +178,17 @@ export const PublisherView: React.FC = () => {
       const unsubEvt = window.hclipper.onEngineEvent((evt: any) => {
         if (evt.event === 'publish_progress') {
           const detail = evt.note ? ` — ${evt.note}` : '';
-          const logType = evt.status === 'posted' ? 'success' : evt.status === 'failed' ? 'error' : 'info';
+          const logType = evt.status === 'posted' ? 'success' : evt.status === 'staged' ? 'info' : evt.status === 'failed' ? 'error' : 'info';
           addLog(`[${evt.progress}%] ${evt.clip_id} -> ${evt.platform}: ${evt.status.toUpperCase()}${detail}`, logType);
         } else if (evt.event === 'publish_result') {
           const pubCount = evt.published_count || 0;
+          const stagedCount = evt.staged_count || 0;
           const failCount = evt.failed_count || 0;
-          if (pubCount > 0) {
-            addLog(`Batch publish finished: ${pubCount} posted successfully (${failCount} failed).`, 'success');
+          if (pubCount > 0 || stagedCount > 0) {
+            const summaryParts = [];
+            if (pubCount > 0) summaryParts.push(`${pubCount} posted live`);
+            if (stagedCount > 0) summaryParts.push(`${stagedCount} staged for YouTube Studio`);
+            addLog(`Batch publish finished: ${summaryParts.join(', ')} (${failCount} failed).`, 'success');
           } else {
             addLog(`Batch publish finished: 0 posted (${failCount} failed). Check activity logs above.`, 'warn');
           }
@@ -249,11 +253,15 @@ export const PublisherView: React.FC = () => {
 
       const pubEvt = res.events?.find((e: any) => e.event === 'publish_result');
       const count = pubEvt?.published_count || 0;
+      const stagedCount = pubEvt?.staged_count || 0;
       const failCount = pubEvt?.failed_count || 0;
 
-      if (count > 0) {
-        setPublishMessage(`Published ${count} clip(s) successfully!`);
-        addLog(`Clips ${selectedRange} batch completed: ${count} posted, ${failCount} failed.`, 'success');
+      if (count > 0 || stagedCount > 0) {
+        const parts = [];
+        if (count > 0) parts.push(`${count} live`);
+        if (stagedCount > 0) parts.push(`${stagedCount} staged`);
+        setPublishMessage(`Completed: ${parts.join(', ')}!`);
+        addLog(`Clips ${selectedRange} batch completed: ${parts.join(', ')} (${failCount} failed).`, 'success');
       } else if (failCount > 0) {
         setPublishMessage(`Upload failed for ${failCount} clip(s). Review log console below.`);
         addLog(`Publishing failed for ${failCount} operation(s). Check credentials and logs.`, 'error');
