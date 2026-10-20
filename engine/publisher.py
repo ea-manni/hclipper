@@ -810,12 +810,22 @@ class SocialPublisher:
         total_ops = len(target_items) * len(resolved_plats)
         completed = 0
 
+        def _report_progress(clip_id, plat_name, status, pct, note=""):
+            if not on_progress:
+                return
+            try:
+                on_progress(clip_id, plat_name, status, pct, note=note)
+            except TypeError:
+                try:
+                    on_progress(clip_id, plat_name, status, pct)
+                except Exception:
+                    pass
+
         for item in target_items:
             for plat in resolved_plats:
                 def item_log(msg, lvl="info"):
-                    if on_progress:
-                        pct = int((completed / total_ops) * 100) if total_ops > 0 else 0
-                        on_progress(item["id"], plat, "uploading", pct, note=msg)
+                    pct = int((completed / total_ops) * 100) if total_ops > 0 else 0
+                    _report_progress(item["id"], plat, "uploading", pct, note=msg)
 
                 res = self.publish_video(
                     platform=plat,
@@ -836,9 +846,8 @@ class SocialPublisher:
                     "error": res.get("error")
                 })
 
-                if on_progress:
-                    pct = int((completed / total_ops) * 100) if total_ops > 0 else 100
-                    on_progress(item["id"], plat, status_str, pct, note=note_str)
+                pct = int((completed / total_ops) * 100) if total_ops > 0 else 100
+                _report_progress(item["id"], plat, status_str, pct, note=note_str)
 
         return {
             "success": any(entry["status"] == "posted" for entry in published_log),

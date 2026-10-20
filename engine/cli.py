@@ -244,16 +244,20 @@ def cmd_publish(args):
         publisher = SocialPublisher()
         platforms = [p.strip() for p in args.platforms.split(",") if p.strip()]
 
-        def progress_cb(clip_id, platform, status, pct):
+        def progress_cb(clip_id, platform, status, pct, note=None, **kwargs):
             if args.json:
-                emit_json("publish_progress", {
+                payload = {
                     "clip_id": clip_id,
                     "platform": platform,
                     "status": status,
                     "progress": pct
-                })
+                }
+                if note:
+                    payload["note"] = note
+                emit_json("publish_progress", payload)
             else:
-                print(f"[{pct}%] {clip_id} -> {platform}: {status}")
+                detail = f" - {note}" if note else ""
+                print(f"[{pct}%] {clip_id} -> {platform}: {status}{detail}")
 
         print(f"Publishing clips matching '{args.publish}' to {platforms}...")
         res = publisher.publish_batch(args.publish, platforms, on_progress=progress_cb)
