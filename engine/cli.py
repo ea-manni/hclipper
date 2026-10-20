@@ -315,6 +315,25 @@ def cmd_session_status(args):
     else:
         print(json.dumps(status, indent=2))
 
+def cmd_browser_profiles(args):
+    publisher = SocialPublisher()
+    profiles = publisher.detect_system_browser_profiles()
+    if args.json:
+        emit_json("browser_profiles", {"profiles": profiles})
+    else:
+        print(json.dumps(profiles, indent=2))
+
+def cmd_open_browser_studio(args):
+    publisher = SocialPublisher()
+    url = getattr(args, "url", "https://studio.youtube.com") or "https://studio.youtube.com"
+    profile = getattr(args, "profile", "Default") or "Default"
+    browser = getattr(args, "browser", "chrome") or "chrome"
+    success = publisher.open_system_browser(browser=browser, profile_id=profile, url=url)
+    if args.json:
+        emit_json("open_browser_result", {"success": success, "browser": browser, "profile": profile, "url": url})
+    else:
+        print(f"Opened {browser} profile '{profile}' to {url}: {success}")
+
 def cmd_motion(args):
     from engine.motion.pipeline import DynamicMotionPipeline
     from engine.subtitles import SubtitleEngine
@@ -761,6 +780,17 @@ def main():
     # Session Status
     p_ss = subparsers.add_parser("session-status", help="Check session login status", parents=[common_parser])
     p_ss.set_defaults(func=cmd_session_status)
+
+    # Discovered Browser Profiles
+    p_bp = subparsers.add_parser("browser-profiles", help="List discovered Chrome & Edge user profiles and channels", parents=[common_parser])
+    p_bp.set_defaults(func=cmd_browser_profiles)
+
+    # Open Studio in authentic System Browser
+    p_obs = subparsers.add_parser("open-studio", help="Launch authentic system browser with selected profile", parents=[common_parser])
+    p_obs.add_argument("--browser", default="chrome", choices=["chrome", "edge"], help="Target system browser")
+    p_obs.add_argument("--profile", default="Default", help="Browser user profile ID (e.g. Default, Profile 3)")
+    p_obs.add_argument("--url", default="https://studio.youtube.com", help="Target URL to navigate to")
+    p_obs.set_defaults(func=cmd_open_browser_studio)
 
     # Highlights (BYOK AI Viral Clip Scout)
     p_hl = subparsers.add_parser("highlights", help="Scout viral short clip moments from transcripts", parents=[common_parser])

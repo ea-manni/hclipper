@@ -39,6 +39,15 @@ interface QueueItem {
   };
 }
 
+interface BrowserProfile {
+  browser: 'chrome' | 'edge';
+  browserName: string;
+  profileId: string;
+  name: string;
+  emails: string[];
+  isDefault: boolean;
+}
+
 interface LogEntry {
   id: string;
   time: string;
@@ -85,6 +94,10 @@ export const PublisherView: React.FC = () => {
     instagram: false
   });
 
+  // Browser Profiles State (Real System Chrome / Edge channels)
+  const [browserProfiles, setBrowserProfiles] = useState<BrowserProfile[]>([]);
+  const [selectedYouTubeProfileId, setSelectedYouTubeProfileId] = useState<string>('Profile 3');
+
   // Edit Caption Modal State
   const [editingClip, setEditingClip] = useState<QueueItem | null>(null);
   const [editTitle, setEditTitle] = useState('');
@@ -109,7 +122,22 @@ export const PublisherView: React.FC = () => {
         // Trigger automatic scan if queue file was empty
         await handleScanClips();
       }
-      // Check session status
+
+      // Discover authentic browser profiles directly from system
+      if (window.hclipper.getBrowserProfiles) {
+        try {
+          const sysProfiles = await window.hclipper.getBrowserProfiles();
+          if (sysProfiles && sysProfiles.length > 0) {
+            setBrowserProfiles(sysProfiles);
+            const withEmails = sysProfiles.find((p) => p.emails && p.emails.length > 0);
+            if (withEmails) {
+              setSelectedYouTubeProfileId(withEmails.profileId);
+            }
+          }
+        } catch (e) {}
+      }
+
+      // Check session status via engine
       const res = await window.hclipper.runEngine('session-status', []);
       if (res.events && res.events.length > 0) {
         const lastEvt = res.events[res.events.length - 1];
@@ -120,6 +148,21 @@ export const PublisherView: React.FC = () => {
             tiktok_us: lastEvt.tiktok_us,
             instagram: lastEvt.instagram
           });
+          if (lastEvt.browser_profiles && Array.isArray(lastEvt.browser_profiles) && lastEvt.browser_profiles.length > 0) {
+            const mapped: BrowserProfile[] = lastEvt.browser_profiles.map((p: any) => ({
+              browser: p.browser,
+              browserName: p.browser_name,
+              profileId: p.profile_id,
+              name: p.name,
+              emails: p.emails || [],
+              isDefault: p.is_default || false
+            }));
+            setBrowserProfiles(mapped);
+            const withEmails = mapped.find((p) => p.emails && p.emails.length > 0);
+            if (withEmails) {
+              setSelectedYouTubeProfileId(withEmails.profileId);
+            }
+          }
         }
       }
     }
@@ -134,9 +177,17 @@ export const PublisherView: React.FC = () => {
       });
       const unsubEvt = window.hclipper.onEngineEvent((evt: any) => {
         if (evt.event === 'publish_progress') {
-          addLog(`[${evt.progress}%] ${evt.clip_id} -> ${evt.platform}: ${evt.status.toUpperCase()}`, evt.status === 'posted' ? 'success' : 'warn');
+          const detail = evt.note ? ` — ${evt.note}` : '';
+          const logType = evt.status === 'posted' ? 'success' : evt.status === 'failed' ? 'error' : 'info';
+          addLog(`[${evt.progress}%] ${evt.clip_id} -> ${evt.platform}: ${evt.status.toUpperCase()}${detail}`, logType);
         } else if (evt.event === 'publish_result') {
-          addLog(`Batch publish finished: ${evt.published_count || 0} operations executed.`, evt.success ? 'success' : 'warn');
+          const pubCount = evt.published_count || 0;
+          const failCount = evt.failed_count || 0;
+          if (pubCount > 0) {
+            addLog(`Batch publish finished: ${pubCount} posted successfully (${failCount} failed).`, 'success');
+          } else {
+            addLog(`Batch publish finished: 0 posted (${failCount} failed). Check activity logs above.`, 'warn');
+          }
         } else if (evt.event === 'login_result') {
           if (evt.success) {
             addLog(`Session profile created for ${evt.platform}!`, 'success');
@@ -194,13 +245,20 @@ export const PublisherView: React.FC = () => {
         '--platforms', plats.join(',')
       ]);
       setIsPublishing(false);
-      if (res.success) {
-        setPublishMessage(`Clips ${selectedRange} successfully published!`);
-        addLog(`Clips ${selectedRange} batch completed successfully.`, 'success');
-        await loadQueueFromDisk();
+      await loadQueueFromDisk();
+
+      const pubEvt = res.events?.find((e: any) => e.event === 'publish_result');
+      const count = pubEvt?.published_count || 0;
+      const failCount = pubEvt?.failed_count || 0;
+
+      if (count > 0) {
+        setPublishMessage(`Published ${count} clip(s) successfully!`);
+        addLog(`Clips ${selectedRange} batch completed: ${count} posted, ${failCount} failed.`, 'success');
+      } else if (failCount > 0) {
+        setPublishMessage(`Upload failed for ${failCount} clip(s). Review log console below.`);
+        addLog(`Publishing failed for ${failCount} operation(s). Check credentials and logs.`, 'error');
       } else {
-        setPublishMessage(`Publishing completed with status logged in console.`);
-        addLog(`Publishing finished with warnings/errors.`, 'warn');
+        setPublishMessage(`Publishing completed. See activity log.`);
       }
     } else {
       setTimeout(() => {
@@ -276,11 +334,63 @@ export const PublisherView: React.FC = () => {
     addLog(`Updated caption metadata for ${editingClip.filename}`, 'success');
   };
 
+  const handleStageForYouTube = async (item: QueueItem) => {
+    addLog(`Preparing YouTube upload for "${item.title}"...`, 'info');
+    const fullText = `${item.title}\n\n${item.caption || ''}\n\n#Shorts`.trim();
+    if (window.hclipper?.copyToClipboard) {
+      await window.hclipper.copyToClipboard(fullText);
+    }
+    if (window.hclipper?.showInFolder) {
+      window.hclipper.showInFolder(item.file_path);
+    }
+    const prof = browserProfiles.find((p) => p.profileId === selectedYouTubeProfileId) || browserProfiles[0];
+    if (window.hclipper?.openBrowserProfile) {
+      await window.hclipper.openBrowserProfile({
+        browser: prof?.browser || 'chrome',
+        profileId: prof?.profileId || 'Default',
+        url: 'https://studio.youtube.com'
+      });
+    }
+
+    const updated = queue.map((q) =>
+      q.id === item.id ? { ...q, status: { ...q.status, youtube: 'staged' } } : q
+    );
+    setQueue(updated);
+    if (window.hclipper?.saveQueue) {
+      await window.hclipper.saveQueue(updated);
+    }
+    addLog(
+      `✓ Copied title & hashtags to clipboard! Opened YouTube Studio in ${prof?.browserName || 'Chrome'} (${prof?.name || 'Default'}). Drag clip into Studio to complete.`,
+      'success'
+    );
+  };
+
+  const handleOpenYouTubeStudio = async (profileId?: string) => {
+    const pid = profileId || selectedYouTubeProfileId;
+    const prof = browserProfiles.find((p) => p.profileId === pid) || browserProfiles[0];
+    addLog(`Opening YouTube Studio in ${prof?.browserName || 'Chrome'} (${prof?.name || pid})...`, 'info');
+    if (window.hclipper?.openBrowserProfile) {
+      await window.hclipper.openBrowserProfile({
+        browser: prof?.browser || 'chrome',
+        profileId: prof?.profileId || 'Default',
+        url: 'https://studio.youtube.com'
+      });
+      addLog(`✓ YouTube Studio opened in authentic ${prof?.browserName || 'Chrome'} window (no bot check).`, 'success');
+    }
+  };
+
   const renderBadge = (status?: string) => {
     if (status === 'posted') {
       return (
         <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded">
           <CheckCircle className="w-2.5 h-2.5" /> Live
+        </span>
+      );
+    }
+    if (status === 'staged') {
+      return (
+        <span className="flex items-center gap-1 text-[10px] font-bold text-sky-400 bg-sky-500/10 border border-sky-500/20 px-2 py-0.5 rounded">
+          <ExternalLink className="w-2.5 h-2.5" /> Staged
         </span>
       );
     }
@@ -344,13 +454,15 @@ export const PublisherView: React.FC = () => {
             <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
               sessionStatuses.youtube ? 'text-emerald-400 bg-emerald-500/10' : 'text-amber-400 bg-amber-500/10'
             }`}>
-              {sessionStatuses.youtube ? 'Connected' : 'Click to Login'}
+              {sessionStatuses.youtube ? 'Connected' : 'Click to Link'}
             </span>
           </div>
           <div>
             <div className="text-xs font-bold text-white">YouTube Shorts</div>
-            <div className="text-[10px] text-slate-400">
-              {sessionStatuses.youtube ? 'Connected Channel' : 'Click to Authenticate'}
+            <div className="text-[10px] text-slate-400 truncate">
+              {browserProfiles.length > 0 
+                ? `${browserProfiles.find(p => p.profileId === selectedYouTubeProfileId)?.name || 'Chrome'} (${browserProfiles.find(p => p.profileId === selectedYouTubeProfileId)?.browserName || 'Chrome'})`
+                : (sessionStatuses.youtube ? 'Connected Channel' : 'Click to Link Channel')}
             </div>
           </div>
         </div>
@@ -613,6 +725,14 @@ export const PublisherView: React.FC = () => {
                       >
                         <FolderOpen className="w-3.5 h-3.5" />
                       </button>
+                      {/* Stage for YouTube in authentic browser */}
+                      <button 
+                        onClick={() => handleStageForYouTube(item)}
+                        className="px-2.5 py-1 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded text-[11px] font-bold border border-red-500/30 inline-flex items-center gap-1 shadow-sm transition-all"
+                        title="Copy clip details, highlight in folder, and open YouTube Studio in selected Chrome profile"
+                      >
+                        <YoutubeIcon className="w-3 h-3 text-red-500" /> Stage YT
+                      </button>
                       {/* Edit Caption */}
                       <button 
                         onClick={() => openCaptionModal(item)}
@@ -771,9 +891,16 @@ export const PublisherView: React.FC = () => {
       {/* Account Login Session Modal */}
       {activeAccountModal && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="glass-card bg-[#0d1017] border border-white/15 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
+          <div className="glass-card bg-[#0d1017] border border-white/15 rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl">
             <div className="flex items-center justify-between border-b border-white/10 pb-3">
-              <h3 className="text-sm font-bold text-white capitalize">{activeAccountModal.replace('_', ' ')} Session</h3>
+              <div className="flex items-center space-x-2">
+                {activeAccountModal === 'youtube' && <YoutubeIcon className="w-5 h-5 text-red-500" />}
+                {activeAccountModal.startsWith('tiktok') && <TikTokIcon className="w-5 h-5 text-emerald-400" />}
+                {activeAccountModal === 'instagram' && <InstagramIcon className="w-5 h-5 text-pink-500" />}
+                <h3 className="text-sm font-bold text-white capitalize">
+                  {activeAccountModal === 'youtube' ? 'YouTube Shorts & Channel Session' : `${activeAccountModal.replace('_', ' ')} Session`}
+                </h3>
+              </div>
               <button 
                 onClick={() => setActiveAccountModal(null)}
                 className="p-1 rounded-lg hover:bg-white/10 text-slate-400 hover:text-white"
@@ -782,26 +909,102 @@ export const PublisherView: React.FC = () => {
               </button>
             </div>
 
-            <p className="text-xs text-slate-300 leading-relaxed">
-              Launches an interactive Chromium browser session. Log in once; your cookies and authentication tokens will be securely preserved in <code className="bg-slate-900 px-1 py-0.5 rounded text-amber-300">sessions/</code> for automatic publishing.
-            </p>
+            {activeAccountModal === 'youtube' ? (
+              <div className="space-y-4">
+                <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-3 space-y-1.5">
+                  <div className="text-xs font-bold text-red-400 flex items-center gap-1.5">
+                    <CheckCircle className="w-3.5 h-3.5 text-red-400" />
+                    <span>Authentic System Chrome / Edge Session</span>
+                  </div>
+                  <p className="text-[11px] text-slate-300 leading-relaxed">
+                    Google restricts automated headless browsers from logging into Google Accounts.
+                    hclipper connects with your authentic system Google Chrome profile so you can manage, stage, and publish shorts to any of your channels without bot blocks.
+                  </p>
+                </div>
 
-            <div className="flex justify-end space-x-2 pt-2">
-              <button 
-                onClick={() => setActiveAccountModal(null)}
-                className="px-3.5 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-slate-300 text-xs font-medium"
-              >
-                Close
-              </button>
-              <button 
-                onClick={() => handleConnectSession(activeAccountModal)}
-                disabled={isLoggingIn}
-                className="px-4 py-1.5 rounded-lg bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 text-xs font-bold flex items-center space-x-1"
-              >
-                <LogIn className="w-3.5 h-3.5" />
-                <span>{isLoggingIn ? 'Launching Chromium...' : 'Launch Login Browser'}</span>
-              </button>
-            </div>
+                {/* Browser Channel Selector */}
+                <div className="space-y-2">
+                  <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                    Select Your Authenticated Browser Channel / Profile:
+                  </label>
+                  <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                    {browserProfiles.length > 0 ? (
+                      browserProfiles.map((p) => (
+                        <div
+                          key={`${p.browser}_${p.profileId}`}
+                          onClick={() => setSelectedYouTubeProfileId(p.profileId)}
+                          className={`p-3 rounded-xl border text-xs cursor-pointer transition-all flex items-center justify-between ${
+                            selectedYouTubeProfileId === p.profileId
+                              ? 'bg-amber-400/10 border-amber-400/40 text-white'
+                              : 'bg-white/[0.02] border-white/10 text-slate-400 hover:border-white/20 hover:text-slate-200'
+                          }`}
+                        >
+                          <div>
+                            <div className="font-bold text-white flex items-center gap-1.5">
+                              <span>{p.name || p.profileId}</span>
+                              <span className="text-[10px] text-slate-400 font-mono">({p.browserName})</span>
+                            </div>
+                            {p.emails && p.emails.length > 0 && (
+                              <div className="text-[10px] text-amber-300/80 font-mono mt-0.5">
+                                {p.emails.join(', ')}
+                              </div>
+                            )}
+                          </div>
+                          <input
+                            type="radio"
+                            name="yt_profile"
+                            checked={selectedYouTubeProfileId === p.profileId}
+                            onChange={() => setSelectedYouTubeProfileId(p.profileId)}
+                            className="accent-amber-400 cursor-pointer"
+                          />
+                        </div>
+                      ))
+                    ) : (
+                      <div className="p-3 rounded-lg bg-slate-900 border border-white/10 text-xs text-slate-400">
+                        Scanning system browser profiles...
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Actions */}
+                <div className="pt-2 flex flex-col gap-2">
+                  <button
+                    onClick={() => handleOpenYouTubeStudio()}
+                    className="w-full py-2.5 px-4 bg-red-600 hover:bg-red-500 text-white rounded-lg text-xs font-bold flex items-center justify-center space-x-2 shadow-lg transition-all"
+                  >
+                    <ExternalLink className="w-4 h-4" />
+                    <span>Open YouTube Studio in {browserProfiles.find((p) => p.profileId === selectedYouTubeProfileId)?.name || 'Chrome'}</span>
+                  </button>
+                  <p className="text-[10px] text-center text-slate-500">
+                    Opens YouTube Studio directly where you can select your channel, review analytics, or upload shorts.
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <p className="text-xs text-slate-300 leading-relaxed">
+                  Launches an interactive browser session. Log in once; your cookies and authentication tokens will be securely preserved in <code className="bg-slate-900 px-1 py-0.5 rounded text-amber-300">sessions/</code> for automatic publishing.
+                </p>
+
+                <div className="flex justify-end space-x-2 pt-2">
+                  <button 
+                    onClick={() => setActiveAccountModal(null)}
+                    className="px-3.5 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-slate-300 text-xs font-medium"
+                  >
+                    Close
+                  </button>
+                  <button 
+                    onClick={() => handleConnectSession(activeAccountModal)}
+                    disabled={isLoggingIn}
+                    className="px-4 py-1.5 rounded-lg bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 text-xs font-bold flex items-center space-x-1"
+                  >
+                    <LogIn className="w-3.5 h-3.5" />
+                    <span>{isLoggingIn ? 'Launching Browser...' : 'Launch Login Browser'}</span>
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

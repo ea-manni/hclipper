@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, clipboard } = require('electron');
 const path = require('path');
 const { spawn } = require('child_process');
 const fs = require('fs');
@@ -647,5 +647,104 @@ ipcMain.handle('hclipper:resolve-media-url', async (event, rawPath) => {
   const fallback = path.isAbsolute(rawPath) ? rawPath : path.join(workspaceRoot, rawPath);
   const normalized = fallback.replace(/\\/g, '/');
   return normalized.startsWith('/') ? `file://${normalized}` : `file:///${normalized}`;
+});
+
+// IPC Handler: Copy to Clipboard
+ipcMain.handle('hclipper:copy-to-clipboard', async (event, text) => {
+  if (typeof text === 'string') {
+    clipboard.writeText(text);
+    return true;
+  }
+  return false;
+});
+
+// IPC Handler: Open URL in authentic system browser profile
+ipcMain.handle('hclipper:open-browser-profile', async (event, { browser = 'chrome', profileId = 'Default', url = 'https://studio.youtube.com' }) => {
+  let candidates = [];
+  if (browser === 'chrome') {
+    candidates = [
+      'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+      'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+      path.join(process.env.LOCALAPPDATA || '', 'Google', 'Chrome', 'Application', 'chrome.exe')
+    ];
+  } else if (browser === 'edge') {
+    candidates = [
+      'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
+      'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe'
+    ];
+  }
+
+  const exe = candidates.find(c => fs.existsSync(c));
+  if (exe) {
+    const args = [`--profile-directory=${profileId}`, url];
+    spawn(exe, args, { detached: true, stdio: 'ignore' }).unref();
+    return true;
+  } else {
+    shell.openExternal(url);
+    return true;
+  }
+});
+
+// IPC Handler: Get System Browser Profiles
+ipcMain.handle('hclipper:get-browser-profiles', async () => {
+  const localAppData = process.env.LOCALAPPDATA || '';
+  if (!localAppData) return [];
+  const profiles = [];
+
+  // Google Chrome
+  const chromeUserData = path.join(localAppData, 'Google', 'Chrome', 'User Data');
+  if (fs.existsSync(chromeUserData)) {
+    try {
+      const entries = fs.readdirSync(chromeUserData, { withFileTypes: true });
+      const dirs = ['Default', ...entries.filter(e => e.isDirectory() && e.name.startsWith('Profile ')).map(e => e.name)];
+      for (const p of dirs) {
+        const prefFile = path.join(chromeUserData, p, 'Preferences');
+        if (fs.existsSync(prefFile)) {
+          try {
+            const data = JSON.parse(fs.readFileSync(prefFile, 'utf8'));
+            const name = data?.profile?.name || p;
+            const accs = data?.account_info || [];
+            const emails = accs.map(a => a.email).filter(Boolean);
+            profiles.push({
+              browser: 'chrome',
+              browserName: 'Google Chrome',
+              profileId: p,
+              name,
+              emails,
+              isDefault: p === 'Default'
+            });
+          } catch (e) {}
+        }
+      }
+    } catch (e) {}
+  }
+
+  // Microsoft Edge
+  const edgeUserData = path.join(localAppData, 'Microsoft', 'Edge', 'User Data');
+  if (fs.existsSync(edgeUserData)) {
+    try {
+      const entries = fs.readdirSync(edgeUserData, { withFileTypes: true });
+      const dirs = ['Default', ...entries.filter(e => e.isDirectory() && e.name.startsWith('Profile ')).map(e => e.name)];
+      for (const p of dirs) {
+        const prefFile = path.join(edgeUserData, p, 'Preferences');
+        if (fs.existsSync(prefFile)) {
+          try {
+            const data = JSON.parse(fs.readFileSync(prefFile, 'utf8'));
+            const name = data?.profile?.name || p;
+            profiles.push({
+              browser: 'edge',
+              browserName: 'Microsoft Edge',
+              profileId: p,
+              name,
+              emails: [],
+              isDefault: p === 'Default'
+            });
+          } catch (e) {}
+        }
+      }
+    } catch (e) {}
+  }
+
+  return profiles;
 });
 

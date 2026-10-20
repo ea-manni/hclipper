@@ -177,14 +177,112 @@ class SocialPublisher:
         self.proxy_user = proxy_user
         self.proxy_pass = proxy_pass
 
-    def check_session_status(self) -> Dict[str, bool]:
-        """Checks if persistent session cookies exist on disk for each account."""
+    def check_session_status(self) -> Dict[str, Any]:
+        """Checks if persistent session cookies exist on disk for each account and discovers system browser profiles."""
+        browser_profiles = self.detect_system_browser_profiles()
+        has_system_yt = any(p.get("browser") == "chrome" and len(p.get("emails", [])) > 0 for p in browser_profiles)
+        has_custom_yt = (self.sessions_dir / "youtube_default_profile").exists()
+
         return {
-            "youtube": (self.sessions_dir / "youtube_default_profile").exists(),
+            "youtube": has_custom_yt or has_system_yt,
+            "youtube_custom": has_custom_yt,
+            "youtube_system": has_system_yt,
             "tiktok_us": (self.sessions_dir / "tiktok_default_profile").exists() or (self.sessions_dir / "tiktok_us_default_profile").exists() or (self.sessions_dir / "tiktok_us_profile").exists(),
             "tiktok_ng": (self.sessions_dir / "tiktok_ng_default_profile").exists() or (self.sessions_dir / "tiktok_ng_profile").exists(),
-            "instagram": (self.sessions_dir / "instagram_default_profile").exists() or (self.sessions_dir / "ig_session.json").exists()
+            "instagram": (self.sessions_dir / "instagram_default_profile").exists() or (self.sessions_dir / "ig_session.json").exists(),
+            "browser_profiles": browser_profiles
         }
+
+    @staticmethod
+    def detect_system_browser_profiles() -> List[Dict[str, Any]]:
+        """
+        Discovers authentic Google Chrome and Microsoft Edge profiles installed on the user's system,
+        including authenticated Google/YouTube account emails.
+        """
+        profiles = []
+        local_app_data = os.environ.get("LOCALAPPDATA", "")
+        if not local_app_data:
+            return profiles
+
+        # 1. Google Chrome
+        chrome_user_data = Path(local_app_data) / "Google" / "Chrome" / "User Data"
+        if chrome_user_data.exists():
+            profile_dirs = ["Default"] + [p.name for p in chrome_user_data.glob("Profile *") if p.is_dir()]
+            for p in profile_dirs:
+                pref_file = chrome_user_data / p / "Preferences"
+                if pref_file.exists():
+                    try:
+                        with open(pref_file, "r", encoding="utf-8", errors="ignore") as f:
+                            data = json.load(f)
+                        name = data.get("profile", {}).get("name", p)
+                        accs = data.get("account_info", [])
+                        emails = [a.get("email") for a in accs if a.get("email")]
+                        profiles.append({
+                            "browser": "chrome",
+                            "browser_name": "Google Chrome",
+                            "profile_id": p,
+                            "name": name,
+                            "emails": emails,
+                            "is_default": p == "Default"
+                        })
+                    except Exception:
+                        pass
+
+        # 2. Microsoft Edge
+        edge_user_data = Path(local_app_data) / "Microsoft" / "Edge" / "User Data"
+        if edge_user_data.exists():
+            profile_dirs = ["Default"] + [p.name for p in edge_user_data.glob("Profile *") if p.is_dir()]
+            for p in profile_dirs:
+                pref_file = edge_user_data / p / "Preferences"
+                if pref_file.exists():
+                    try:
+                        with open(pref_file, "r", encoding="utf-8", errors="ignore") as f:
+                            data = json.load(f)
+                        name = data.get("profile", {}).get("name", p)
+                        profiles.append({
+                            "browser": "edge",
+                            "browser_name": "Microsoft Edge",
+                            "profile_id": p,
+                            "name": name,
+                            "emails": [],
+                            "is_default": p == "Default"
+                        })
+                    except Exception:
+                        pass
+
+        return profiles
+
+    @staticmethod
+    def open_system_browser(browser: str = "chrome", profile_id: str = "Default", url: str = "https://studio.youtube.com") -> bool:
+        """
+        Launches the creator's actual system browser using their authenticated profile.
+        Completely bypasses bot/automation barriers.
+        """
+        import subprocess
+        candidates = []
+        if browser == "chrome":
+            candidates = [
+                r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+                r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+                os.path.expandvars(r"%LOCALAPPDATA%\Google\Chrome\Application\chrome.exe")
+            ]
+        elif browser == "edge":
+            candidates = [
+                r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+                r"C:\Program Files\Microsoft\Edge\Application\msedge.exe"
+            ]
+
+        exe = next((c for c in candidates if os.path.exists(c)), None)
+        if not exe:
+            return False
+
+        args = [exe, f"--profile-directory={profile_id}", url]
+        try:
+            subprocess.Popen(args, close_fds=True)
+            return True
+        except Exception as e:
+            print(f"Error launching system browser: {e}", file=sys.stderr)
+            return False
 
     def verify_geolocation(self, proxy_server: Optional[str] = None) -> Dict[str, Any]:
         """
@@ -213,8 +311,8 @@ class SocialPublisher:
 
     def launch_browser_session(self, platform: str, account: str = "default", headless: bool = False):
         """
-        Launches an interactive Playwright browser window to allow the creator
-        to log in and save persistent cookies and session tokens.
+        Launches an interactive browser window using real Chrome channel and stealth
+        to allow the creator to log in and save persistent cookies and session tokens.
         """
         try:
             from playwright.sync_api import sync_playwright
@@ -236,16 +334,28 @@ class SocialPublisher:
         }
         target_url = url_map.get(platform, "https://google.com")
 
+        # Check if Chrome channel is available
+        launch_kwargs = {
+            "user_data_dir": str(profile_path),
+            "headless": headless,
+            "viewport": {"width": 1280, "height": 850},
+            "ignore_default_args": ["--enable-automation"],
+            "args": [
+                "--disable-blink-features=AutomationControlled",
+                "--no-first-run",
+                "--no-default-browser-check"
+            ]
+        }
+        chrome_exe = r"C:\Program Files\Google\Chrome\Application\chrome.exe"
+        if os.path.exists(chrome_exe):
+            launch_kwargs["channel"] = "chrome"
+
         with sync_playwright() as p:
-            browser = p.chromium.launch_persistent_context(
-                user_data_dir=str(profile_path),
-                headless=headless,
-                args=["--disable-blink-features=AutomationControlled"]
-            )
+            browser = p.chromium.launch_persistent_context(**launch_kwargs)
             page = browser.pages[0] if browser.pages else browser.new_page()
             stealth.apply_stealth_sync(page)
             page.goto(target_url, timeout=60000, wait_until="domcontentloaded")
-            print(f"Browser opened for {platform}. Log in and close browser window when finished.")
+            print(f"Browser opened for {platform}. Log in to your account and close the browser window when finished.")
             try:
                 if sys.stdin.isatty():
                     input(f"\n[{platform.upper()}] Log in to your account in the opened browser, then press ENTER: ")
@@ -264,6 +374,274 @@ class SocialPublisher:
 
         return str(profile_path)
 
+    def _upload_instagram(self, page, video_path: Path, title: str, caption: str, on_log=None) -> Dict[str, Any]:
+        """Performs end-to-end Instagram Reels creation, upload, and sharing."""
+        def log(msg, lvl="info"):
+            if on_log:
+                on_log(msg, lvl)
+            print(f"[Instagram] {msg}")
+
+        log("Navigating to Instagram...")
+        page.goto("https://www.instagram.com/", timeout=60000, wait_until="domcontentloaded")
+        page.wait_for_timeout(3000)
+
+        # Check authentication
+        if "accounts/login" in page.url or page.locator('input[name="username"]').count() > 0:
+            raise RuntimeError("Instagram session is not authenticated. Please log in first in Step 6.")
+
+        # Dismiss notification / prompt overlays
+        for btn in page.locator('button:has-text("Not Now"), button:has-text("Cancel")').all():
+            try:
+                if btn.is_visible():
+                    btn.click()
+                    page.wait_for_timeout(800)
+            except Exception:
+                pass
+
+        log("Opening 'Create New Post' modal...")
+        create_selectors = [
+            'svg[aria-label="New post"]',
+            'svg[aria-label="Create"]',
+            '[aria-label="New post"]',
+            'a:has-text("Create")',
+            'button:has-text("Create")'
+        ]
+        clicked_create = False
+        for sel in create_selectors:
+            loc = page.locator(sel).first
+            if loc.count() > 0 and loc.is_visible():
+                loc.click()
+                clicked_create = True
+                break
+
+        if not clicked_create:
+            page.keyboard.press("c")
+            page.wait_for_timeout(1000)
+
+        # Attach video
+        log("Attaching video file...")
+        file_input = page.locator('div[role="dialog"] input[type="file"], input[type="file"]').first
+        file_input.wait_for(state="attached", timeout=20000)
+        file_input.set_input_files(str(video_path.resolve()))
+        page.wait_for_timeout(3500)
+
+        # Handle 'Video posts are now shared as reels' modal
+        try:
+            ok_btn = page.locator('div[role="dialog"] button:has-text("OK")').first
+            if ok_btn.is_visible(timeout=3000):
+                ok_btn.click()
+                page.wait_for_timeout(1000)
+        except Exception:
+            pass
+
+        # Step 1: Crop -> Click Next
+        log("Advancing past crop settings...")
+        next_btn = page.locator('div[role="dialog"] button:has-text("Next"), div[role="dialog"] div[role="button"]:has-text("Next")').first
+        next_btn.wait_for(state="visible", timeout=25000)
+        next_btn.click()
+        page.wait_for_timeout(2500)
+
+        # Step 2: Cover / Filters -> Click Next
+        log("Advancing past cover and trim...")
+        next_btn = page.locator('div[role="dialog"] button:has-text("Next"), div[role="dialog"] div[role="button"]:has-text("Next")').first
+        next_btn.wait_for(state="visible", timeout=25000)
+        next_btn.click()
+        page.wait_for_timeout(2500)
+
+        # Step 3: Caption
+        log("Adding caption and hashtags...")
+        caption_box = page.locator('div[role="dialog"] div[contenteditable="true"], div[role="dialog"] textarea').first
+        full_caption = f"{title}\n\n{caption}".strip()
+        if caption_box.count() > 0 and caption_box.is_visible():
+            caption_box.click()
+            caption_box.fill(full_caption)
+            page.wait_for_timeout(1500)
+
+        # Step 4: Click Share
+        log("Clicking 'Share' button...")
+        share_btn = page.locator('div[role="dialog"] button:has-text("Share"), div[role="dialog"] div[role="button"]:has-text("Share")').first
+        share_btn.wait_for(state="visible", timeout=15000)
+        share_btn.click()
+
+        # Step 5: Wait for real confirmation
+        log("Uploading video & awaiting Instagram confirmation (up to 90s)...")
+        success_loc = page.locator('text="Your reel has been shared", text="Your post has been shared", svg[aria-label="Animated checkmark"]').first
+        try:
+            success_loc.wait_for(state="visible", timeout=90000)
+            log("Confirmed! Reel published successfully to Instagram.", "success")
+            return {"status": "posted", "note": "Reel shared to Instagram"}
+        except Exception:
+            if page.locator('div[role="dialog"]').count() == 0:
+                log("Reel upload completed and modal closed.", "success")
+                return {"status": "posted", "note": "Reel shared to Instagram"}
+            raise RuntimeError("Timed out waiting for Instagram reel confirmation.")
+
+    def _upload_tiktok(self, page, video_path: Path, title: str, caption: str, on_log=None) -> Dict[str, Any]:
+        """Performs end-to-end TikTok Studio upload, captioning, and publishing."""
+        def log(msg, lvl="info"):
+            if on_log:
+                on_log(msg, lvl)
+            print(f"[TikTok] {msg}")
+
+        log("Navigating to TikTok Creator Studio upload page...")
+        page.goto("https://www.tiktok.com/tiktokstudio/upload", timeout=60000, wait_until="domcontentloaded")
+        page.wait_for_timeout(4000)
+
+        # Check authentication
+        if "login" in page.url or page.locator('button:has-text("Log in"), a[href*="login"]').first.is_visible():
+            raise RuntimeError("TikTok session is not authenticated. Please log in first in Step 6.")
+
+        # Identify upload scope (direct or iframe)
+        target_scope = page
+        for frame in page.frames:
+            if "upload" in frame.url or "creator" in frame.url:
+                target_scope = frame
+                break
+
+        log("Attaching video file to TikTok uploader...")
+        file_input = target_scope.locator('input[type="file"]').first
+        try:
+            file_input.wait_for(state="attached", timeout=20000)
+        except Exception:
+            file_input = page.locator('input[type="file"]').first
+            file_input.wait_for(state="attached", timeout=15000)
+
+        file_input.set_input_files(str(video_path.resolve()))
+        page.wait_for_timeout(4000)
+
+        log("Setting caption & hashtags...")
+        caption_box = page.locator('div[contenteditable="true"], div.DraftEditor-editorContainer, textarea[placeholder*="caption" i]').first
+        full_caption = f"{title} {caption}".strip()
+        try:
+            caption_box.wait_for(state="visible", timeout=25000)
+            caption_box.click()
+            page.keyboard.press("Control+A")
+            page.keyboard.press("Backspace")
+            caption_box.fill(full_caption)
+            page.wait_for_timeout(1000)
+        except Exception as e:
+            log(f"Caption prefill note: {e}", "warn")
+
+        log("Waiting for video upload & transcoding (monitoring Post button)...")
+        post_btn = page.locator('button:has-text("Post"), div[role="button"]:has-text("Post"), button[class*="btn-post"]').first
+        post_btn.wait_for(state="visible", timeout=35000)
+
+        # Wait until Post button is active and enabled
+        start_t = time.time()
+        while time.time() - start_t < 120:
+            try:
+                is_disabled = post_btn.is_disabled() or post_btn.get_attribute("disabled") is not None
+                classes = post_btn.get_attribute("class") or ""
+                if not is_disabled and "disabled" not in classes.lower():
+                    break
+            except Exception:
+                pass
+            page.wait_for_timeout(2000)
+
+        log("Clicking 'Post' button...")
+        post_btn.click()
+        page.wait_for_timeout(3000)
+
+        # Handle post-confirmation modals if prompted
+        for confirm_btn in page.locator('button:has-text("Post now"), button:has-text("Continue to post")').all():
+            try:
+                if confirm_btn.is_visible():
+                    confirm_btn.click()
+                    page.wait_for_timeout(2000)
+            except Exception:
+                pass
+
+        log("Awaiting TikTok publish confirmation...")
+        success_loc = page.locator('text="Your video has been uploaded", text="Manage your posts", text="Upload another video"').first
+        try:
+            success_loc.wait_for(state="visible", timeout=60000)
+            log("Confirmed! Video published successfully to TikTok.", "success")
+            return {"status": "posted", "note": "Video published to TikTok"}
+        except Exception:
+            if "manage" in page.url or "content" in page.url:
+                log("Confirmed! Navigated to TikTok manage posts.", "success")
+                return {"status": "posted", "note": "Video published to TikTok"}
+            raise RuntimeError("Timed out waiting for TikTok post confirmation.")
+
+    def _upload_youtube(self, page, video_path: Path, title: str, caption: str, on_log=None) -> Dict[str, Any]:
+        """Performs YouTube Studio upload, sets title/description/visibility, and publishes Short."""
+        def log(msg, lvl="info"):
+            if on_log:
+                on_log(msg, lvl)
+            print(f"[YouTube] {msg}")
+
+        log("Navigating to YouTube Studio...")
+        page.goto("https://studio.youtube.com", timeout=60000, wait_until="domcontentloaded")
+        page.wait_for_timeout(4000)
+
+        # Check authentication
+        if "accounts.google.com" in page.url or "signin" in page.url:
+            raise RuntimeError("YouTube session is not authenticated. Please select or connect your Google Chrome profile in Step 6.")
+
+        log("Clicking 'CREATE' -> 'Upload videos'...")
+        create_btn = page.locator('#create-icon, button[aria-label="Create"], ytcp-button#create-icon').first
+        create_btn.wait_for(state="visible", timeout=25000)
+        create_btn.click()
+        page.wait_for_timeout(1200)
+
+        upload_item = page.locator('tp-yt-paper-item:has-text("Upload videos"), [test-id="upload-beta"]').first
+        upload_item.wait_for(state="visible", timeout=12000)
+        upload_item.click()
+        page.wait_for_timeout(2000)
+
+        log("Attaching video file to YouTube Studio...")
+        file_input = page.locator('input[type="file"]').first
+        file_input.wait_for(state="attached", timeout=20000)
+        file_input.set_input_files(str(video_path.resolve()))
+        page.wait_for_timeout(4000)
+
+        log("Setting video Title and Description...")
+        # YouTube shorts title max 100 chars
+        title_box = page.locator('#title-textarea #textbox, [aria-label*="title" i]').first
+        title_box.wait_for(state="visible", timeout=25000)
+        title_box.click()
+        title_clean = title[:95].strip()
+        title_box.fill(title_clean)
+        page.wait_for_timeout(1000)
+
+        desc_box = page.locator('#description-textarea #textbox, [aria-label*="description" i]').first
+        if desc_box.is_visible():
+            desc_box.click()
+            desc_text = f"{title}\n\n{caption}\n\n#Shorts".strip()
+            desc_box.fill(desc_text)
+            page.wait_for_timeout(1000)
+
+        log("Setting audience: 'No, it's not made for kids'...")
+        not_for_kids = page.locator('tp-yt-paper-radio-button[name="VIDEO_MADE_FOR_KIDS_NOT_MFK"], [name="VIDEO_MADE_FOR_KIDS_NOT_MFK"]').first
+        not_for_kids.wait_for(state="visible", timeout=15000)
+        not_for_kids.click()
+        page.wait_for_timeout(1000)
+
+        # Step through wizard: Next -> Next -> Next
+        log("Advancing through video elements and checks...")
+        for step in range(3):
+            next_btn = page.locator('#next-button').first
+            next_btn.wait_for(state="visible", timeout=15000)
+            next_btn.click()
+            page.wait_for_timeout(2000)
+
+        log("Setting Visibility: Public...")
+        public_radio = page.locator('tp-yt-paper-radio-button[name="PUBLIC"], [name="PUBLIC"]').first
+        public_radio.wait_for(state="visible", timeout=15000)
+        public_radio.click()
+        page.wait_for_timeout(1000)
+
+        log("Clicking 'Publish' button...")
+        done_btn = page.locator('#done-button').first
+        done_btn.wait_for(state="visible", timeout=15000)
+        done_btn.click()
+
+        log("Awaiting YouTube publish confirmation...")
+        done_dialog = page.locator('text="Video published", text="Video uploaded", a[href*="youtu.be"]').first
+        done_dialog.wait_for(state="visible", timeout=90000)
+        log("Confirmed! Short published successfully to YouTube Studio.", "success")
+        return {"status": "posted", "note": "Short published to YouTube"}
+
     def publish_video(
         self,
         platform: str,
@@ -271,10 +649,11 @@ class SocialPublisher:
         title: str,
         caption: str = "",
         account: str = "default",
-        headless: bool = False
+        headless: bool = False,
+        on_log=None
     ) -> Dict[str, Any]:
         """
-        Dispatches upload to designated platform uploader.
+        Dispatches upload to designated platform uploader. Captures real errors and screenshots.
         """
         video_file = Path(video_path)
         if not video_file.is_file():
@@ -311,49 +690,40 @@ class SocialPublisher:
                 "error": "Playwright is not installed. Run 'pip install playwright playwright-stealth' and 'playwright install chromium'."
             }
 
-        url_map = {
-            "youtube": "https://studio.youtube.com",
-            "tiktok": "https://www.tiktok.com/creator-center/upload",
-            "tiktok_us": "https://www.tiktok.com/creator-center/upload",
-            "tiktok_ng": "https://www.tiktok.com/creator-center/upload",
-            "instagram": "https://www.instagram.com"
+        launch_kwargs = {
+            "user_data_dir": str(profile_path),
+            "headless": headless,
+            "viewport": {"width": 1280, "height": 850},
+            "ignore_default_args": ["--enable-automation"],
+            "args": [
+                "--disable-blink-features=AutomationControlled",
+                "--no-first-run",
+                "--no-default-browser-check"
+            ]
         }
-        target_url = url_map.get(platform, "https://studio.youtube.com")
-        resolved_video_abs = str(video_file.resolve())
+        chrome_exe = r"C:\Program Files\Google\Chrome\Application\chrome.exe"
+        if os.path.exists(chrome_exe):
+            launch_kwargs["channel"] = "chrome"
+
+        scratch_dir = PROJECT_ROOT / "scratch"
+        scratch_dir.mkdir(parents=True, exist_ok=True)
 
         try:
             with sync_playwright() as p:
-                browser = p.chromium.launch_persistent_context(
-                    user_data_dir=str(profile_path),
-                    headless=headless,
-                    args=["--disable-blink-features=AutomationControlled"]
-                )
+                browser = p.chromium.launch_persistent_context(**launch_kwargs)
                 page = browser.pages[0] if browser.pages else browser.new_page()
                 stealth.apply_stealth_sync(page)
-                page.goto(target_url, timeout=45000, wait_until="domcontentloaded")
-                time.sleep(3)
 
-                # Attempt automated file input staging if upload element exists
-                uploaded = False
-                try:
-                    file_input = page.locator('input[type="file"]').first
-                    if file_input.count() > 0:
-                        file_input.set_input_files(resolved_video_abs)
-                        uploaded = True
-                        time.sleep(2)
-                except Exception:
-                    pass
+                if platform == "instagram":
+                    res = self._upload_instagram(page, video_file, title, caption, on_log=on_log)
+                elif platform in ("tiktok", "tiktok_ng", "tiktok_us"):
+                    res = self._upload_tiktok(page, video_file, title, caption, on_log=on_log)
+                elif platform == "youtube":
+                    res = self._upload_youtube(page, video_file, title, caption, on_log=on_log)
+                else:
+                    raise ValueError(f"Unsupported social platform: {platform}")
 
-                # Attempt caption prefill if supported on platform upload form
-                try:
-                    caption_box = page.locator('div[contenteditable="true"], textarea[placeholder*="caption" i]').first
-                    if caption_box.count() > 0:
-                        full_caption = f"{title}\n\n{caption}".strip()
-                        caption_box.fill(full_caption)
-                except Exception:
-                    pass
-
-                time.sleep(3)
+                page.wait_for_timeout(3000)
                 browser.close()
 
             return {
@@ -361,17 +731,23 @@ class SocialPublisher:
                 "platform": platform,
                 "account": account,
                 "video": video_file.name,
-                "status": "posted" if uploaded else "staged",
-                "note": "Uploaded via automated browser session" if uploaded else "Staged in platform creator studio."
+                "status": res.get("status", "posted"),
+                "note": res.get("note", "Published successfully")
             }
         except Exception as e:
+            err_msg = str(e)
+            try:
+                err_shot = scratch_dir / f"publish_error_{platform}_{int(time.time())}.png"
+                page.screenshot(path=str(err_shot))
+            except Exception:
+                pass
             return {
                 "success": False,
                 "platform": platform,
                 "account": account,
                 "video": video_file.name,
                 "status": "failed",
-                "error": f"Automation error while publishing to {platform}: {str(e)}"
+                "error": f"Automation error while publishing to {platform}: {err_msg}"
             }
 
     def publish_batch(
@@ -381,8 +757,7 @@ class SocialPublisher:
         on_progress=None
     ) -> Dict[str, Any]:
         """
-        Publishes a batch of clips specified by range (e.g. '1-6', '1,3', 'all')
-        to selected platforms and updates clips_queue.json.
+        Publishes a batch of clips specified by range to selected platforms and updates clips_queue.json.
         """
         qm = QueueManager()
         items = qm.items
@@ -437,28 +812,38 @@ class SocialPublisher:
 
         for item in target_items:
             for plat in resolved_plats:
+                def item_log(msg, lvl="info"):
+                    if on_progress:
+                        pct = int((completed / total_ops) * 100) if total_ops > 0 else 0
+                        on_progress(item["id"], plat, "uploading", pct, note=msg)
+
                 res = self.publish_video(
                     platform=plat,
                     video_path=item["file_path"],
                     title=item["title"],
-                    caption=item.get("caption", "")
+                    caption=item.get("caption", ""),
+                    on_log=item_log
                 )
-                status_str = "posted" if res.get("success") else "failed"
-                qm.update_status(item["id"], plat, status_str, note="Published via hclipper batch")
+                status_str = res.get("status", "failed") if res.get("success") else "failed"
+                note_str = res.get("note") or res.get("error", "")
+                qm.update_status(item["id"], plat, status_str, note=note_str)
                 completed += 1
                 published_log.append({
                     "clip_id": item["id"],
                     "platform": plat,
-                    "status": status_str
+                    "status": status_str,
+                    "note": note_str,
+                    "error": res.get("error")
                 })
 
                 if on_progress:
                     pct = int((completed / total_ops) * 100) if total_ops > 0 else 100
-                    on_progress(item["id"], plat, status_str, pct)
+                    on_progress(item["id"], plat, status_str, pct, note=note_str)
 
         return {
-            "success": True,
-            "published_count": len(published_log),
+            "success": any(entry["status"] == "posted" for entry in published_log),
+            "published_count": sum(1 for entry in published_log if entry["status"] == "posted"),
+            "failed_count": sum(1 for entry in published_log if entry["status"] == "failed"),
             "log": published_log
         }
 

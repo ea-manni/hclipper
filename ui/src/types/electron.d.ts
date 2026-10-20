@@ -31,6 +31,20 @@ export interface HclipperAPI {
     sessionsDir: string;
   }>;
   resolveMediaUrl: (rawPath: string) => Promise<string>;
+  copyToClipboard: (text: string) => Promise<boolean>;
+  getBrowserProfiles: () => Promise<Array<{
+    browser: 'chrome' | 'edge';
+    browserName: string;
+    profileId: string;
+    name: string;
+    emails: string[];
+    isDefault: boolean;
+  }>>;
+  openBrowserProfile: (options: {
+    browser?: 'chrome' | 'edge';
+    profileId?: string;
+    url?: string;
+  }) => Promise<boolean>;
   onEngineEvent: (callback: (data: any) => void) => () => void;
   onEngineLog: (callback: (data: { level: string; text: string; jobId?: string }) => void) => () => void;
 }

@@ -18,6 +18,9 @@ contextBridge.exposeInMainWorld('hclipper', {
   listDownloads: () => ipcRenderer.invoke('hclipper:list-downloads'),
   getSystemInfo: () => ipcRenderer.invoke('hclipper:get-system-info'),
   resolveMediaUrl: (rawPath) => ipcRenderer.invoke('hclipper:resolve-media-url', rawPath),
+  copyToClipboard: (text) => ipcRenderer.invoke('hclipper:copy-to-clipboard', text),
+  getBrowserProfiles: () => ipcRenderer.invoke('hclipper:get-browser-profiles'),
+  openBrowserProfile: (options) => ipcRenderer.invoke('hclipper:open-browser-profile', options),
   onEngineEvent: (callback) => {
     const handler = (event, data) => callback(data);
     ipcRenderer.on('hclipper:engine-event', handler);
